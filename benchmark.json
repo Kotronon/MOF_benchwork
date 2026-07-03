@@ -1,0 +1,60 @@
+{
+  "material": {
+    "name": "MOF-5",
+    "cif_source": "auto",
+    "charge_scheme": "DDEC",
+    "source": "crafted"
+  },
+  "adsorbates": {
+    "components": [
+      "CO2"
+    ],
+    "mixture": null
+  },
+  "conditions": {
+    "temperature_K": 298.15,
+    "pressures_bar": [
+      0.01,
+      0.05,
+      0.1,
+      0.5,
+      1,
+      5,
+      10
+    ]
+  },
+  "benchmark": {
+    "task": "auto",
+    "metrics": [],
+    "reference": {
+      "source": "crafted",
+      "material": "MOF-5",
+      "adsorbate": "CO2"
+    }
+  },
+  "simulation": {
+    "engine": "LAMMPS",
+    "method": "GCMC",
+    "forcefield": {
+      "framework": "UFF",
+      "adsorbate": "auto",
+      "cross_interactions": "auto"
+    },
+    "framework": "rigid",
+    "units": "real",
+    "atom_style": "full",
+    "pair_style": "lj/cut/coul/long",
+    "cutoff_A": 12.0,
+    "kspace_style": "pppm",
+    "kspace_accuracy": 1e-5,
+    "unit_cells": "auto",
+    "cycles": 50000,
+    "initialization_cycles": 20000
+  },
+  "output": {
+    "directory": null,
+    "save_logs": true,
+    "save_plots": true,
+    "save_csv": true
+  }
+}

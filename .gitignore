@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# CRAFTED database unziped files
+CRAFTED-2.0.0/
