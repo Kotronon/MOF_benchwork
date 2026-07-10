@@ -1,0 +1,12 @@
+math
+dataclasses
+pathlib
+typing
+numpy
+matplotlib
+pandas
+json
+
+ase 
+lammps 
+ovito

@@ -217,5 +217,12 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# CRAFTED database unziped files
+# macOS metadata
+.DS_Store
+
+# External/raw datasets and generated benchmark artifacts
 CRAFTED-2.0.0/
+CRAFTED-2.0.0.tar.xz
+external/
+outputs/
+reports/

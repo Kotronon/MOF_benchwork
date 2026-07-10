@@ -1,0 +1,24 @@
+LAMMPS (22 Jul 2025 - Update 4)
+OMP_NUM_THREADS environment is not set. Defaulting to 1 thread.
+  using 1 OpenMP thread(s) per MPI task
+units real
+                atom_style full
+                boundary p p p
+                read_data /var/folders/s7/3t33jc_x4db6rn6wvz8lsq5m0000gn/T/tmpklghmyo4/IRMOF-1.data
+Reading data file ...
+  triclinic box = (0 0 0) to (18.265982 15.818805 14.914112) with tilt (9.1329912 9.1329912 5.2729349)
+WARNING: Triclinic box skew is large. LAMMPS will run inefficiently. (src/domain.cpp:221)
+  1 by 1 by 1 MPI processor grid
+  reading atoms ...
+  106 atoms
+Finding 1-2 1-3 1-4 neighbors ...
+  special bond factors lj:    0        0        0       
+  special bond factors coul:  0        0        0       
+     0 = max # of 1-2 neighbors
+     0 = max # of 1-3 neighbors
+     0 = max # of 1-4 neighbors
+     1 = max # of special neighbors
+  special bonds CPU = 0.000 seconds
+  read_data CPU = 0.001 seconds
+                
+Total wall time: 0:00:00
