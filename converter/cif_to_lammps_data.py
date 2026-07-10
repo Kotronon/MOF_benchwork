@@ -120,10 +120,13 @@ def convert_cif_to_lammps_data(
     output_path: str | Path,
     atom_style: str = "full",
     extra_atom_types: dict[str, float] | None = None,
+    extra_bond_types: int = 0,
 ) -> Path:
     """Write a minimal LAMMPS data file with framework atoms and optional extra type masses."""
     if atom_style != "full":
         raise ValueError("Only atom_style='full' is supported by the V1 framework converter.")
+    if extra_bond_types < 0:
+        raise ValueError("extra_bond_types must be non-negative.")
 
     structure = load_framework_structure(cif_path)
     output = Path(output_path)
@@ -143,16 +146,24 @@ def convert_cif_to_lammps_data(
         f"LAMMPS data file generated from {Path(cif_path)}",
         "",
         f"{structure.atom_count} atoms",
-        f"{len(type_map)} atom types",
-        "",
-        f"0.0 {box['lx']:.8f} xlo xhi",
-        f"0.0 {box['ly']:.8f} ylo yhi",
-        f"0.0 {box['lz']:.8f} zlo zhi",
-        f"{box['xy']:.8f} {box['xz']:.8f} {box['yz']:.8f} xy xz yz",
-        "",
-        "Masses",
-        "",
     ]
+    if extra_bond_types:
+        lines.append("0 bonds")
+    lines.append(f"{len(type_map)} atom types")
+    if extra_bond_types:
+        lines.append(f"{extra_bond_types} bond types")
+    lines.extend(
+        [
+            "",
+            f"0.0 {box['lx']:.8f} xlo xhi",
+            f"0.0 {box['ly']:.8f} ylo yhi",
+            f"0.0 {box['lz']:.8f} zlo zhi",
+            f"{box['xy']:.8f} {box['xz']:.8f} {box['yz']:.8f} xy xz yz",
+            "",
+            "Masses",
+            "",
+        ]
+    )
     for symbol, atom_type in type_map.items():
         lines.append(f"{atom_type} {masses[symbol]:.8f} # {symbol}")
 

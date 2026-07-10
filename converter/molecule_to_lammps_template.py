@@ -124,6 +124,7 @@ def build_molecule_template(
     molecule_def_path: str | Path,
     output_path: str | Path,
     atom_type_ids: dict[str, int] | None = None,
+    atom_charges: dict[str, float] | None = None,
 ) -> Path:
     """Build a minimal LAMMPS molecule template for a rigid linear CRAFTED molecule."""
     molecule = parse_crafted_molecule_def(molecule_def_path)
@@ -137,6 +138,10 @@ def build_molecule_template(
         if missing:
             raise ValueError(f"Missing global atom type IDs for molecule atom types: {', '.join(missing)}.")
         type_ids = atom_type_ids
+    if atom_charges is not None:
+        missing_charges = sorted({atom.atom_type for atom in molecule.atoms} - set(atom_charges))
+        if missing_charges:
+            raise ValueError(f"Missing charges for molecule atom types: {', '.join(missing_charges)}.")
     bond_type_ids = {
         bond_type: index for index, bond_type in enumerate(_unique(bond.bond_type for bond in molecule.bonds), 1)
     }
@@ -158,6 +163,11 @@ def build_molecule_template(
     lines.extend(["", "Types", ""])
     for atom in molecule.atoms:
         lines.append(f"{atom.index + 1} {type_ids[atom.atom_type]}")
+
+    if atom_charges is not None:
+        lines.extend(["", "Charges", ""])
+        for atom in molecule.atoms:
+            lines.append(f"{atom.index + 1} {atom_charges[atom.atom_type]:.8f}")
 
     if molecule.bonds:
         lines.extend(["", "Bonds", ""])

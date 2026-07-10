@@ -260,10 +260,13 @@ class BenchmarkPipelineTests(unittest.TestCase):
                 "CRAFTED-2.0.0/CIF_FILES/DDEC/IRMOF-1.cif",
                 output_path,
                 extra_atom_types={"O_co2": 15.9994, "C_co2": 12.0107},
+                extra_bond_types=1,
             )
 
             text = output_path.read_text(encoding="utf-8")
         self.assertIn("6 atom types", text)
+        self.assertIn("0 bonds", text)
+        self.assertIn("1 bond types", text)
         self.assertIn("5 15.99940000 # O_co2", text)
         self.assertIn("6 12.01070000 # C_co2", text)
 
@@ -275,12 +278,17 @@ class BenchmarkPipelineTests(unittest.TestCase):
                 "CRAFTED-2.0.0/FORCEFIELDS/UFF/CO2.def",
                 output_path,
                 atom_type_ids={"O_co2": 5, "C_co2": 6},
+                atom_charges={"O_co2": -0.35, "C_co2": 0.7},
             )
 
             text = output_path.read_text(encoding="utf-8")
         self.assertIn("1 5", text)
         self.assertIn("2 6", text)
         self.assertIn("3 5", text)
+        self.assertIn("Charges", text)
+        self.assertIn("1 -0.35000000", text)
+        self.assertIn("2 0.70000000", text)
+        self.assertIn("3 -0.35000000", text)
 
     def test_parse_co2_crafted_molecule_definition(self) -> None:
         molecule = parse_crafted_molecule_def("CRAFTED-2.0.0/FORCEFIELDS/UFF/CO2.def")
@@ -372,6 +380,68 @@ class BenchmarkPipelineTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn("106 atoms", result.stdout)
+
+    @unittest.skipUnless(HAS_ASE and HAS_LAMMPS, "ASE and lmp are required for the LAMMPS forcefield smoke test.")
+    def test_lammps_run_zero_reads_data_pair_coeffs_and_co2_template(self) -> None:
+        run_plan = benchmark.build_run_plan(benchmark.load_benchmark_data("benchmark.json"))
+        parameters = load_forcefield_parameters(run_plan["resources"]["forcefield"])
+        forcefield = build_lammps_forcefield(
+            framework_symbols=["Zn", "H", "C", "O"],
+            adsorbate_atom_types=["O_co2", "C_co2"],
+            parameters=parameters,
+        )
+        extra_masses = {
+            atom_type.label: atom_type.mass
+            for atom_type in forcefield.atom_types
+            if atom_type.source == "adsorbate" and atom_type.mass is not None
+        }
+        type_ids = {atom_type.label: atom_type.type_id for atom_type in forcefield.atom_types}
+        charges = {
+            atom_type.label: atom_type.charge
+            for atom_type in forcefield.atom_types
+            if atom_type.source == "adsorbate" and atom_type.charge is not None
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            data_file = tmpdir_path / "IRMOF-1.data"
+            template_file = tmpdir_path / "CO2.template"
+            forcefield_file = tmpdir_path / "forcefield.in"
+            input_file = tmpdir_path / "run_zero.in"
+
+            convert_cif_to_lammps_data(
+                run_plan["material"]["cif_path"],
+                data_file,
+                extra_atom_types=extra_masses,
+                extra_bond_types=1,
+            )
+            build_molecule_template(
+                run_plan["resources"]["forcefield"]["adsorbates"]["CO2"],
+                template_file,
+                atom_type_ids=type_ids,
+                atom_charges=charges,
+            )
+            write_lammps_forcefield_include(forcefield, forcefield_file)
+            input_file.write_text(
+                f"""units real
+atom_style full
+boundary p p p
+read_data {data_file} extra/special/per/atom 2
+molecule co2 {template_file}
+include {forcefield_file}
+run 0
+""",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                ["lmp", "-in", str(input_file), "-log", str(tmpdir_path / "log.lammps")],
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("Loop time", result.stdout)
 
 if __name__ == "__main__":
     unittest.main()
