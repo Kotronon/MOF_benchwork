@@ -25,7 +25,8 @@ from converter.forcefield_to_lammps import (
     write_lammps_forcefield_include,
 )
 from converter.molecule_to_lammps_template import build_molecule_template, parse_crafted_molecule_def
-from modules.module_a_adsorption import prepare as prepare_module_a
+
+from parsers.lammps_log_parser import summarize_adsorption, get_log, log_to_json, parse_lammps_log
 
 
 HAS_ASE = importlib.util.find_spec("ase") is not None
@@ -106,13 +107,74 @@ class BenchmarkPipelineTests(unittest.TestCase):
     def test_module_a_prepare_returns_json_serializable_plan(self) -> None:
         run_plan = benchmark.build_run_plan(benchmark.load_benchmark_data("benchmark.json"))
 
-        prepare_plan = prepare_module_a(run_plan)
+        prepare_plan = benchmark.prepare_benchmark(run_plan)
 
         self.assertEqual(prepare_plan["status"], "prepared_plan")
         self.assertEqual(prepare_plan["side_effects"], "none")
         self.assertIn("framework_data", prepare_plan["planned_files"])
+        self.assertIn("forcefield_include", prepare_plan["planned_files"])
+        self.assertIn("run0_input", prepare_plan["planned_files"])
         self.assertEqual(len(prepare_plan["planned_files"]["input_scripts"]), len(run_plan["conditions"]["pressures_bar"]))
         json.dumps(prepare_plan)
+
+    @unittest.skipUnless(HAS_ASE, "ASE is required for materializing framework data.")
+    def test_materialize_benchmark_writes_prepare_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = benchmark.load_benchmark_data("benchmark.json")
+            config["output"]["directory"] = str(Path(tmpdir) / "module_a")
+            run_plan = benchmark.build_run_plan(config)
+            prepare_plan = benchmark.prepare_benchmark(run_plan)
+
+            result = benchmark.materialize_benchmark(prepare_plan)
+
+            framework_data = Path(result["files"]["framework_data"])
+            molecule_template = Path(result["files"]["molecule_templates"]["CO2"])
+            forcefield_include = Path(result["files"]["forcefield_include"])
+            run0_input = Path(result["files"]["run0_input"])
+            gcmc_test_input = Path(result["files"]["gcmc_test_input"])
+            summary = Path(result["files"]["summary"])
+
+            self.assertTrue(framework_data.exists())
+            self.assertTrue(molecule_template.exists())
+            self.assertTrue(forcefield_include.exists())
+            self.assertTrue(run0_input.exists())
+            self.assertTrue(gcmc_test_input.exists())
+            self.assertTrue(summary.exists())
+            self.assertIn("extra/special/per/atom 2", run0_input.read_text(encoding="utf-8"))
+            self.assertIn("extra/bond/per/atom 2 extra/special/per/atom 2", gcmc_test_input.read_text(encoding="utf-8"))
+            self.assertIn("fix gcmc_co2 adsorbate gcmc", gcmc_test_input.read_text(encoding="utf-8"))
+            self.assertIn("pair_coeff", forcefield_include.read_text(encoding="utf-8"))
+        self.assertEqual(result["status"], "materialized")
+        json.dumps(result)
+
+    def test_gcmc_input_builder_uses_valid_lammps_gcmc_shape(self) -> None:
+        script = benchmark.gcmc_input_builder(
+            {
+                "framework_data": "IRMOF-1.data",
+                "molecule_templates": {"CO2": "CO2.template"},
+                "forcefield_include": "forcefield.in",
+                "framework_atom_types": [1, 2, 3, 4],
+                "adsorbate_atom_types": [5, 6],
+                "component": "CO2",
+                "temperature_K": 298.15,
+                "pressure_bar": 0.01,
+                "chemical_potential_kcal_mol": -10.0,
+                "displacement_A": 1.0,
+                "run_steps": 1,
+                "gcmc_every_steps": 1,
+                "exchange_attempts": 1,
+                "move_attempts": 1,
+                "seed": 12345,
+                "extra_bond_per_atom": 2,
+                "extra_special_per_atom": 2,
+            }
+        )
+
+        self.assertIn("read_data IRMOF-1.data extra/bond/per/atom 2 extra/special/per/atom 2", script)
+        self.assertIn("group framework type 1 2 3 4", script)
+        self.assertIn("group adsorbate type 5 6", script)
+        self.assertIn("fix gcmc_co2 adsorbate gcmc 1 1 1 0 12345 298.15 -10 1 mol co2 group adsorbate full_energy", script)
+        self.assertIn("run 1", script)
 
     def test_dry_run_does_not_create_output_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -424,13 +486,13 @@ class BenchmarkPipelineTests(unittest.TestCase):
             write_lammps_forcefield_include(forcefield, forcefield_file)
             input_file.write_text(
                 f"""units real
-atom_style full
-boundary p p p
-read_data {data_file} extra/special/per/atom 2
-molecule co2 {template_file}
-include {forcefield_file}
-run 0
-""",
+                atom_style full
+                boundary p p p
+                read_data {data_file} extra/special/per/atom 2
+                molecule co2 {template_file}
+                include {forcefield_file}
+                run 0
+                """,
                 encoding="utf-8",
             )
 
@@ -442,6 +504,79 @@ run 0
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn("Loop time", result.stdout)
+
+    @unittest.skipUnless(HAS_ASE and HAS_LAMMPS, "ASE and lmp are required for the GCMC smoke test.")
+    def test_lammps_can_run_materialized_gcmc_smoke_input(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = benchmark.load_benchmark_data("benchmark.json")
+            config["output"]["directory"] = str(Path(tmpdir) / "module_a")
+            run_plan = benchmark.build_run_plan(config)
+            prepare_plan = benchmark.prepare_benchmark(run_plan)
+            result = benchmark.materialize_benchmark(prepare_plan)
+            gcmc_input = Path(result["files"]["gcmc_test_input"])
+            log_file = Path(result["working_directory"]) / "logs" / "gcmc_test.log"
+
+            completed = subprocess.run(
+                ["lmp", "-in", str(gcmc_input), "-log", str(log_file)],
+                capture_output=True,
+                text=True,
+            )
+            parsed_data = parse_lammps_log(completed.stdout)
+
+        self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+        self.assertIn("Loop time", completed.stdout)
+        summary = summarize_adsorption(
+            parsed_data["rows"],
+            framework_atoms=106,
+            adsorbate_atoms_per_molecule=3,
+        )
+        self.assertTrue(summary["inserted"])
+        self.assertGreaterEqual(summary["max_adsorbates"], 1)
+        
+    def test_lammps_log_parser_summarizes_adsorption_from_thermo_rows(self) -> None:
+        log_data = """LAMMPS
+Step Atoms Temp PotEng TotEng Press
+0 106 0.0 10.0 10.0 1.0
+1 109 2.0 9.0 9.5 1.1
+2 112 3.0 8.0 8.5 1.2
+Loop time of 0.1 on 1 procs
+"""
+        parsed_data = parse_lammps_log(log_data)
+        summary = summarize_adsorption(parsed_data["rows"], framework_atoms=106, adsorbate_atoms_per_molecule=3)
+
+        self.assertEqual(len(parsed_data["rows"]), 3)
+        self.assertEqual(parsed_data["rows"][1]["Atoms"], 109)
+        self.assertEqual(summary["sample_count"], 3)
+        self.assertTrue(summary["inserted"])
+        self.assertEqual(summary["max_adsorbates"], 2)
+        self.assertAlmostEqual(summary["mean_adsorbates"], 1.0)
+        self.assertEqual(summary["max_atoms"], 112)
+
+    def test_log_to_json_writes_adsorption_summary(self) -> None:
+        log_data = """LAMMPS
+Step Atoms Temp PotEng TotEng Press
+0 106 0.0 10.0 10.0 1.0
+1 109 2.0 9.0 9.5 1.1
+2 112 3.0 8.0 8.5 1.2
+Loop time of 0.1 on 1 procs
+"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "gcmc_test.log"
+            output_path = Path(tmpdir) / "summary" / "gcmc_test_summary.json"
+            log_path.write_text(log_data, encoding="utf-8")
+
+            summary = log_to_json(
+                log_path,
+                output_path,
+                framework_atoms=106,
+                adsorbate_atoms_per_molecule=3,
+            )
+
+            written_summary = json.loads(output_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(summary["max_adsorbates"], 2)
+        self.assertEqual(written_summary["max_adsorbates"], 2)
+        self.assertTrue(written_summary["inserted"])
 
 if __name__ == "__main__":
     unittest.main()
