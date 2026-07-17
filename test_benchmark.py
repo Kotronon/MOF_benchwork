@@ -158,7 +158,7 @@ class BenchmarkPipelineTests(unittest.TestCase):
                 "component": "CO2",
                 "temperature_K": 298.15,
                 "pressure_bar": 0.01,
-                "chemical_potential_kcal_mol": -10.0,
+                "chemical_potential_kcal_mol": 0.0,
                 "displacement_A": 1.0,
                 "run_steps": 1,
                 "gcmc_every_steps": 1,
@@ -173,7 +173,11 @@ class BenchmarkPipelineTests(unittest.TestCase):
         self.assertIn("read_data IRMOF-1.data extra/bond/per/atom 2 extra/special/per/atom 2", script)
         self.assertIn("group framework type 1 2 3 4", script)
         self.assertIn("group adsorbate type 5 6", script)
-        self.assertIn("fix gcmc_co2 adsorbate gcmc 1 1 1 0 12345 298.15 -10 1 mol co2 group adsorbate full_energy", script)
+        self.assertIn(
+            "fix gcmc_co2 adsorbate gcmc 1 1 1 0 12345 298.15 0 1 "
+            "mol co2 group adsorbate full_energy pressure 0.00986923 fugacity_coeff 1",
+            script,
+        )
         self.assertIn("run 1", script)
 
     def test_dry_run_does_not_create_output_directory(self) -> None:

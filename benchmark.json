@@ -48,7 +48,7 @@
     "kspace_style": "pppm",
     "kspace_accuracy": 1e-5,
     "unit_cells": "auto",
-    "cycles": 50000,
+    "cycles": 100000,
     "initialization_cycles": 20000
   },
   "output": {
