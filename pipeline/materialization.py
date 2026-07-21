@@ -19,6 +19,11 @@ from pipeline.utils import unique
 def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
     """Materialize a prepare plan into generated benchmark files on disk."""
     working_dir = Path(prepare_plan["working_directory"])
+    if working_dir.exists() and not prepare_plan.get("overwrite", True):
+        raise FileExistsError(
+            f"Working directory already exists: {working_dir}. "
+            "Use a new output.run_id or enable output.overwrite."
+        )
     working_dir.mkdir(parents=True, exist_ok=True)
 
     for directory in [
@@ -158,6 +163,8 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
                     pressure_bar=pressure_bar,
                     extra_special_per_atom=extra_special_per_atom,
                     fugacity_coeff=fugacity_coeff,
+                    dump_file=input_script["dump"],
+                    dump_every_steps=1000,
                 )
             ),
             encoding="utf-8",
@@ -166,6 +173,7 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
     result = {
         "status": "materialized",
         "working_directory": str(working_dir),
+        "parameters": prepare_plan["parameters"],
         "files": {
             "framework_data": str(framework_data_path),
             "forcefield_include": str(forcefield_path),
@@ -176,6 +184,7 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
             "source_files": source_files,
             "gcmc_inputs": [script["path"] for script in prepare_plan["planned_files"]["input_scripts"]],
             "gcmc_runs": prepare_plan["planned_files"]["input_scripts"],
+            "dump_files": [script["dump"] for script in prepare_plan["planned_files"]["input_scripts"]],
         },
     }
     save_benchmark_data(prepare_plan["planned_files"]["summary"], {"prepare_plan": prepare_plan, "result": result})
@@ -194,6 +203,8 @@ def _gcmc_builder_inputs(
     pressure_bar: float,
     extra_special_per_atom: int,
     fugacity_coeff: float = 1.0,
+    dump_file: str | None = None,
+    dump_every_steps: int = 1000,
 ) -> dict[str, Any]:
     return {
         "framework_data": str(framework_data_path),
@@ -214,6 +225,8 @@ def _gcmc_builder_inputs(
         "extra_bond_per_atom": extra_special_per_atom,
         "extra_special_per_atom": extra_special_per_atom,
         "fugacity_coeff": fugacity_coeff,
+        "dump_file": dump_file,
+        "dump_every_steps": dump_every_steps,
     }
 
 
@@ -255,4 +268,3 @@ def _max_special_neighbors(molecules: Any) -> int:
         if molecule.bonds:
             max_neighbors = max(max_neighbors, len(molecule.atoms) - 1)
     return max_neighbors
-

@@ -27,6 +27,7 @@ from converter.forcefield_to_lammps import (
 from converter.molecule_to_lammps_template import build_molecule_template, parse_crafted_molecule_def
 
 from parsers.lammps_log_parser import summarize_adsorption, get_log, log_to_json, parse_lammps_log
+from pipeline.evaluate import framework_mass_from_lammps_data, sim_results_to_csv
 
 
 HAS_ASE = importlib.util.find_spec("ase") is not None
@@ -581,6 +582,66 @@ Loop time of 0.1 on 1 procs
         self.assertEqual(summary["max_adsorbates"], 2)
         self.assertEqual(written_summary["max_adsorbates"], 2)
         self.assertTrue(written_summary["inserted"])
+
+    def test_sim_results_to_csv_writes_flat_isotherm_table(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_path = Path(tmpdir) / "isotherm_summary.json"
+            output_path = Path(tmpdir) / "isotherm_summary.csv"
+            data_path = Path(tmpdir) / "framework.data"
+            reference_path = Path(tmpdir) / "reference.csv"
+            data_path.write_text(
+                """LAMMPS data
+
+2 atoms
+1 atom types
+
+Masses
+
+1 10.0 # X
+
+Atoms # full
+
+1 1 1 0.0 0.0 0.0 0.0
+2 1 1 0.0 1.0 0.0 0.0
+""",
+                encoding="utf-8",
+            )
+            reference_path.write_text(
+                "# pressure[Pa],mean_volume[mol/kg],mean_error[mol/kg]\n"
+                "1.000000000000000000e+05,8.000000000000000000e+01,1.000000000000000000e+00\n",
+                encoding="utf-8",
+            )
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "status": "completed",
+                        "results": [
+                            {
+                                "pressure_bar": 1.0,
+                                "log_file": "gcmc_1bar.log",
+                                "summary_file": "gcmc_1bar_summary.json",
+                                "summary": {
+                                    "sample_count": 10,
+                                    "inserted": True,
+                                    "max_atoms": 124,
+                                    "max_adsorbates": 6.0,
+                                    "mean_adsorbates": 2.0,
+                                },
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = sim_results_to_csv(input_path, output_path, framework_data=data_path, reference_csv=reference_path)
+            text = output_path.read_text(encoding="utf-8")
+            framework_mass_amu = framework_mass_from_lammps_data(data_path)
+
+        self.assertEqual(result, output_path)
+        self.assertAlmostEqual(framework_mass_amu, 20.0)
+        self.assertIn("pressure_bar,pressure_Pa,sample_count,inserted,max_adsorbates,mean_adsorbates_per_cell", text)
+        self.assertIn("1.0,100000.0,10,True,6.0,2.0,124,20.0,100.0,100.0,80.0,1.0,exact,20.0,25.0", text)
 
 if __name__ == "__main__":
     unittest.main()

@@ -11,7 +11,8 @@ DEFAULT_PRESSURES_BAR = [0.01, 0.05, 0.1, 0.5, 1, 5, 10]
 
 def load_benchmark_data(file_path: str | Path) -> dict[str, Any]:
     """Load benchmark input data from a JSON file."""
-    with Path(file_path).open("r", encoding="utf-8") as handle:
+    path = _resolve_input_path(file_path)
+    with path.open("r", encoding="utf-8") as handle:
         data = json.load(handle)
     return data_to_dict(data)
 
@@ -32,6 +33,18 @@ def data_to_dict(data: list[dict[str, Any]] | dict[str, Any]) -> dict[str, Any]:
         return {item["name"]: item for item in data if isinstance(item, dict) and "name" in item}
 
     raise TypeError("Benchmark data must be a dictionary or a list of dictionaries.")
+
+
+def _resolve_input_path(file_path: str | Path) -> Path:
+    path = Path(file_path)
+    if path.exists():
+        return path
+
+    fallback = Path("input_json_files") / path.name
+    if not path.is_absolute() and fallback.exists():
+        return fallback
+
+    return path
 
 
 def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
@@ -94,6 +107,8 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(output, dict):
         raise TypeError("'output' must be an object.")
     output.setdefault("directory", None)
+    output.setdefault("run_id", None)
+    output.setdefault("overwrite", True)
     output.setdefault("save_logs", True)
     output.setdefault("save_plots", True)
     output.setdefault("save_csv", True)
@@ -138,4 +153,3 @@ def _validate_pressures(pressures_bar: Any) -> None:
     for pressure in pressures_bar:
         if not isinstance(pressure, (int, float)) or pressure <= 0:
             raise ValueError("'conditions.pressures_bar' must contain positive numbers.")
-

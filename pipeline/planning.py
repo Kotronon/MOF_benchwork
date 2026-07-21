@@ -89,9 +89,10 @@ def build_run_plan(config: dict[str, Any]) -> dict[str, Any]:
             "report_json": str(Path(output_directory) / "benchmark_report.json"),
             "table_csv": str(Path(output_directory) / "benchmark_table.csv"),
             "plot_png": str(Path(output_directory) / "isotherm_plot.png"),
+            "run_id": normalized["output"]["run_id"],
+            "overwrite": normalized["output"]["overwrite"],
             "save_logs": normalized["output"]["save_logs"],
             "save_plots": normalized["output"]["save_plots"],
             "save_csv": normalized["output"]["save_csv"],
         },
     }
-

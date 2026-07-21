@@ -1,0 +1,77 @@
+{
+  "material": {
+    "name": "MOF-5",
+    "cif_source": "auto",
+    "charge_scheme": "DDEC",
+    "source": "crafted"
+  },
+  "adsorbates": {
+    "components": [
+      "CO2"
+    ],
+    "mixture": null
+  },
+  "conditions": {
+    "temperature_K": 298.15,
+    "pressures_bar": [
+      0.1,
+      0.5,
+      1,
+      2,
+      5,
+      10,
+      20,
+      35
+    ]
+  },
+  "benchmark": {
+    "task": "auto",
+    "metrics": [
+      "co2_uptake",
+      "isotherm",
+      "error_to_reference",
+      "runtime",
+      "validity_range"
+    ],
+    "reference": {
+      "source": "crafted",
+      "material": "MOF-5",
+      "adsorbate": "CO2"
+    },
+    "paper": {
+      "citation": "Tao, Zhang, Xu, Sustainable Materials and Technologies 32 (2022) e00383",
+      "target_protocol": "Pure CO2 GCMC for MOF-5 at 298 K, 0.1-35 bar, Peng-Robinson fugacity, rigid 1x1x1 cell, 10M equilibration + 10M production steps."
+    }
+  },
+  "simulation": {
+    "engine": "LAMMPS",
+    "method": "GCMC",
+    "forcefield": {
+      "framework": "UFF",
+      "adsorbate": "auto",
+      "cross_interactions": "auto"
+    },
+    "framework": "rigid",
+    "units": "real",
+    "atom_style": "full",
+    "pair_style": "lj/cut/coul/long",
+    "cutoff_A": 12.8,
+    "kspace_style": "pppm",
+    "kspace_accuracy": 1e-4,
+    "unit_cells": [
+      1,
+      1,
+      1
+    ],
+    "cycles": 500000,
+    "initialization_cycles": 500000
+  },
+  "output": {
+    "directory": "outputs/module_A_co2_isotherm",
+    "run_id": "tao2022_mof5_co2_paper",
+    "overwrite": false,
+    "save_logs": true,
+    "save_plots": true,
+    "save_csv": true
+  }
+}

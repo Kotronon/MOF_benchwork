@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,8 +17,15 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
     if module_id != "A":
         raise ValueError(f"Prepare currently supports module 'A' only, got {module_id!r}.")
 
+    production_steps = int(run_plan["simulation"].get("cycles", 10000))
+    equilibration_steps = int(run_plan["simulation"].get("initialization_cycles", 0))
+    if production_steps <= 0:
+        raise ValueError("'simulation.cycles' must be positive.")
+    if equilibration_steps < 0:
+        raise ValueError("'simulation.initialization_cycles' must be non-negative.")
+
     output_dir = Path(run_plan["outputs"]["directory"])
-    working_dir = output_dir / "work"
+    working_dir = _working_directory(output_dir, run_plan["outputs"].get("run_id"))
     input_dir = working_dir / "inputs"
     data_dir = working_dir / "data"
     molecule_dir = working_dir / "molecules"
@@ -57,6 +65,7 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
         "status": "prepared_plan",
         "side_effects": "none",
         "working_directory": str(working_dir),
+        "overwrite": run_plan["outputs"].get("overwrite", True),
         "inputs": {
             "framework_cif": run_plan["resources"]["cif_path"],
             "forcefield_files": run_plan["resources"]["forcefield"]["files"],
@@ -102,8 +111,9 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
             "pressures_bar": run_plan["conditions"]["pressures_bar"],
             "unit_cells": run_plan["simulation"]["unit_cells"],
             "forcefield": run_plan["resources"]["forcefield"]["framework"],
-            "run_steps": run_plan["simulation"].get("cycles", 10000),
-            "equilibration_steps": run_plan["simulation"].get("initialization_cycles", 0),
+            "production_steps": production_steps,
+            "equilibration_steps": equilibration_steps,
+            "run_steps": equilibration_steps + production_steps,
         },
     }
 
@@ -112,3 +122,12 @@ def prepare(run_plan: dict[str, Any]) -> dict[str, Any]:
     """Backward-compatible alias for the central prepare function."""
     return prepare_benchmark(run_plan)
 
+
+def _working_directory(output_dir: Path, run_id: str | None) -> Path:
+    if run_id:
+        return output_dir / "runs" / run_id
+    return output_dir / "work"
+
+
+def timestamp_run_id() -> str:
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
