@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import importlib.util
 from pathlib import Path
@@ -27,11 +28,13 @@ from converter.forcefield_to_lammps import (
 from converter.molecule_to_lammps_template import build_molecule_template, parse_crafted_molecule_def
 
 from parsers.lammps_log_parser import summarize_adsorption, get_log, log_to_json, parse_lammps_log
-from pipeline.evaluate import framework_mass_from_lammps_data, sim_results_to_csv
+from pipeline.evaluate import evaluate_all_references, evaluate_isotherm, framework_mass_from_lammps_data, sim_results_to_csv
+from pipeline.nist_isodb_parser import find_nist_isotherm_candidates, load_nist_isotherm
 
 
 HAS_ASE = importlib.util.find_spec("ase") is not None
 HAS_LAMMPS = shutil.which("lmp") is not None
+HAS_NIST_ISODB = Path("isodb-library/Library").exists()
 
 
 class BenchmarkPipelineTests(unittest.TestCase):
@@ -208,6 +211,115 @@ class BenchmarkPipelineTests(unittest.TestCase):
 
         with self.assertRaisesRegex(LookupError, "Adsorbate definition"):
             benchmark.resolve_benchmark(config)
+
+    @unittest.skipUnless(HAS_NIST_ISODB, "NIST ISODB library is required for NIST reference tests.")
+    def test_nist_isodb_candidates_rank_irmof1_co2_at_298k(self) -> None:
+        candidates = find_nist_isotherm_candidates(
+            "isodb-library",
+            material_names=["IRMOF-1", "MOF-5"],
+            components=["CO2"],
+            temperature_K=298.15,
+            pressures_bar=[0.1, 1.0, 10.0],
+        )
+
+        self.assertTrue(candidates)
+        self.assertEqual(candidates[0]["source"], "nist_isodb")
+        self.assertEqual(candidates[0]["format"], "nist_json")
+        self.assertEqual(candidates[0]["component"], "CO2")
+        self.assertLessEqual(candidates[0]["temperature_delta_K"], 2.0)
+        dois = [candidate["doi"] for candidate in candidates]
+        self.assertEqual(len(dois), len(set(dois)))
+
+    @unittest.skipUnless(HAS_NIST_ISODB, "NIST ISODB library is required for NIST reference tests.")
+    def test_nist_outlier_filter_marks_candidates_far_from_crafted(self) -> None:
+        run_plan = benchmark.build_run_plan(benchmark.load_benchmark_data("benchmark_tao2022_mof5_co2.json"))
+        excluded = [
+            reference
+            for reference in run_plan["resources"]["references"]
+            if reference.get("doi") == "10.1007/s00894-010-0720-x"
+        ]
+
+        self.assertTrue(excluded)
+        self.assertTrue(excluded[0]["excluded"])
+        self.assertFalse(excluded[0]["use_in_evaluation"])
+        self.assertIn("loading_ratio_gt_3_vs_primary_reference", excluded[0]["exclusion_reasons"])
+
+    @unittest.skipUnless(HAS_NIST_ISODB, "NIST ISODB library is required for NIST reference tests.")
+    def test_reference_resolver_auto_keeps_crafted_primary_and_adds_nist_candidates(self) -> None:
+        config = benchmark.load_benchmark_data("benchmark.json")
+        config["benchmark"]["reference"]["source"] = "auto"
+
+        run_plan = benchmark.build_run_plan(config)
+        references = run_plan["resources"]["references"]
+        selected = [reference for reference in references if reference["selected"]]
+
+        self.assertTrue(any(reference["source"] == "crafted" for reference in references))
+        self.assertTrue(any(reference["source"] == "nist_isodb" for reference in references))
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(selected[0]["source"], "crafted")
+        self.assertIn("excess", config["benchmark"]["reference"]["allowed_reference_basis"])
+        self.assertTrue(config["benchmark"]["reference"]["allow_excess_reference_basis"])
+
+    def test_load_nist_isotherm_converts_json_to_reference_points(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "nist.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "DOI": "10.test/example",
+                        "adsorbates": [{"name": "Carbon Dioxide"}],
+                        "adsorbent": {"name": "IRMOF-1"},
+                        "adsorptionUnits": "mmol/g",
+                        "pressureUnits": "bar",
+                        "temperature": 298,
+                        "isotherm_data": [
+                            {
+                                "pressure": 1.0,
+                                "species_data": [{"adsorption": 2.5, "composition": 1}],
+                                "total_adsorption": 2.5,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            points = load_nist_isotherm(path, component="CO2")
+
+        self.assertEqual(len(points), 1)
+        self.assertEqual(points[0]["source"], "nist_isodb")
+        self.assertEqual(points[0]["doi"], "10.test/example")
+        self.assertAlmostEqual(points[0]["pressure_Pa"], 100000.0)
+        self.assertAlmostEqual(points[0]["loading_mol_per_kg"], 2.5)
+
+    def test_load_nist_isotherm_accepts_null_total_adsorption(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "nist.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "DOI": "10.test/example",
+                        "adsorbates": [{"name": "Carbon Dioxide"}],
+                        "adsorbent": {"name": "IRMOF-1"},
+                        "adsorptionUnits": "mmol/g",
+                        "pressureUnits": "bar",
+                        "temperature": 298,
+                        "isotherm_data": [
+                            {
+                                "pressure": 1.0,
+                                "species_data": [{"adsorption": 2.5, "composition": 1}],
+                                "total_adsorption": None,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            points = load_nist_isotherm(path, component="CO2")
+
+        self.assertEqual(len(points), 1)
+        self.assertAlmostEqual(points[0]["loading_mol_per_kg"], 2.5)
 
     def test_parse_pseudo_atoms_reads_adsorbate_masses_and_charges(self) -> None:
         pseudo_atoms = parse_pseudo_atoms("CRAFTED-2.0.0/FORCEFIELDS/UFF/pseudo_atoms.def")
@@ -636,12 +748,363 @@ Atoms # full
 
             result = sim_results_to_csv(input_path, output_path, framework_data=data_path, reference_csv=reference_path)
             text = output_path.read_text(encoding="utf-8")
+            with output_path.open("r", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
             framework_mass_amu = framework_mass_from_lammps_data(data_path)
 
         self.assertEqual(result, output_path)
         self.assertAlmostEqual(framework_mass_amu, 20.0)
         self.assertIn("pressure_bar,pressure_Pa,sample_count,inserted,max_adsorbates,mean_adsorbates_per_cell", text)
-        self.assertIn("1.0,100000.0,10,True,6.0,2.0,124,20.0,100.0,100.0,80.0,1.0,exact,20.0,25.0", text)
+        self.assertEqual(rows[0]["reference_source"], "crafted")
+        self.assertEqual(rows[0]["reference_match"], "exact")
+        self.assertEqual(float(rows[0]["absolute_error_mol_per_kg"]), 20.0)
+        self.assertEqual(float(rows[0]["relative_error_percent"]), 25.0)
+
+    def test_sim_results_to_csv_accepts_nist_json_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_path = root / "isotherm_summary.json"
+            output_path = root / "isotherm_summary.csv"
+            data_path = root / "framework.data"
+            reference_path = root / "nist.json"
+            data_path.write_text(
+                """LAMMPS data
+
+1 atoms
+1 atom types
+
+Masses
+
+1 10.0 # X
+
+Atoms # full
+
+1 1 1 0.0 0.0 0.0 0.0
+""",
+                encoding="utf-8",
+            )
+            reference_path.write_text(
+                json.dumps(
+                    {
+                        "DOI": "10.test/example",
+                        "adsorbates": [{"name": "Carbon Dioxide"}],
+                        "adsorbent": {"name": "IRMOF-1"},
+                        "adsorptionUnits": "mmol/g",
+                        "pressureUnits": "bar",
+                        "temperature": 298,
+                        "isotherm_data": [
+                            {
+                                "pressure": 1.0,
+                                "species_data": [{"adsorption": 100.0, "composition": 1}],
+                                "total_adsorption": 100.0,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "status": "completed",
+                        "results": [
+                            {
+                                "pressure_bar": 1.0,
+                                "summary": {
+                                    "sample_count": 10,
+                                    "inserted": True,
+                                    "max_atoms": 13,
+                                    "max_adsorbates": 4.0,
+                                    "mean_adsorbates": 1.0,
+                                },
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            sim_results_to_csv(input_path, output_path, framework_data=data_path, reference_csv=reference_path)
+            text = output_path.read_text(encoding="utf-8")
+            with output_path.open("r", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+
+        self.assertIn("nist_isodb,10.test/example,unknown", text)
+        self.assertEqual(rows[0]["reference_match"], "exact")
+        self.assertEqual(rows[0]["reference_source"], "nist_isodb")
+        self.assertEqual(rows[0]["reference_doi"], "10.test/example")
+        self.assertEqual(rows[0]["reference_basis"], "unknown")
+        self.assertEqual(rows[0]["reference_compared_against"], "absolute_assumed_for_unknown_reference")
+        self.assertEqual(float(rows[0]["comparison_error_mol_per_kg"]), 0.0)
+
+    def test_excess_reference_compares_against_excess_loading(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_path = root / "isotherm_summary.json"
+            output_path = root / "isotherm_summary.csv"
+            data_path = root / "framework.data"
+            reference_path = root / "nist_excess.json"
+            data_path.write_text(
+                """LAMMPS data
+
+1 atoms
+1 atom types
+
+Masses
+
+1 10.0 # X
+
+Atoms # full
+
+1 1 1 0.0 0.0 0.0 0.0
+""",
+                encoding="utf-8",
+            )
+            absolute_loading = 100.0
+            gas_density = 100000.0 / (8.31446261815324 * 300.0)
+            excess_loading = absolute_loading - gas_density * 0.001
+            reference_path.write_text(
+                json.dumps(
+                    {
+                        "DOI": "10.test/excess",
+                        "adsorbates": [{"name": "Carbon Dioxide"}],
+                        "adsorbent": {"name": "IRMOF-1"},
+                        "adsorptionUnits": "mmol/g",
+                        "pressureUnits": "bar",
+                        "temperature": 300,
+                        "category": "excess adsorption",
+                        "isotherm_data": [
+                            {
+                                "pressure": 1.0,
+                                "species_data": [{"adsorption": excess_loading, "composition": 1}],
+                                "total_adsorption": excess_loading,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "status": "completed",
+                        "results": [
+                            {
+                                "pressure_bar": 1.0,
+                                "summary": {
+                                    "sample_count": 10,
+                                    "inserted": True,
+                                    "max_atoms": 4,
+                                    "max_adsorbates": 1.0,
+                                    "mean_adsorbates": 1.0,
+                                },
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            sim_results_to_csv(
+                input_path,
+                output_path,
+                framework_data=data_path,
+                reference_csv=reference_path,
+                evaluation_config={
+                    "report_excess": True,
+                    "pore_volume_cm3_g": 1.0,
+                    "gas_density_backend": "ideal",
+                    "temperature_K": 300.0,
+                },
+            )
+            with output_path.open("r", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+
+        self.assertEqual(rows[0]["reference_basis"], "excess")
+        self.assertEqual(rows[0]["reference_compared_against"], "excess")
+        self.assertAlmostEqual(float(rows[0]["loading_absolute_mol_per_kg"]), absolute_loading)
+        self.assertAlmostEqual(float(rows[0]["loading_excess_mol_per_kg"]), excess_loading)
+        self.assertAlmostEqual(float(rows[0]["comparison_error_mol_per_kg"]), 0.0)
+
+    def test_run_isotherm_rejects_invalid_parallel_jobs(self) -> None:
+        with self.assertRaisesRegex(ValueError, "jobs must be at least 1"):
+            benchmark.run_isotherm({"files": {"gcmc_runs": []}}, jobs=0)
+
+    def test_evaluate_isotherm_writes_readable_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "data").mkdir()
+            (root / "source" / "references").mkdir(parents=True)
+            sim_path = root / "isotherm_summary.json"
+            data_path = root / "data" / "framework.data"
+            reference_path = root / "source" / "references" / "reference.csv"
+            data_path.write_text(
+                """LAMMPS data
+
+1 atoms
+1 atom types
+
+Masses
+
+1 10.0 # X
+
+Atoms # full
+
+1 1 1 0.0 0.0 0.0 0.0
+""",
+                encoding="utf-8",
+            )
+            reference_path.write_text(
+                "# pressure[Pa],mean_volume[mol/kg],mean_error[mol/kg]\n"
+                "1.0e+05,100.0,2.0\n",
+                encoding="utf-8",
+            )
+            sim_path.write_text(
+                json.dumps(
+                    {
+                        "status": "completed",
+                        "results": [
+                            {
+                                "pressure_bar": 1.0,
+                                "summary": {
+                                    "sample_count": 10,
+                                    "inserted": True,
+                                    "max_atoms": 13,
+                                    "max_adsorbates": 4.0,
+                                    "mean_adsorbates": 1.0,
+                                },
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = evaluate_isotherm(sim_path)
+            csv_exists = Path(result["evaluated_csv"]).exists()
+            report_exists = Path(result["evaluation_report"]).exists()
+
+        self.assertEqual(result["point_count"], 1)
+        self.assertEqual(result["mean_absolute_error_mol_per_kg"], 0.0)
+        self.assertTrue(csv_exists)
+        self.assertTrue(report_exists)
+
+    def test_evaluate_all_references_writes_combined_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_dir = Path(tmpdir)
+            (run_dir / "data").mkdir()
+            (run_dir / "source" / "references").mkdir(parents=True)
+            data_path = run_dir / "data" / "framework.data"
+            crafted_path = run_dir / "source" / "references" / "crafted.csv"
+            nist_path = run_dir / "source" / "references" / "nist.json"
+            sim_path = run_dir / "isotherm_summary.json"
+
+            data_path.write_text(
+                """LAMMPS data
+
+1 atoms
+1 atom types
+
+Masses
+
+1 10.0 # X
+
+Atoms # full
+
+1 1 1 0.0 0.0 0.0 0.0
+""",
+                encoding="utf-8",
+            )
+            crafted_path.write_text(
+                "# pressure[Pa],mean_volume[mol/kg],mean_error[mol/kg]\n"
+                "1.0e+05,90.0,1.0\n",
+                encoding="utf-8",
+            )
+            nist_path.write_text(
+                json.dumps(
+                    {
+                        "DOI": "10.test/nist",
+                        "adsorbates": [{"name": "Carbon Dioxide"}],
+                        "adsorbent": {"name": "IRMOF-1"},
+                        "adsorptionUnits": "mmol/g",
+                        "pressureUnits": "bar",
+                        "temperature": 298,
+                        "isotherm_data": [
+                            {
+                                "pressure": 1.0,
+                                "species_data": [{"adsorption": 110.0, "composition": 1}],
+                                "total_adsorption": 110.0,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            sim_path.write_text(
+                json.dumps(
+                    {
+                        "status": "completed",
+                        "results": [
+                            {
+                                "pressure_bar": 1.0,
+                                "summary": {
+                                    "sample_count": 10,
+                                    "inserted": True,
+                                    "max_atoms": 13,
+                                    "max_adsorbates": 4.0,
+                                    "mean_adsorbates": 1.0,
+                                },
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (run_dir / "prepare_summary.json").write_text(
+                json.dumps(
+                    {
+                        "prepare_plan": {"parameters": {"components": ["CO2"]}},
+                        "result": {
+                            "files": {
+                                "source_files": {
+                                    "reference_files": [
+                                        {
+                                            "path": str(crafted_path),
+                                            "copied_path": str(crafted_path),
+                                            "source": "crafted",
+                                            "format": "crafted_csv",
+                                            "selected": True,
+                                        },
+                                        {
+                                            "path": str(nist_path),
+                                            "copied_path": str(nist_path),
+                                            "source": "nist_isodb",
+                                            "format": "nist_json",
+                                            "doi": "10.test/nist",
+                                            "selected": False,
+                                        },
+                                    ]
+                                }
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = evaluate_all_references(run_dir)
+            combined_csv = Path(result["combined_csv"])
+            candidates_json = Path(result["reference_candidates"])
+            combined_csv_exists = combined_csv.exists()
+            candidates_json_exists = candidates_json.exists()
+            combined_text = combined_csv.read_text(encoding="utf-8")
+
+        self.assertEqual(result["reference_count"], 2)
+        self.assertTrue(combined_csv_exists)
+        self.assertTrue(candidates_json_exists)
+        self.assertIn("simulation_mol_per_kg", combined_text)
+        self.assertIn("crafted_crafted_reference_mol_per_kg", combined_text)
+        self.assertIn("nist_isodb_10_test_nist_reference_mol_per_kg", combined_text)
 
 if __name__ == "__main__":
     unittest.main()

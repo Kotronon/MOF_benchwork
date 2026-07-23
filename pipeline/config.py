@@ -87,6 +87,19 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
             "adsorbate": adsorbates["components"][0],
         },
     )
+    if not isinstance(benchmark["reference"], dict):
+        raise TypeError("'benchmark.reference' must be an object.")
+    benchmark["reference"].setdefault("temperature_tolerance_K", 2.0)
+    benchmark["reference"].setdefault("max_nist_candidates", 5)
+    benchmark["reference"].setdefault("preferred_sources", ["crafted", "nist_isodb"])
+    benchmark["reference"].setdefault("deduplicate_nist_by_doi", True)
+    benchmark["reference"].setdefault("exclude_nist_outliers", True)
+    benchmark["reference"].setdefault("nist_max_loading_mol_per_kg", 60.0)
+    benchmark["reference"].setdefault("nist_max_reference_ratio", 3.0)
+    benchmark["reference"].setdefault("allowed_reference_basis", ["absolute", "simulation_reference", "excess"])
+    benchmark["reference"].setdefault("allow_unknown_reference_basis", True)
+    benchmark["reference"].setdefault("allow_excess_reference_basis", True)
+    benchmark["reference"].setdefault("require_known_nist_article_source", False)
 
     simulation = config.setdefault("simulation", {})
     if not isinstance(simulation, dict):
@@ -102,6 +115,17 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     simulation.setdefault("kspace_style", "pppm")
     simulation.setdefault("kspace_accuracy", 1e-5)
     simulation.setdefault("unit_cells", simulation.get("supercell", "auto"))
+
+    evaluation = config.setdefault("evaluation", {})
+    if not isinstance(evaluation, dict):
+        raise TypeError("'evaluation' must be an object.")
+    evaluation.setdefault("simulation_basis", "absolute")
+    evaluation.setdefault("report_excess", True)
+    evaluation.setdefault("pore_volume_cm3_g", "auto")
+    evaluation.setdefault("pore_volume_source", None)
+    evaluation.setdefault("pore_volume_method", None)
+    evaluation.setdefault("gas_density_backend", "HEOS")
+    evaluation.setdefault("reference_matching", "by_basis")
 
     output = config.setdefault("output", {})
     if not isinstance(output, dict):

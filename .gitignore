@@ -223,8 +223,19 @@ __marimo__/
 # External/raw datasets and generated benchmark artifacts
 CRAFTED-2.0.0/
 CRAFTED-2.0.0.tar.xz
+isodb-library/
 external/
 outputs/
 reports/
 presentations/
 guidelines_for_project_developement/
+docs/
+
+# LaTeX auxiliary files
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz

@@ -27,7 +27,25 @@
     "task": "auto",
     "metrics": [],
     "reference": {
-      "source": "crafted",
+      "source": "auto",
+      "preferred_sources": [
+        "crafted",
+        "nist_isodb"
+      ],
+      "temperature_tolerance_K": 2.0,
+      "max_nist_candidates": 5,
+      "deduplicate_nist_by_doi": true,
+      "exclude_nist_outliers": true,
+      "nist_max_loading_mol_per_kg": 60.0,
+      "nist_max_reference_ratio": 3.0,
+      "allowed_reference_basis": [
+        "absolute",
+        "simulation_reference",
+        "excess"
+      ],
+      "allow_unknown_reference_basis": true,
+      "allow_excess_reference_basis": true,
+      "require_known_nist_article_source": false,
       "material": "MOF-5",
       "adsorbate": "CO2"
     }
@@ -50,6 +68,15 @@
     "unit_cells": "auto",
     "cycles": 100000,
     "initialization_cycles": 20000
+  },
+  "evaluation": {
+    "simulation_basis": "absolute",
+    "report_excess": true,
+    "pore_volume_cm3_g": "auto",
+    "pore_volume_source": null,
+    "pore_volume_method": null,
+    "gas_density_backend": "HEOS",
+    "reference_matching": "by_basis"
   },
   "output": {
     "directory": null,

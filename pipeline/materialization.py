@@ -174,6 +174,7 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
         "status": "materialized",
         "working_directory": str(working_dir),
         "parameters": prepare_plan["parameters"],
+        "evaluation": prepare_plan.get("evaluation", {}),
         "files": {
             "framework_data": str(framework_data_path),
             "forcefield_include": str(forcefield_path),

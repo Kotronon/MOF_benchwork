@@ -72,6 +72,7 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
             "adsorbate_definitions": run_plan["resources"]["forcefield"]["adsorbates"],
             "reference_files": run_plan["resources"]["references"],
         },
+        "evaluation": run_plan.get("evaluation", {}),
         "planned_files": {
             "framework_data": plan_cif_to_lammps_data(
                 cif_path=Path(run_plan["resources"]["cif_path"]),
