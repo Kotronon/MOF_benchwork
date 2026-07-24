@@ -1,0 +1,39 @@
+\section{Project Architecture}
+
+The project separates planning, materialization, execution, parsing, and evaluation.
+This separation is important because the benchmark should first produce a reproducible run plan before any files are written or LAMMPS is started.
+
+\begin{longtable}{p{0.30\textwidth}p{0.62\textwidth}}
+\toprule
+\textbf{Path} & \textbf{Purpose} \\
+\midrule
+\texttt{benchmark.py} & Command-line entry point and high-level orchestration. \\
+\texttt{pipeline/config.py} & Input loading, schema normalization, and default values. \\
+\texttt{pipeline/planning.py} & Resolution of material, force field, references, unit cells, and run-plan construction. \\
+\texttt{pipeline/prepare.py} & Side-effect-free preparation plan for generated files. \\
+\texttt{pipeline/materialization.py} & Writes the prepared benchmark environment to disk. \\
+\texttt{pipeline/runners.py} & Executes LAMMPS runs and triggers evaluation. \\
+\texttt{pipeline/evaluate.py} & Converts simulation summaries to CSV, Markdown reports, and plots. \\
+\texttt{pipeline/eos.py} & Equation-of-state helper functions for fugacity and gas density. \\
+\texttt{converter/cif\_to\_lammps\_data.py} & Converts CIF framework structures to LAMMPS data files. \\
+\texttt{converter/molecule\_to\_lammps\_template.py} & Converts CRAFTED/RASPA molecule definitions to LAMMPS molecule templates. \\
+\texttt{converter/forcefield\_to\_lammps.py} & Converts force-field parameters to LAMMPS pair coefficients. \\
+\texttt{resolvers/} & Resolves materials, force fields, unit cells, references, and task modules. \\
+\texttt{parsers/lammps\_log\_parser.py} & Parses LAMMPS thermo output and summarizes adsorption. \\
+\texttt{input\_json\_files/} & Benchmark input configurations. \\
+\texttt{test\_benchmark.py} & Unit and smoke tests for the benchmark pipeline. \\
+\bottomrule
+\end{longtable}
+
+\subsection{Pipeline Stages}
+
+\begin{enumerate}
+    \item \textbf{Configuration}: load and normalize the benchmark JSON file.
+    \item \textbf{Resolution}: resolve material aliases, CIF paths, force-field files, unit cells, and references.
+    \item \textbf{Planning}: build a JSON-serializable run plan without side effects.
+    \item \textbf{Preparation}: create a description of required generated files.
+    \item \textbf{Materialization}: write data, templates, force-field includes, inputs, and source copies to disk.
+    \item \textbf{Execution}: run a smoke test or full pressure-grid isotherm in LAMMPS.
+    \item \textbf{Parsing}: extract adsorption summaries from LAMMPS logs.
+    \item \textbf{Evaluation}: calculate absolute and excess loading, compare to references, and generate reports.
+\end{enumerate}

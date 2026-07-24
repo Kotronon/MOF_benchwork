@@ -1,0 +1,20 @@
+\section{Introduction}
+
+\texttt{MOF\_benchwork} aims to provide a reproducible workflow for benchmarking gas adsorption simulations in metal-organic frameworks.
+The project combines input normalization, material and force-field resolution, LAMMPS input generation, simulation execution, log parsing, and reference-data evaluation.
+
+The first implemented benchmark target is CO2 adsorption in MOF-5, resolved internally as IRMOF-1.
+This system is used as the initial Module A case because it is a common reference framework and suitable for validating the pipeline before extending the project to mixtures, Widom insertion, Henry coefficients, or flexible-framework simulations.
+
+\subsection{Benchmark Modules}
+
+The project is organized around four benchmark modules:
+
+\begin{itemize}
+    \item Module A: single-component adsorption in a rigid framework.
+    \item Module B: mixture adsorption and selectivity.
+    \item Module C: Widom insertion, Henry coefficients, or force-field comparison.
+    \item Module D: flexible-framework simulations or MD/GCMC flexibility studies.
+\end{itemize}
+
+The current documentation focuses on the completed technical state of Module A and lists the remaining scientific validation steps.

@@ -1,0 +1,51 @@
+\section{Future Modules}
+
+The architecture is intended to support additional benchmark modules without duplicating the central planning and materialization logic.
+Shared functionality such as configuration loading, reference resolution, force-field conversion, execution, and evaluation should remain in \texttt{pipeline/}, \texttt{converter/}, \texttt{resolvers/}, and \texttt{parsers/}.
+Module-specific code should only describe module-specific scientific workflows.
+
+\subsection{Module B: Mixture Adsorption and Selectivity}
+
+Module B will extend the current single-component workflow to mixtures such as CO2/N2.
+Expected additions include:
+
+\begin{itemize}
+    \item mixture composition in the benchmark configuration,
+    \item multiple molecule templates,
+    \item mixture GCMC input generation,
+    \item component-wise adsorption summaries,
+    \item selectivity calculation,
+    \item reference comparison for mixture data where available.
+\end{itemize}
+
+\subsection{Module C: Widom Insertion and Henry Coefficients}
+
+Module C will focus on low-pressure adsorption properties and potential comparison.
+Expected additions include:
+
+\begin{itemize}
+    \item Widom insertion input generation,
+    \item Henry coefficient extraction,
+    \item optional force-field comparison,
+    \item low-pressure reference matching,
+    \item uncertainty estimation for insertion averages.
+\end{itemize}
+
+\subsection{Module D: Framework Flexibility}
+
+Module D will address flexible-framework simulations.
+Expected additions include:
+
+\begin{itemize}
+    \item flexible framework preparation,
+    \item MD or hybrid MD/GCMC workflows,
+    \item trajectory analysis,
+    \item OVITO-based visualization outputs,
+    \item comparison between rigid and flexible adsorption behavior.
+\end{itemize}
+
+\subsection{Avoiding Redundancy}
+
+Preparation and materialization should remain central whenever possible.
+Individual modules should not duplicate generic logic such as copying files, creating run directories, resolving references, or writing evaluation outputs.
+Instead, modules should provide the module-specific parts of the run plan that the central pipeline can materialize and execute.

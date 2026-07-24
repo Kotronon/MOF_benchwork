@@ -1,0 +1,38 @@
+\section{Limitations and Future Work}
+
+Module A is technically runnable, but the scientific validation is not complete yet.
+The most important remaining limitations are:
+
+\begin{itemize}
+    \item convergence has not yet been quantified,
+    \item uncertainty estimates are not yet calculated,
+    \item multiple independent random seeds are not yet automated,
+    \item block averaging is not yet implemented,
+    \item MAE and MSE per reference should be made more explicit in a combined report,
+    \item the best-matching reference should be highlighted automatically.
+\end{itemize}
+
+\subsection{Immediate Next Steps}
+
+\begin{enumerate}
+    \item Add convergence analysis by plotting loading as a function of simulation step or block index.
+    \item Add multiple-seed execution for every pressure point.
+    \item Calculate statistical uncertainty using standard deviation across seeds or block standard error of the mean.
+    \item Refactor the combined evaluation report to show MAE and MSE per reference.
+    \item Highlight the best-matching reference dataset.
+    \item Add a final Module A report that combines input protocol, simulation results, reference comparison, uncertainty, and plots.
+\end{enumerate}
+
+\subsection{Scientific Completion Criteria for Module A}
+
+Module A can be considered scientifically complete when:
+
+\begin{itemize}
+    \item the simulation protocol is fully documented,
+    \item adsorption isotherms are converged or convergence limitations are explicitly stated,
+    \item uncertainty is reported for every pressure point,
+    \item multiple seeds or statistically justified block averages are available,
+    \item references are curated and basis-matched,
+    \item absolute and excess adsorption are reported where appropriate,
+    \item generated outputs are reproducible from a single benchmark configuration.
+\end{itemize}

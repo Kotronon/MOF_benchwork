@@ -1,0 +1,41 @@
+\section{Validation Status}
+
+The current test suite checks:
+
+\begin{itemize}
+    \item benchmark JSON loading,
+    \item default configuration normalization,
+    \item MOF-5 to IRMOF-1 alias resolution,
+    \item automatic module selection,
+    \item CRAFTED molecule parsing,
+    \item CIF charge parsing,
+    \item LAMMPS data generation,
+    \item force-field parsing and pair-coefficient generation,
+    \item GCMC input generation,
+    \item LAMMPS log parsing,
+    \item isotherm CSV generation,
+    \item NIST reference parsing,
+    \item combined reference evaluation,
+    \item excess adsorption comparison against excess references.
+\end{itemize}
+
+The latest local test run completed with:
+
+\begin{lstlisting}
+Ran 44 tests in 41.431s
+OK (skipped=7)
+\end{lstlisting}
+
+The skipped tests depend on optional local tools such as ASE, LAMMPS, or the local NIST ISODB checkout.
+
+\subsection{Environment Notes}
+
+CoolProp was verified in the \texttt{MOF\_sim} environment for CO2 at 298.15 K and 1 bar.
+The calculated molar gas density was:
+
+\begin{equation}
+    \rho_{\mathrm{CO2}} = 40.54118025466975~\mathrm{mol~m^{-3}}.
+\end{equation}
+
+The base Python interpreter may not contain all simulation dependencies.
+Production commands should therefore be run from \texttt{MOF\_sim}.

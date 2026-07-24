@@ -1,0 +1,127 @@
+\section{Module A: Single-Component Adsorption}
+
+Module A targets single-component adsorption in a rigid framework.
+The current implementation uses CO2 adsorption in MOF-5/IRMOF-1 as the first benchmark case.
+
+\subsection{Current Scope}
+
+Module A currently covers:
+
+\begin{enumerate}
+    \item loading a benchmark JSON input file,
+    \item resolving MOF-5 to IRMOF-1,
+    \item resolving the DDEC CIF file,
+    \item resolving CRAFTED UFF force-field files,
+    \item resolving CO2 molecule definitions,
+    \item generating a LAMMPS framework data file,
+    \item generating a CO2 LAMMPS molecule template,
+    \item generating pair coefficients and LAMMPS force-field include files,
+    \item generating one GCMC input per pressure point,
+    \item executing LAMMPS pressure-point simulations,
+    \item parsing LAMMPS logs,
+    \item calculating absolute and excess adsorption,
+    \item comparing the simulation results against reference data.
+\end{enumerate}
+
+\subsection{Current Paper-Like Setup}
+
+\begin{longtable}{p{0.36\textwidth}p{0.48\textwidth}}
+\toprule
+\textbf{Setting} & \textbf{Current value} \\
+\midrule
+Material & MOF-5, resolved as IRMOF-1 \\
+Charge scheme & DDEC \\
+Adsorbate & CO2 \\
+Temperature & 298.15 K \\
+Pressure points & 0.1, 0.5, 1, 2, 5, 10, 20, 35 bar \\
+Force field & UFF framework and CRAFTED CO2 definition \\
+Framework model & Rigid \\
+Unit cells & 1 x 1 x 1 \\
+LAMMPS units & real \\
+Pair style & \texttt{lj/cut/coul/long} \\
+Cutoff & 12.8 Angstrom \\
+KSpace & \texttt{pppm}, accuracy \texttt{1e-4} \\
+Fugacity model & Peng-Robinson via CoolProp \\
+Production cycles & 500000 \\
+Initialization cycles & 500000 \\
+\bottomrule
+\end{longtable}
+
+\subsection{CIF to LAMMPS Data}
+
+The CIF converter reads the framework geometry with ASE and separately parses CIF charges from \texttt{\_atom\_site\_charge}.
+This is necessary because ASE reads the geometry and cell but does not reliably preserve the charge column required for LAMMPS \texttt{atom\_style full}.
+
+The generated framework data file contains:
+
+\begin{itemize}
+    \item atom count,
+    \item atom types,
+    \item restricted triclinic box parameters,
+    \item masses,
+    \item \texttt{Atoms \# full} section with molecule ID, atom type, charge, and Cartesian coordinates.
+\end{itemize}
+
+For IRMOF-1, the framework contains 106 atoms in the primitive simulation cell.
+
+\subsection{Molecule Templates}
+
+The molecule converter parses CRAFTED/RASPA \texttt{.def} files for adsorbates such as CO2 and N2.
+For CO2, it creates a LAMMPS molecule template with:
+
+\begin{itemize}
+    \item three atoms,
+    \item two rigid bonds,
+    \item global atom type IDs,
+    \item partial charges from the pseudo-atom definitions.
+\end{itemize}
+
+Because the CO2 template contains bonds, LAMMPS input generation reserves additional per-atom bond and special-neighbor slots:
+
+\begin{lstlisting}
+extra/bond/per/atom 2 extra/special/per/atom 2
+\end{lstlisting}
+
+\subsection{Force-Field Conversion}
+
+The force-field converter parses CRAFTED UFF files and writes LAMMPS pair coefficients.
+It assigns atom types for framework atoms and adsorbate atoms, then applies Lorentz-Berthelot mixing for cross interactions.
+
+The generated force-field include file is referenced by every generated LAMMPS input script.
+
+\subsection{LAMMPS Execution}
+
+A short smoke test can be started with:
+
+\begin{lstlisting}[language=bash]
+conda activate MOF_sim
+python benchmark.py benchmark_tao2022_mof5_co2.json --run-test
+\end{lstlisting}
+
+A full pressure-grid run can be started with:
+
+\begin{lstlisting}[language=bash]
+conda activate MOF_sim
+python benchmark.py benchmark_tao2022_mof5_co2.json --run-isotherm --new-run --jobs 4
+\end{lstlisting}
+
+The \texttt{--new-run} flag creates a timestamped output directory.
+The \texttt{--jobs} flag controls how many pressure points are executed in parallel.
+
+\subsection{GCMC Interpretation}
+
+In a GCMC simulation, CO2 molecules are inserted and deleted during the simulation.
+Therefore, the number of CO2 molecules in a trajectory or dump file changes over time.
+This is expected behavior and is the basis for estimating adsorption from the mean molecule count.
+
+\subsection{Visualization}
+
+LAMMPS trajectory dumps are written for pressure-point runs when dump output is enabled in the generated GCMC input.
+The dump files can be opened with the OVITO desktop application.
+Typical dump location:
+
+\begin{lstlisting}
+outputs/module_A_co2_isotherm/runs/<run_id>/dumps/gcmc_10bar.lammpstrj
+\end{lstlisting}
+
+Coloring by particle type is useful to distinguish framework atom types from inserted CO2 atom types.

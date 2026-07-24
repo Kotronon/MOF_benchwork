@@ -1,0 +1,90 @@
+\section{Evaluation and Statistics}
+
+The evaluation layer converts LAMMPS log summaries into adsorption isotherm tables, reports, and plots.
+The simulation molecule count is interpreted as absolute adsorption, and excess adsorption can be calculated when pore volume and gas density are available.
+
+\subsection{Absolute Adsorption}
+
+The absolute loading is calculated from the mean number of adsorbate molecules in the simulation cell:
+
+\begin{equation}
+    n_{\mathrm{abs}} =
+    \frac{1000 \cdot \langle N_{\mathrm{ads}}\rangle}{m_{\mathrm{framework}}}
+\end{equation}
+
+where:
+
+\begin{itemize}
+    \item $n_{\mathrm{abs}}$ is the absolute adsorption loading in mol kg$^{-1}$,
+    \item $\langle N_{\mathrm{ads}}\rangle$ is the mean number of adsorbate molecules per simulation cell,
+    \item $m_{\mathrm{framework}}$ is the framework mass in atomic mass units.
+\end{itemize}
+
+The numerical values of mol kg$^{-1}$ and mmol g$^{-1}$ are identical.
+
+\subsection{Excess Adsorption}
+
+Excess adsorption is calculated as:
+
+\begin{equation}
+    n_{\mathrm{ex}} =
+    n_{\mathrm{abs}} - \rho_{\mathrm{gas}} V_{\mathrm{pore}}
+\end{equation}
+
+where:
+
+\begin{itemize}
+    \item $n_{\mathrm{ex}}$ is the excess adsorption loading in mol kg$^{-1}$,
+    \item $n_{\mathrm{abs}}$ is the absolute adsorption loading in mol kg$^{-1}$,
+    \item $\rho_{\mathrm{gas}}$ is the bulk gas molar density in mol m$^{-3}$,
+    \item $V_{\mathrm{pore}}$ is the pore volume in m$^3$ kg$^{-1}$.
+\end{itemize}
+
+For IRMOF-1, the current automatic pore volume source is:
+
+\begin{lstlisting}
+CRAFTED-2.0.0/RAC_DBSCAN/CRAFTED_MOF_geometric.csv:AV_cm^3/g
+\end{lstlisting}
+
+with:
+
+\begin{equation}
+    V_{\mathrm{pore}} = 0.845545~\mathrm{cm^3~g^{-1}}
+    = 0.000845545~\mathrm{m^3~kg^{-1}}.
+\end{equation}
+
+The gas density is calculated with CoolProp using the configured backend.
+For production evaluation, the current backend is \texttt{HEOS}.
+
+\subsection{Current Evaluation Outputs}
+
+For each evaluated run, the pipeline writes:
+
+\begin{itemize}
+    \item \texttt{evaluated\_isotherm.csv},
+    \item \texttt{evaluation\_report.md},
+    \item \texttt{isotherm\_comparison.png}.
+\end{itemize}
+
+For comparison against all available references, the pipeline writes:
+
+\begin{itemize}
+    \item \texttt{evaluations/reference\_candidates.json},
+    \item \texttt{evaluations/combined\_reference\_comparison.csv},
+    \item \texttt{evaluations/combined\_reference\_comparison.png},
+    \item one evaluation subdirectory per active reference.
+\end{itemize}
+
+\subsection{Planned Statistical Extensions}
+
+The next scientific development step is statistical validation.
+The most important additions are:
+
+\begin{itemize}
+    \item convergence analysis by plotting loading as a function of simulation step or block index,
+    \item multiple independent runs using different random seeds,
+    \item standard deviation across seeds,
+    \item block standard error of the mean,
+    \item MAE and MSE per reference dataset,
+    \item automatic highlighting of the best-matching reference.
+\end{itemize}

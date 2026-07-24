@@ -229,7 +229,6 @@ outputs/
 reports/
 presentations/
 guidelines_for_project_developement/
-docs/
 
 # LaTeX auxiliary files
 *.aux

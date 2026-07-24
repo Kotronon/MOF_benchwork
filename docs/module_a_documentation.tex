@@ -1,0 +1,463 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{amsmath}
+
+\geometry{margin=2.5cm}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    citecolor=blue
+}
+
+\lstdefinestyle{code}{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    columns=fullflexible
+}
+\lstset{style=code}
+
+\title{MOF\_benchwork: Module A Documentation}
+\author{Katharina}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This document describes the current state of \texttt{MOF\_benchwork} up to the first runnable version of Module A.
+Module A targets single-component CO2 adsorption in a rigid MOF framework using GCMC-style LAMMPS input generation.
+The current implementation can resolve benchmark inputs, generate LAMMPS input artifacts, execute pressure-point runs, parse LAMMPS logs, and evaluate the resulting adsorption isotherm against curated reference data.
+The simulation output is treated as absolute adsorption from molecule counts, and the evaluation layer can additionally calculate excess adsorption when a pore volume is available.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Project Goal}
+
+The goal of \texttt{MOF\_benchwork} is to provide a reproducible benchmark pipeline for gas adsorption simulations in metal-organic frameworks.
+The project is structured around benchmark modules:
+
+\begin{itemize}
+    \item Module A: single-component adsorption in a rigid framework.
+    \item Module B: mixture adsorption and selectivity.
+    \item Module C: Widom insertion, Henry coefficients, or force-field comparison.
+    \item Module D: flexible-framework simulations or MD/GCMC flexibility studies.
+\end{itemize}
+
+The current implementation focuses on Module A, using MOF-5/IRMOF-1 and CO2 as the first benchmark case.
+
+\section{Current Scope of Module A}
+
+Module A currently covers the following workflow:
+
+\begin{enumerate}
+    \item Load a benchmark JSON input file.
+    \item Normalize missing configuration values with defaults.
+    \item Resolve the material alias MOF-5 to IRMOF-1.
+    \item Resolve the CIF file and charge scheme.
+    \item Resolve force-field files and adsorbate definitions from CRAFTED.
+    \item Select the benchmark module automatically.
+    \item Build a side-effect-free run plan.
+    \item Materialize a run directory with generated LAMMPS data, molecule templates, force-field include files, and GCMC inputs.
+    \item Run a short smoke test or a full pressure-grid isotherm.
+    \item Parse LAMMPS logs into JSON summaries.
+    \item Evaluate the isotherm against CRAFTED and NIST reference data.
+    \item Report both absolute and excess adsorption where possible.
+\end{enumerate}
+
+
+
+\section{Benchmark Configuration}
+
+The main Module A input is stored in:
+
+\begin{lstlisting}
+input_json_files/benchmark_tao2022_mof5_co2.json
+\end{lstlisting}
+
+The configuration contains the following conceptual sections:
+
+\begin{itemize}
+    \item \texttt{material}: framework name, CIF source, charge scheme, and data source.
+    \item \texttt{adsorbates}: adsorbate components, currently CO2.
+    \item \texttt{conditions}: temperature and pressure grid.
+    \item \texttt{benchmark}: task, metrics, and reference-data configuration.
+    \item \texttt{simulation}: LAMMPS/GCMC settings.
+    \item \texttt{evaluation}: absolute/excess handling and gas-density model.
+    \item \texttt{output}: output directory, run ID, overwrite behavior, and saved artifacts.
+\end{itemize}
+
+\subsection{Current Paper-Like Setup}
+
+The current paper-like MOF-5/CO2 setup uses:
+
+\begin{longtable}{p{0.36\textwidth}p{0.48\textwidth}}
+\toprule
+\textbf{Setting} & \textbf{Current value} \\
+\midrule
+Material & MOF-5, resolved as IRMOF-1 \\
+Charge scheme & DDEC \\
+Adsorbate & CO2 \\
+Temperature & 298.15 K \\
+Pressure points & 0.1, 0.5, 1, 2, 5, 10, 20, 35 bar \\
+Force field & UFF framework and CRAFTED CO2 definition \\
+Framework model & Rigid \\
+Unit cells & 1 x 1 x 1 \\
+LAMMPS units & real \\
+Pair style & \texttt{lj/cut/coul/long} \\
+Cutoff & 12.8 Angstrom \\
+KSpace & \texttt{pppm}, accuracy \texttt{1e-4} \\
+Fugacity model & Peng-Robinson via CoolProp \\
+Production cycles & 500000 \\
+Initialization cycles & 500000 \\
+\bottomrule
+\end{longtable}
+
+\section{Pipeline Design}
+
+\subsection{Planning}
+
+The planning stage is side-effect-free.
+It creates a JSON-serializable run plan without writing output files or starting LAMMPS.
+The main command is:
+
+\begin{lstlisting}[language=bash]
+python benchmark.py benchmark_tao2022_mof5_co2.json --dry-run
+\end{lstlisting}
+
+The run plan contains:
+
+\begin{itemize}
+    \item selected module,
+    \item resolved material and CIF path,
+    \item resolved charge scheme,
+    \item resolved force-field files,
+    \item adsorbate definitions,
+    \item pressure and temperature points,
+    \item reference candidates,
+    \item output paths,
+    \item evaluation settings.
+\end{itemize}
+
+\subsection{Preparation}
+
+The preparation stage creates a side-effect-free description of all files that should be generated.
+The command is:
+
+\begin{lstlisting}[language=bash]
+python benchmark.py benchmark_tao2022_mof5_co2.json --prepare
+\end{lstlisting}
+
+The actual materialization writes:
+
+\begin{itemize}
+    \item framework-only LAMMPS data file,
+    \item CO2 molecule template,
+    \item LAMMPS force-field include file,
+    \item one run-zero input,
+    \item one GCMC smoke-test input,
+    \item one GCMC input per pressure point,
+    \item source copies of CIF, force-field, molecule, and reference files.
+\end{itemize}
+
+\section{Converters}
+
+\subsection{CIF to LAMMPS Data}
+
+The CIF converter reads the framework geometry with ASE and separately parses CIF charges from \texttt{\_atom\_site\_charge}.
+This is necessary because ASE reads the geometry and cell but does not reliably preserve the charge column as required for LAMMPS \texttt{atom\_style full}.
+
+The generated framework data file contains:
+
+\begin{itemize}
+    \item atom count,
+    \item atom types,
+    \item triclinic box parameters,
+    \item masses,
+    \item \texttt{Atoms \# full} section with molecule ID, atom type, charge, and Cartesian coordinates.
+\end{itemize}
+
+For IRMOF-1 the converter generates a restricted triclinic LAMMPS box.
+This preserves the periodic cell geometry in the LAMMPS representation.
+
+\subsection{Molecule Definition to LAMMPS Template}
+
+The molecule converter parses CRAFTED/RASPA \texttt{.def} files for adsorbates such as CO2 and N2.
+For CO2 it creates a LAMMPS molecule template with:
+
+\begin{itemize}
+    \item three atoms,
+    \item two rigid bonds,
+    \item global atom type IDs,
+    \item partial charges from the pseudo-atom definitions.
+\end{itemize}
+
+Because the CO2 template contains bonds, LAMMPS input generation reserves additional per-atom bond and special-neighbor slots using options such as:
+
+\begin{lstlisting}
+extra/bond/per/atom 2 extra/special/per/atom 2
+\end{lstlisting}
+
+\subsection{Force Field to LAMMPS Include}
+
+The force-field converter parses CRAFTED UFF files and writes LAMMPS pair coefficients.
+It assigns atom types for both framework atoms and adsorbate atoms, then applies Lorentz-Berthelot mixing for cross interactions.
+
+\section{LAMMPS Execution}
+
+\subsection{Smoke Test}
+
+A short test run can be started with:
+
+\begin{lstlisting}[language=bash]
+conda activate MOF_sim
+python benchmark.py benchmark_tao2022_mof5_co2.json --run-test
+\end{lstlisting}
+
+The smoke test verifies that LAMMPS can read the generated data, molecule template, and pair coefficients, and that GCMC insertion can occur.
+
+\subsection{Full Isotherm}
+
+A full pressure-grid run can be started with:
+
+\begin{lstlisting}[language=bash]
+conda activate MOF_sim
+python benchmark.py benchmark_tao2022_mof5_co2.json --run-isotherm --new-run --jobs 4
+\end{lstlisting}
+
+The \texttt{--new-run} flag creates a timestamped output directory to avoid overwriting older results.
+The \texttt{--jobs} flag controls how many pressure points are executed in parallel.
+
+\section{Evaluation}
+
+\subsection{Absolute Adsorption}
+
+The raw LAMMPS output is converted to an absolute loading using the mean number of adsorbate molecules in the simulation cell:
+
+\begin{equation}
+    n_{\mathrm{abs}} =
+    \frac{1000 \cdot \langle N_{\mathrm{ads}}\rangle}{m_{\mathrm{framework}}}
+\end{equation}
+
+where:
+
+\begin{itemize}
+    \item $n_{\mathrm{abs}}$ is the absolute adsorption loading in mol kg$^{-1}$,
+    \item $\langle N_{\mathrm{ads}}\rangle$ is the mean number of adsorbate molecules per simulation cell,
+    \item $m_{\mathrm{framework}}$ is the framework mass in atomic mass units.
+\end{itemize}
+
+The numerical values of mol kg$^{-1}$ and mmol g$^{-1}$ are identical.
+
+\subsection{Excess Adsorption}
+
+The evaluation layer can additionally calculate excess adsorption:
+
+\begin{equation}
+    n_{\mathrm{ex}} =
+    n_{\mathrm{abs}} - \rho_{\mathrm{gas}} V_{\mathrm{pore}}
+\end{equation}
+
+where:
+
+\begin{itemize}
+    \item $n_{\mathrm{ex}}$ is the excess adsorption loading in mol kg$^{-1}$,
+    \item $n_{\mathrm{abs}}$ is the absolute adsorption loading in mol kg$^{-1}$,
+    \item $\rho_{\mathrm{gas}}$ is the bulk gas molar density in mol m$^{-3}$,
+    \item $V_{\mathrm{pore}}$ is the pore volume in m$^3$ kg$^{-1}$.
+\end{itemize}
+
+For IRMOF-1, the current automatic pore volume source is:
+
+\begin{lstlisting}
+CRAFTED-2.0.0/RAC_DBSCAN/CRAFTED_MOF_geometric.csv:AV_cm^3/g
+\end{lstlisting}
+
+with:
+
+\begin{equation}
+    V_{\mathrm{pore}} = 0.845545~\mathrm{cm^3~g^{-1}}
+    = 0.000845545~\mathrm{m^3~kg^{-1}}.
+\end{equation}
+
+The gas density is calculated through CoolProp using the configured backend.
+For production evaluation, the current backend is:
+
+\begin{lstlisting}
+HEOS
+\end{lstlisting}
+
+\subsection{Reference Matching}
+
+The evaluation distinguishes reference adsorption bases:
+
+\begin{itemize}
+    \item \texttt{simulation\_reference}: compared against absolute simulation loading.
+    \item \texttt{absolute}: compared against absolute simulation loading.
+    \item \texttt{excess}: compared against excess simulation loading.
+    \item \texttt{unknown}: reported as unknown and compared against absolute loading by default.
+\end{itemize}
+
+This behavior is controlled by:
+
+\begin{lstlisting}
+"reference_matching": "by_basis"
+\end{lstlisting}
+
+\subsection{Evaluation Outputs}
+
+For each evaluated run, the pipeline writes:
+
+\begin{itemize}
+    \item \texttt{evaluated\_isotherm.csv},
+    \item \texttt{evaluation\_report.md},
+    \item \texttt{isotherm\_comparison.png}.
+\end{itemize}
+
+For comparison against all available references, the pipeline writes:
+
+\begin{itemize}
+    \item \texttt{evaluations/reference\_candidates.json},
+    \item \texttt{evaluations/combined\_reference\_comparison.csv},
+    \item \texttt{evaluations/combined\_reference\_comparison.png},
+    \item one evaluation subdirectory per active reference.
+\end{itemize}
+
+\section{Reference Data}
+
+The current workflow supports two reference sources:
+
+\begin{itemize}
+    \item CRAFTED is used as the primary simulation-reference dataset.
+    \item NIST ISODB is used as an additional experimental/literature reference source.
+\end{itemize}
+
+NIST entries can be excluded from evaluation if they are detected as outliers or if their adsorption basis is not allowed by the benchmark configuration.
+Excluded entries are documented in \texttt{reference\_candidates.json} instead of being silently removed.
+
+\section{Visualization}
+
+LAMMPS trajectory dumps are written for pressure-point runs when dump output is enabled in the generated GCMC input.
+The dump files can be opened with the OVITO desktop application.
+Coloring by particle type is useful to distinguish framework atom types from inserted CO2 atom types.
+
+Typical dump location:
+
+\begin{lstlisting}
+outputs/module_A_co2_isotherm/runs/<run_id>/dumps/gcmc_10bar.lammpstrj
+\end{lstlisting}
+
+The number of CO2 molecules changes during GCMC because insertion and deletion moves are part of the grand-canonical ensemble.
+This is expected behavior and is the basis for calculating adsorption from the mean molecule count.
+
+\section{Validation Status}
+
+The current test suite checks:
+
+\begin{itemize}
+    \item benchmark JSON loading,
+    \item default configuration normalization,
+    \item MOF-5 to IRMOF-1 alias resolution,
+    \item module selection,
+    \item CRAFTED molecule parsing,
+    \item CIF charge parsing,
+    \item LAMMPS data generation,
+    \item force-field parsing and pair-coefficient generation,
+    \item GCMC input generation,
+    \item log parsing,
+    \item isotherm CSV generation,
+    \item NIST reference parsing,
+    \item combined reference evaluation,
+    \item excess adsorption comparison against excess references.
+\end{itemize}
+
+The latest local test run completed with:
+
+\begin{lstlisting}
+Ran 44 tests in 41.431s
+OK (skipped=7)
+\end{lstlisting}
+
+The skipped tests depend on optional local tools such as ASE, LAMMPS, or the local NIST ISODB checkout.
+
+\section{Current Limitations}
+
+Module A is technically runnable, but the scientific validation is not complete yet.
+The most important remaining limitations are:
+
+\begin{itemize}
+    \item convergence has not yet been quantified,
+    \item uncertainty estimates are not yet calculated,
+    \item multiple independent random seeds are not yet automated,
+    \item block averaging is not yet implemented,
+    \item mean absolute error and mean squared error per reference should be made more explicit in a combined report,
+    \item the best-matching reference should be highlighted automatically.
+\end{itemize}
+
+\section{Next Steps}
+
+The next development steps for Module A are:
+
+\begin{enumerate}
+    \item Add convergence analysis by plotting loading as a function of simulation step or block index.
+    \item Add multiple-seed execution for every pressure point.
+    \item Calculate statistical uncertainty using standard deviation across seeds or block standard error of the mean.
+    \item Refactor the combined evaluation report to show MAE/MSE per reference.
+    \item Highlight the best-matching reference dataset.
+    \item Add a final Module A report that combines input protocol, simulation results, reference comparison, uncertainty, and plots.
+\end{enumerate}
+
+\section{Example Commands}
+
+\subsection{Dry Run}
+
+\begin{lstlisting}[language=bash]
+conda activate MOF_sim
+python benchmark.py benchmark_tao2022_mof5_co2.json --dry-run
+\end{lstlisting}
+
+\subsection{Prepare Files}
+
+\begin{lstlisting}[language=bash]
+conda activate MOF_sim
+python benchmark.py benchmark_tao2022_mof5_co2.json --prepare --new-run
+\end{lstlisting}
+
+\subsection{Run Full Isotherm}
+
+\begin{lstlisting}[language=bash]
+conda activate MOF_sim
+python benchmark.py benchmark_tao2022_mof5_co2.json --run-isotherm --new-run --jobs 4
+\end{lstlisting}
+
+\subsection{Evaluate Existing Run}
+
+\begin{lstlisting}[language=bash]
+conda activate MOF_sim
+python benchmark.py benchmark_tao2022_mof5_co2.json --evaluate-all --run-id <run_id>
+\end{lstlisting}
+
+\section{Appendix: Important Assumptions}
+
+\begin{itemize}
+    \item The current first benchmark system is CO2 adsorption in MOF-5/IRMOF-1.
+    \item The framework is treated as rigid.
+    \item The current framework charge scheme is DDEC.
+    \item CRAFTED is treated as an external raw-data source and is not committed as curated project data.
+    \item The LAMMPS output molecule count is interpreted as absolute adsorption.
+    \item Excess adsorption requires a pore volume and a bulk gas density model.
+    \item The current pore volume for IRMOF-1 is taken from CRAFTED geometric descriptors.
+\end{itemize}
+
+\end{document}
