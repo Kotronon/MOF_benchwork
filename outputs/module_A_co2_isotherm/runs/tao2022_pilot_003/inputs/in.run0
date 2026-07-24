@@ -1,0 +1,7 @@
+units real
+atom_style full
+boundary p p p
+read_data outputs/module_A_co2_isotherm/runs/tao2022_pilot_003/data/IRMOF-1.data extra/special/per/atom 2
+molecule co2 outputs/module_A_co2_isotherm/runs/tao2022_pilot_003/molecules/co2.template
+include outputs/module_A_co2_isotherm/runs/tao2022_pilot_003/forcefield/forcefield.in
+run 0

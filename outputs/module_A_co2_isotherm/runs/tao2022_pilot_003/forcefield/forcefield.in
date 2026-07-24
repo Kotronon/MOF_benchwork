@@ -1,0 +1,34 @@
+# LAMMPS forcefield include generated from CRAFTED parameters
+pair_style lj/cut/coul/long 12.8
+kspace_style pppm 1.0e-4
+
+# Atom type map
+# 1: Zn -> Zn_ (framework)
+# 2: H -> H_ (framework)
+# 3: C -> C_ (framework)
+# 4: O -> O_ (framework)
+# 5: O_co2 -> O_co2 (adsorbate)
+# 6: C_co2 -> C_co2 (adsorbate)
+
+# Pair coefficients: type_i type_j epsilon[kcal/mol] sigma[A]
+pair_coeff 1 1 0.1239021756 2.46200000 # Zn-Zn
+pair_coeff 1 2 0.0738328294 2.51650000 # Zn-H
+pair_coeff 1 3 0.1140191147 2.94650000 # Zn-C
+pair_coeff 1 4 0.0862311494 2.79000000 # Zn-O
+pair_coeff 1 5 0.1394678960 2.75600000 # Zn-O_co2
+pair_coeff 1 6 0.0815347203 2.63100000 # Zn-C_co2
+pair_coeff 2 2 0.0439966988 2.57100000 # H-H
+pair_coeff 2 3 0.0679435515 3.00100000 # H-C
+pair_coeff 2 4 0.0513848099 2.84450000 # H-O
+pair_coeff 2 5 0.0831083822 2.81050000 # H-O_co2
+pair_coeff 2 6 0.0485862259 2.68550000 # H-C_co2
+pair_coeff 3 3 0.1049243765 3.43100000 # C-C
+pair_coeff 3 4 0.0793529191 3.27450000 # C-O
+pair_coeff 3 5 0.1283432349 3.24050000 # C-O_co2
+pair_coeff 3 6 0.0750311008 3.11550000 # C-C_co2
+pair_coeff 4 4 0.0600135638 3.11800000 # O-O
+pair_coeff 4 5 0.0970642921 3.08400000 # O-O_co2
+pair_coeff 4 6 0.0567450298 2.95900000 # O-C_co2
+pair_coeff 5 5 0.1569891239 3.05000000 # O_co2-O_co2
+pair_coeff 5 6 0.0917778548 2.92500000 # O_co2-C_co2
+pair_coeff 6 6 0.0536545107 2.80000000 # C_co2-C_co2

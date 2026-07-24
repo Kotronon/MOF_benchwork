@@ -1,0 +1,145 @@
+{
+  "status": "completed",
+  "results": [
+    {
+      "pressure_bar": 0.01,
+      "input_script": "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p01bar.in",
+      "command": [
+        "lmp",
+        "-in",
+        "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p01bar.in",
+        "-log",
+        "outputs/module_A_co2_isotherm/work/logs/gcmc_0p01bar.log"
+      ],
+      "log_file": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p01bar.log",
+      "summary_file": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p01bar_summary.json",
+      "summary": {
+        "sample_count": 801,
+        "inserted": true,
+        "max_atoms": 109,
+        "max_adsorbates": 1.0,
+        "mean_adsorbates": 0.016229712858926344
+      }
+    },
+    {
+      "pressure_bar": 0.05,
+      "input_script": "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p05bar.in",
+      "command": [
+        "lmp",
+        "-in",
+        "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p05bar.in",
+        "-log",
+        "outputs/module_A_co2_isotherm/work/logs/gcmc_0p05bar.log"
+      ],
+      "log_file": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p05bar.log",
+      "summary_file": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p05bar_summary.json",
+      "summary": {
+        "sample_count": 801,
+        "inserted": true,
+        "max_atoms": 112,
+        "max_adsorbates": 2.0,
+        "mean_adsorbates": 0.05742821473158552
+      }
+    },
+    {
+      "pressure_bar": 0.1,
+      "input_script": "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p1bar.in",
+      "command": [
+        "lmp",
+        "-in",
+        "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p1bar.in",
+        "-log",
+        "outputs/module_A_co2_isotherm/work/logs/gcmc_0p1bar.log"
+      ],
+      "log_file": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p1bar.log",
+      "summary_file": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p1bar_summary.json",
+      "summary": {
+        "sample_count": 801,
+        "inserted": true,
+        "max_atoms": 112,
+        "max_adsorbates": 2.0,
+        "mean_adsorbates": 0.12609238451935081
+      }
+    },
+    {
+      "pressure_bar": 0.5,
+      "input_script": "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p5bar.in",
+      "command": [
+        "lmp",
+        "-in",
+        "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p5bar.in",
+        "-log",
+        "outputs/module_A_co2_isotherm/work/logs/gcmc_0p5bar.log"
+      ],
+      "log_file": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p5bar.log",
+      "summary_file": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p5bar_summary.json",
+      "summary": {
+        "sample_count": 801,
+        "inserted": true,
+        "max_atoms": 118,
+        "max_adsorbates": 4.0,
+        "mean_adsorbates": 0.7053682896379525
+      }
+    },
+    {
+      "pressure_bar": 1,
+      "input_script": "outputs/module_A_co2_isotherm/work/inputs/gcmc_1bar.in",
+      "command": [
+        "lmp",
+        "-in",
+        "outputs/module_A_co2_isotherm/work/inputs/gcmc_1bar.in",
+        "-log",
+        "outputs/module_A_co2_isotherm/work/logs/gcmc_1bar.log"
+      ],
+      "log_file": "outputs/module_A_co2_isotherm/work/logs/gcmc_1bar.log",
+      "summary_file": "outputs/module_A_co2_isotherm/work/logs/gcmc_1bar_summary.json",
+      "summary": {
+        "sample_count": 801,
+        "inserted": true,
+        "max_atoms": 124,
+        "max_adsorbates": 6.0,
+        "mean_adsorbates": 1.4369538077403246
+      }
+    },
+    {
+      "pressure_bar": 5,
+      "input_script": "outputs/module_A_co2_isotherm/work/inputs/gcmc_5bar.in",
+      "command": [
+        "lmp",
+        "-in",
+        "outputs/module_A_co2_isotherm/work/inputs/gcmc_5bar.in",
+        "-log",
+        "outputs/module_A_co2_isotherm/work/logs/gcmc_5bar.log"
+      ],
+      "log_file": "outputs/module_A_co2_isotherm/work/logs/gcmc_5bar.log",
+      "summary_file": "outputs/module_A_co2_isotherm/work/logs/gcmc_5bar_summary.json",
+      "summary": {
+        "sample_count": 801,
+        "inserted": true,
+        "max_atoms": 172,
+        "max_adsorbates": 22.0,
+        "mean_adsorbates": 9.277153558052435
+      }
+    },
+    {
+      "pressure_bar": 10,
+      "input_script": "outputs/module_A_co2_isotherm/work/inputs/gcmc_10bar.in",
+      "command": [
+        "lmp",
+        "-in",
+        "outputs/module_A_co2_isotherm/work/inputs/gcmc_10bar.in",
+        "-log",
+        "outputs/module_A_co2_isotherm/work/logs/gcmc_10bar.log"
+      ],
+      "log_file": "outputs/module_A_co2_isotherm/work/logs/gcmc_10bar.log",
+      "summary_file": "outputs/module_A_co2_isotherm/work/logs/gcmc_10bar_summary.json",
+      "summary": {
+        "sample_count": 801,
+        "inserted": true,
+        "max_atoms": 223,
+        "max_adsorbates": 39.0,
+        "mean_adsorbates": 23.880149812734082
+      }
+    }
+  ]
+}

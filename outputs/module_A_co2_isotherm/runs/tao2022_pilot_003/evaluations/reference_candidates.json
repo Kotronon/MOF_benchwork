@@ -1,0 +1,283 @@
+[
+  {
+    "component": "CO2",
+    "path": "CRAFTED-2.0.0/ISOTHERM_FILES/DDEC_IRMOF-1_UFF_CO2_298.csv",
+    "matched_by": "exact",
+    "source": "crafted",
+    "format": "crafted_csv",
+    "selected": true,
+    "key": "crafted_ddec_irmof_1_uff_co2_298"
+  },
+  {
+    "component": "CO2",
+    "path": "isodb-library/Library/10.1007s008940100720x/10.1007s00894-010-0720-x.Isotherm3.json",
+    "matched_by": "nist_isodb_ranked",
+    "source": "nist_isodb",
+    "format": "nist_json",
+    "selected": false,
+    "score": {
+      "temperature_delta_K": 0.14999999999997726,
+      "pressure_overlap_count": 7,
+      "unit_rank": 0,
+      "point_count": 14
+    },
+    "material": "IRMOF-1",
+    "adsorbates": [
+      "Carbon Dioxide"
+    ],
+    "temperature_K": 298.0,
+    "temperature_delta_K": 0.14999999999997726,
+    "pressure_units": "bar",
+    "adsorption_units": "mmol/g",
+    "pressure_min_bar": 0.0650294,
+    "pressure_max_bar": 30.0047,
+    "point_count": 14,
+    "doi": "10.1007/s00894-010-0720-x",
+    "category": "",
+    "article_source": "UNKNOWN",
+    "adsorption_basis": "unknown",
+    "excluded": true,
+    "exclusion_reasons": [
+      "max_loading_gt_60_mol_per_kg",
+      "loading_ratio_gt_3_vs_primary_reference"
+    ],
+    "use_in_evaluation": false,
+    "key": "nist_isodb_10_1007_s00894_010_0720_x"
+  },
+  {
+    "component": "CO2",
+    "path": "isodb-library/Library/10.1021ct400549q/10.1021Ct400549q.isotherm1.json",
+    "matched_by": "nist_isodb_ranked",
+    "source": "nist_isodb",
+    "format": "nist_json",
+    "selected": false,
+    "score": {
+      "temperature_delta_K": 0.14999999999997726,
+      "pressure_overlap_count": 7,
+      "unit_rank": 0,
+      "point_count": 12
+    },
+    "material": "IRMOF-1",
+    "adsorbates": [
+      "Carbon Dioxide"
+    ],
+    "temperature_K": 298.0,
+    "temperature_delta_K": 0.14999999999997726,
+    "pressure_units": "bar",
+    "adsorption_units": "mmol/g",
+    "pressure_min_bar": 0.251077,
+    "pressure_max_bar": 40.277,
+    "point_count": 12,
+    "doi": "10.1021/Ct400549q",
+    "category": "",
+    "article_source": "UNKNOWN",
+    "adsorption_basis": "unknown",
+    "excluded": false,
+    "exclusion_reasons": [],
+    "use_in_evaluation": true,
+    "key": "nist_isodb_10_1021_ct400549q"
+  },
+  {
+    "component": "CO2",
+    "path": "isodb-library/Library/10.1021ie202777q/10.1021Ie202777q.isotherm1.json",
+    "matched_by": "nist_isodb_ranked",
+    "source": "nist_isodb",
+    "format": "nist_json",
+    "selected": false,
+    "score": {
+      "temperature_delta_K": 0.14999999999997726,
+      "pressure_overlap_count": 4,
+      "unit_rank": 0,
+      "point_count": 17
+    },
+    "material": "IRMOF-1",
+    "adsorbates": [
+      "Carbon Dioxide"
+    ],
+    "temperature_K": 298.0,
+    "temperature_delta_K": 0.14999999999997726,
+    "pressure_units": "bar",
+    "adsorption_units": "mmol/g",
+    "pressure_min_bar": 0.00366882,
+    "pressure_max_bar": 4.57867,
+    "point_count": 17,
+    "doi": "10.1021/Ie202777q",
+    "category": "",
+    "article_source": "UNKNOWN",
+    "adsorption_basis": "unknown",
+    "excluded": true,
+    "exclusion_reasons": [
+      "loading_ratio_gt_3_vs_primary_reference"
+    ],
+    "use_in_evaluation": false,
+    "key": "nist_isodb_10_1021_ie202777q"
+  },
+  {
+    "component": "CO2",
+    "path": "isodb-library/Library/10.1021ja076595g/10.1021Ja076595g.Isotherm2.json",
+    "matched_by": "nist_isodb_ranked",
+    "source": "nist_isodb",
+    "format": "nist_json",
+    "selected": false,
+    "score": {
+      "temperature_delta_K": 0.14999999999997726,
+      "pressure_overlap_count": 6,
+      "unit_rank": 0,
+      "point_count": 21
+    },
+    "material": "IRMOF-1",
+    "adsorbates": [
+      "Carbon Dioxide"
+    ],
+    "temperature_K": 298.0,
+    "temperature_delta_K": 0.14999999999997726,
+    "pressure_units": "bar",
+    "adsorption_units": "mmol/g",
+    "pressure_min_bar": 0.671026,
+    "pressure_max_bar": 35.9737,
+    "point_count": 21,
+    "doi": "10.1021/Ja076595g",
+    "category": "",
+    "article_source": "UNKNOWN",
+    "adsorption_basis": "unknown",
+    "excluded": false,
+    "exclusion_reasons": [],
+    "use_in_evaluation": true,
+    "key": "nist_isodb_10_1021_ja076595g"
+  },
+  {
+    "component": "CO2",
+    "path": "isodb-library/Library/10.1021jz3008485/10.1021Jz3008485.Isotherm13.json",
+    "matched_by": "nist_isodb_ranked",
+    "source": "nist_isodb",
+    "format": "nist_json",
+    "selected": false,
+    "score": {
+      "temperature_delta_K": 0.14999999999997726,
+      "pressure_overlap_count": 3,
+      "unit_rank": 0,
+      "point_count": 39
+    },
+    "material": "IRMOF-1",
+    "adsorbates": [
+      "Carbon Dioxide"
+    ],
+    "temperature_K": 298.0,
+    "temperature_delta_K": 0.14999999999997726,
+    "pressure_units": "bar",
+    "adsorption_units": "mmol/g",
+    "pressure_min_bar": 0.0509709,
+    "pressure_max_bar": 1.0,
+    "point_count": 39,
+    "doi": "10.1021/Jz3008485",
+    "category": "",
+    "article_source": "UNKNOWN",
+    "adsorption_basis": "unknown",
+    "excluded": true,
+    "exclusion_reasons": [
+      "max_loading_gt_60_mol_per_kg",
+      "loading_ratio_gt_3_vs_primary_reference"
+    ],
+    "use_in_evaluation": false,
+    "key": "nist_isodb_10_1021_jz3008485"
+  },
+  {
+    "component": "CO2",
+    "path": "isodb-library/Library/10.1021la800369s/10.1021La800369s.isotherm3a.json",
+    "matched_by": "nist_isodb_ranked",
+    "source": "nist_isodb",
+    "format": "nist_json",
+    "selected": false,
+    "score": {
+      "temperature_delta_K": 0.14999999999997726,
+      "pressure_overlap_count": 7,
+      "unit_rank": 0,
+      "point_count": 10
+    },
+    "material": "IRMOF-1",
+    "adsorbates": [
+      "Carbon Dioxide"
+    ],
+    "temperature_K": 298.0,
+    "temperature_delta_K": 0.14999999999997726,
+    "pressure_units": "bar",
+    "adsorption_units": "mmol/g",
+    "pressure_min_bar": 0.5,
+    "pressure_max_bar": 50.25,
+    "point_count": 10,
+    "doi": "10.1021/La800369s",
+    "category": "",
+    "article_source": "UNKNOWN",
+    "adsorption_basis": "unknown",
+    "excluded": false,
+    "exclusion_reasons": [],
+    "use_in_evaluation": true,
+    "key": "nist_isodb_10_1021_la800369s"
+  },
+  {
+    "component": "CO2",
+    "path": "isodb-library/Library/10.1021acs.jctc.5b00093/10.1021acs.jctc.5b00093.Isotherm3.json",
+    "matched_by": "nist_isodb_ranked",
+    "source": "nist_isodb",
+    "format": "nist_json",
+    "selected": false,
+    "score": {
+      "temperature_delta_K": 0.14999999999997726,
+      "pressure_overlap_count": 7,
+      "unit_rank": 0,
+      "point_count": 13
+    },
+    "material": "IRMOF-1",
+    "adsorbates": [
+      "Carbon Dioxide"
+    ],
+    "temperature_K": 298.0,
+    "temperature_delta_K": 0.14999999999997726,
+    "pressure_units": "bar",
+    "adsorption_units": "mmol/g",
+    "pressure_min_bar": 0.3325,
+    "pressure_max_bar": 49.9991,
+    "point_count": 13,
+    "doi": "10.1021/acs.jctc.5b00093",
+    "category": "sim",
+    "article_source": "Figure 2- SF",
+    "adsorption_basis": "unknown",
+    "excluded": false,
+    "exclusion_reasons": [],
+    "use_in_evaluation": true,
+    "key": "nist_isodb_10_1021_acs_jctc_5b00093"
+  },
+  {
+    "component": "CO2",
+    "path": "isodb-library/Library/10.1039b807470d/10.1039b807470d.Isotherm9.json",
+    "matched_by": "nist_isodb_ranked",
+    "source": "nist_isodb",
+    "format": "nist_json",
+    "selected": false,
+    "score": {
+      "temperature_delta_K": 0.14999999999997726,
+      "pressure_overlap_count": 6,
+      "unit_rank": 0,
+      "point_count": 13
+    },
+    "material": "IRMOF-1",
+    "adsorbates": [
+      "Carbon Dioxide"
+    ],
+    "temperature_K": 298.0,
+    "temperature_delta_K": 0.14999999999997726,
+    "pressure_units": "bar",
+    "adsorption_units": "mmol/g",
+    "pressure_min_bar": 0.9896690000000001,
+    "pressure_max_bar": 49.8885,
+    "point_count": 13,
+    "doi": "10.1039/b807470d",
+    "category": "sim",
+    "article_source": "Figure 2b",
+    "adsorption_basis": "excess",
+    "excluded": false,
+    "exclusion_reasons": [],
+    "use_in_evaluation": true,
+    "key": "nist_isodb_10_1039_b807470d"
+  }
+]

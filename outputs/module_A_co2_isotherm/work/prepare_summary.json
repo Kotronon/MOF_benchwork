@@ -1,0 +1,378 @@
+{
+  "prepare_plan": {
+    "module": {
+      "id": "A",
+      "name": "Baseline GCMC adsorption",
+      "slug": "module_A_co2_isotherm"
+    },
+    "status": "prepared_plan",
+    "side_effects": "none",
+    "working_directory": "outputs/module_A_co2_isotherm/work",
+    "inputs": {
+      "framework_cif": "CRAFTED-2.0.0/CIF_FILES/DDEC/IRMOF-1.cif",
+      "forcefield_files": {
+        "force_field": "CRAFTED-2.0.0/FORCEFIELDS/UFF/force_field.def",
+        "mixing_rules": "CRAFTED-2.0.0/FORCEFIELDS/UFF/force_field_mixing_rules.def",
+        "pseudo_atoms": "CRAFTED-2.0.0/FORCEFIELDS/UFF/pseudo_atoms.def"
+      },
+      "adsorbate_definitions": {
+        "CO2": "CRAFTED-2.0.0/FORCEFIELDS/UFF/CO2.def"
+      },
+      "reference_files": [
+        {
+          "component": "CO2",
+          "path": "CRAFTED-2.0.0/ISOTHERM_FILES/DDEC_IRMOF-1_UFF_CO2_298.csv",
+          "matched_by": "exact"
+        }
+      ]
+    },
+    "planned_files": {
+      "framework_data": {
+        "converter": "cif_to_lammps_data",
+        "input_cif": "CRAFTED-2.0.0/CIF_FILES/DDEC/IRMOF-1.cif",
+        "output_data": "outputs/module_A_co2_isotherm/work/data/IRMOF-1.data",
+        "atom_style": "full",
+        "status": "planned"
+      },
+      "forcefield_include": {
+        "converter": "forcefield_to_lammps",
+        "forcefield_config": {
+          "framework": "UFF",
+          "adsorbate": "auto",
+          "cross_interactions": "auto",
+          "files": {
+            "force_field": "CRAFTED-2.0.0/FORCEFIELDS/UFF/force_field.def",
+            "mixing_rules": "CRAFTED-2.0.0/FORCEFIELDS/UFF/force_field_mixing_rules.def",
+            "pseudo_atoms": "CRAFTED-2.0.0/FORCEFIELDS/UFF/pseudo_atoms.def"
+          },
+          "adsorbates": {
+            "CO2": "CRAFTED-2.0.0/FORCEFIELDS/UFF/CO2.def"
+          }
+        },
+        "components": [
+          "CO2"
+        ],
+        "output_file": "outputs/module_A_co2_isotherm/work/forcefield/forcefield.in",
+        "status": "planned"
+      },
+      "molecule_templates": {
+        "CO2": {
+          "converter": "molecule_to_lammps_template",
+          "input_definition": "CRAFTED-2.0.0/FORCEFIELDS/UFF/CO2.def",
+          "output_template": "outputs/module_A_co2_isotherm/work/molecules/co2.template",
+          "status": "planned"
+        }
+      },
+      "run0_input": {
+        "kind": "run0",
+        "path": "outputs/module_A_co2_isotherm/work/inputs/in.run0",
+        "log": "outputs/module_A_co2_isotherm/work/logs/run0.log",
+        "command": [
+          "lmp",
+          "-in",
+          "outputs/module_A_co2_isotherm/work/inputs/in.run0",
+          "-log",
+          "outputs/module_A_co2_isotherm/work/logs/run0.log"
+        ]
+      },
+      "gcmc_test_input": {
+        "kind": "gcmc_test",
+        "path": "outputs/module_A_co2_isotherm/work/inputs/in.gcmc_test",
+        "log": "outputs/module_A_co2_isotherm/work/logs/gcmc_test.log",
+        "command": [
+          "lmp",
+          "-in",
+          "outputs/module_A_co2_isotherm/work/inputs/in.gcmc_test",
+          "-log",
+          "outputs/module_A_co2_isotherm/work/logs/gcmc_test.log"
+        ]
+      },
+      "input_scripts": [
+        {
+          "kind": "gcmc",
+          "pressure_bar": 0.01,
+          "path": "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p01bar.in",
+          "log": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p01bar.log",
+          "dump": "outputs/module_A_co2_isotherm/work/dumps/gcmc_0p01bar.lammpstrj",
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p01bar.in",
+            "-log",
+            "outputs/module_A_co2_isotherm/work/logs/gcmc_0p01bar.log"
+          ]
+        },
+        {
+          "kind": "gcmc",
+          "pressure_bar": 0.05,
+          "path": "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p05bar.in",
+          "log": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p05bar.log",
+          "dump": "outputs/module_A_co2_isotherm/work/dumps/gcmc_0p05bar.lammpstrj",
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p05bar.in",
+            "-log",
+            "outputs/module_A_co2_isotherm/work/logs/gcmc_0p05bar.log"
+          ]
+        },
+        {
+          "kind": "gcmc",
+          "pressure_bar": 0.1,
+          "path": "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p1bar.in",
+          "log": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p1bar.log",
+          "dump": "outputs/module_A_co2_isotherm/work/dumps/gcmc_0p1bar.lammpstrj",
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p1bar.in",
+            "-log",
+            "outputs/module_A_co2_isotherm/work/logs/gcmc_0p1bar.log"
+          ]
+        },
+        {
+          "kind": "gcmc",
+          "pressure_bar": 0.5,
+          "path": "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p5bar.in",
+          "log": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p5bar.log",
+          "dump": "outputs/module_A_co2_isotherm/work/dumps/gcmc_0p5bar.lammpstrj",
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p5bar.in",
+            "-log",
+            "outputs/module_A_co2_isotherm/work/logs/gcmc_0p5bar.log"
+          ]
+        },
+        {
+          "kind": "gcmc",
+          "pressure_bar": 1,
+          "path": "outputs/module_A_co2_isotherm/work/inputs/gcmc_1bar.in",
+          "log": "outputs/module_A_co2_isotherm/work/logs/gcmc_1bar.log",
+          "dump": "outputs/module_A_co2_isotherm/work/dumps/gcmc_1bar.lammpstrj",
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_co2_isotherm/work/inputs/gcmc_1bar.in",
+            "-log",
+            "outputs/module_A_co2_isotherm/work/logs/gcmc_1bar.log"
+          ]
+        },
+        {
+          "kind": "gcmc",
+          "pressure_bar": 5,
+          "path": "outputs/module_A_co2_isotherm/work/inputs/gcmc_5bar.in",
+          "log": "outputs/module_A_co2_isotherm/work/logs/gcmc_5bar.log",
+          "dump": "outputs/module_A_co2_isotherm/work/dumps/gcmc_5bar.lammpstrj",
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_co2_isotherm/work/inputs/gcmc_5bar.in",
+            "-log",
+            "outputs/module_A_co2_isotherm/work/logs/gcmc_5bar.log"
+          ]
+        },
+        {
+          "kind": "gcmc",
+          "pressure_bar": 10,
+          "path": "outputs/module_A_co2_isotherm/work/inputs/gcmc_10bar.in",
+          "log": "outputs/module_A_co2_isotherm/work/logs/gcmc_10bar.log",
+          "dump": "outputs/module_A_co2_isotherm/work/dumps/gcmc_10bar.lammpstrj",
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_co2_isotherm/work/inputs/gcmc_10bar.in",
+            "-log",
+            "outputs/module_A_co2_isotherm/work/logs/gcmc_10bar.log"
+          ]
+        }
+      ],
+      "logs": [
+        "outputs/module_A_co2_isotherm/work/logs/gcmc_0p01bar.log",
+        "outputs/module_A_co2_isotherm/work/logs/gcmc_0p05bar.log",
+        "outputs/module_A_co2_isotherm/work/logs/gcmc_0p1bar.log",
+        "outputs/module_A_co2_isotherm/work/logs/gcmc_0p5bar.log",
+        "outputs/module_A_co2_isotherm/work/logs/gcmc_1bar.log",
+        "outputs/module_A_co2_isotherm/work/logs/gcmc_5bar.log",
+        "outputs/module_A_co2_isotherm/work/logs/gcmc_10bar.log"
+      ],
+      "summary": "outputs/module_A_co2_isotherm/work/prepare_summary.json"
+    },
+    "parameters": {
+      "material_id": "IRMOF-1",
+      "charge_scheme": "DDEC",
+      "components": [
+        "CO2"
+      ],
+      "temperature_K": 298.15,
+      "pressures_bar": [
+        0.01,
+        0.05,
+        0.1,
+        0.5,
+        1,
+        5,
+        10
+      ],
+      "unit_cells": [
+        1,
+        1,
+        1
+      ],
+      "forcefield": "UFF",
+      "run_steps": 100000,
+      "equilibration_steps": 20000
+    }
+  },
+  "result": {
+    "status": "materialized",
+    "working_directory": "outputs/module_A_co2_isotherm/work",
+    "files": {
+      "framework_data": "outputs/module_A_co2_isotherm/work/data/IRMOF-1.data",
+      "forcefield_include": "outputs/module_A_co2_isotherm/work/forcefield/forcefield.in",
+      "molecule_templates": {
+        "CO2": "outputs/module_A_co2_isotherm/work/molecules/co2.template"
+      },
+      "run0_input": "outputs/module_A_co2_isotherm/work/inputs/in.run0",
+      "gcmc_test_input": "outputs/module_A_co2_isotherm/work/inputs/in.gcmc_test",
+      "summary": "outputs/module_A_co2_isotherm/work/prepare_summary.json",
+      "source_files": {
+        "framework_cif": "outputs/module_A_co2_isotherm/work/source/IRMOF-1.cif",
+        "forcefield_files": {
+          "force_field": "outputs/module_A_co2_isotherm/work/source/forcefield/force_field.def",
+          "mixing_rules": "outputs/module_A_co2_isotherm/work/source/forcefield/force_field_mixing_rules.def",
+          "pseudo_atoms": "outputs/module_A_co2_isotherm/work/source/forcefield/pseudo_atoms.def"
+        },
+        "adsorbate_definitions": {
+          "CO2": "outputs/module_A_co2_isotherm/work/source/molecules/CO2.def"
+        },
+        "reference_files": [
+          {
+            "component": "CO2",
+            "path": "CRAFTED-2.0.0/ISOTHERM_FILES/DDEC_IRMOF-1_UFF_CO2_298.csv",
+            "matched_by": "exact",
+            "copied_path": "outputs/module_A_co2_isotherm/work/source/references/DDEC_IRMOF-1_UFF_CO2_298.csv"
+          }
+        ]
+      },
+      "gcmc_inputs": [
+        "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p01bar.in",
+        "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p05bar.in",
+        "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p1bar.in",
+        "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p5bar.in",
+        "outputs/module_A_co2_isotherm/work/inputs/gcmc_1bar.in",
+        "outputs/module_A_co2_isotherm/work/inputs/gcmc_5bar.in",
+        "outputs/module_A_co2_isotherm/work/inputs/gcmc_10bar.in"
+      ],
+      "gcmc_runs": [
+        {
+          "kind": "gcmc",
+          "pressure_bar": 0.01,
+          "path": "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p01bar.in",
+          "log": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p01bar.log",
+          "dump": "outputs/module_A_co2_isotherm/work/dumps/gcmc_0p01bar.lammpstrj",
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p01bar.in",
+            "-log",
+            "outputs/module_A_co2_isotherm/work/logs/gcmc_0p01bar.log"
+          ]
+        },
+        {
+          "kind": "gcmc",
+          "pressure_bar": 0.05,
+          "path": "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p05bar.in",
+          "log": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p05bar.log",
+          "dump": "outputs/module_A_co2_isotherm/work/dumps/gcmc_0p05bar.lammpstrj",
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p05bar.in",
+            "-log",
+            "outputs/module_A_co2_isotherm/work/logs/gcmc_0p05bar.log"
+          ]
+        },
+        {
+          "kind": "gcmc",
+          "pressure_bar": 0.1,
+          "path": "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p1bar.in",
+          "log": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p1bar.log",
+          "dump": "outputs/module_A_co2_isotherm/work/dumps/gcmc_0p1bar.lammpstrj",
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p1bar.in",
+            "-log",
+            "outputs/module_A_co2_isotherm/work/logs/gcmc_0p1bar.log"
+          ]
+        },
+        {
+          "kind": "gcmc",
+          "pressure_bar": 0.5,
+          "path": "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p5bar.in",
+          "log": "outputs/module_A_co2_isotherm/work/logs/gcmc_0p5bar.log",
+          "dump": "outputs/module_A_co2_isotherm/work/dumps/gcmc_0p5bar.lammpstrj",
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_co2_isotherm/work/inputs/gcmc_0p5bar.in",
+            "-log",
+            "outputs/module_A_co2_isotherm/work/logs/gcmc_0p5bar.log"
+          ]
+        },
+        {
+          "kind": "gcmc",
+          "pressure_bar": 1,
+          "path": "outputs/module_A_co2_isotherm/work/inputs/gcmc_1bar.in",
+          "log": "outputs/module_A_co2_isotherm/work/logs/gcmc_1bar.log",
+          "dump": "outputs/module_A_co2_isotherm/work/dumps/gcmc_1bar.lammpstrj",
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_co2_isotherm/work/inputs/gcmc_1bar.in",
+            "-log",
+            "outputs/module_A_co2_isotherm/work/logs/gcmc_1bar.log"
+          ]
+        },
+        {
+          "kind": "gcmc",
+          "pressure_bar": 5,
+          "path": "outputs/module_A_co2_isotherm/work/inputs/gcmc_5bar.in",
+          "log": "outputs/module_A_co2_isotherm/work/logs/gcmc_5bar.log",
+          "dump": "outputs/module_A_co2_isotherm/work/dumps/gcmc_5bar.lammpstrj",
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_co2_isotherm/work/inputs/gcmc_5bar.in",
+            "-log",
+            "outputs/module_A_co2_isotherm/work/logs/gcmc_5bar.log"
+          ]
+        },
+        {
+          "kind": "gcmc",
+          "pressure_bar": 10,
+          "path": "outputs/module_A_co2_isotherm/work/inputs/gcmc_10bar.in",
+          "log": "outputs/module_A_co2_isotherm/work/logs/gcmc_10bar.log",
+          "dump": "outputs/module_A_co2_isotherm/work/dumps/gcmc_10bar.lammpstrj",
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_co2_isotherm/work/inputs/gcmc_10bar.in",
+            "-log",
+            "outputs/module_A_co2_isotherm/work/logs/gcmc_10bar.log"
+          ]
+        }
+      ],
+      "dump_files": [
+        "outputs/module_A_co2_isotherm/work/dumps/gcmc_0p01bar.lammpstrj",
+        "outputs/module_A_co2_isotherm/work/dumps/gcmc_0p05bar.lammpstrj",
+        "outputs/module_A_co2_isotherm/work/dumps/gcmc_0p1bar.lammpstrj",
+        "outputs/module_A_co2_isotherm/work/dumps/gcmc_0p5bar.lammpstrj",
+        "outputs/module_A_co2_isotherm/work/dumps/gcmc_1bar.lammpstrj",
+        "outputs/module_A_co2_isotherm/work/dumps/gcmc_5bar.lammpstrj",
+        "outputs/module_A_co2_isotherm/work/dumps/gcmc_10bar.lammpstrj"
+      ]
+    }
+  }
+}
