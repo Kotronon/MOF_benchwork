@@ -135,6 +135,7 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
                 component=component,
                 pressure_bar=prepare_plan["parameters"]["pressures_bar"][0],
                 extra_special_per_atom=extra_special_per_atom,
+                seed=prepare_plan["parameters"]["seeds"][0],
             )
         ),
         encoding="utf-8",
@@ -162,9 +163,10 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
                     component=component,
                     pressure_bar=pressure_bar,
                     extra_special_per_atom=extra_special_per_atom,
+                    seed=input_script["seed"],
                     fugacity_coeff=fugacity_coeff,
-                    dump_file=input_script["dump"],
-                    dump_every_steps=1000,
+                    dump_file=input_script.get("dump"),
+                    dump_every_steps=prepare_plan["parameters"].get("dump_every_steps", 1000),
                 )
             ),
             encoding="utf-8",
@@ -175,6 +177,7 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
         "working_directory": str(working_dir),
         "parameters": prepare_plan["parameters"],
         "evaluation": prepare_plan.get("evaluation", {}),
+        "convergence": prepare_plan.get("convergence", {}),
         "files": {
             "framework_data": str(framework_data_path),
             "forcefield_include": str(forcefield_path),
@@ -185,7 +188,11 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
             "source_files": source_files,
             "gcmc_inputs": [script["path"] for script in prepare_plan["planned_files"]["input_scripts"]],
             "gcmc_runs": prepare_plan["planned_files"]["input_scripts"],
-            "dump_files": [script["dump"] for script in prepare_plan["planned_files"]["input_scripts"]],
+            "dump_files": [
+                script["dump"]
+                for script in prepare_plan["planned_files"]["input_scripts"]
+                if script.get("dump") is not None
+            ],
         },
     }
     save_benchmark_data(prepare_plan["planned_files"]["summary"], {"prepare_plan": prepare_plan, "result": result})
@@ -203,6 +210,7 @@ def _gcmc_builder_inputs(
     component: str,
     pressure_bar: float,
     extra_special_per_atom: int,
+    seed: int,
     fugacity_coeff: float = 1.0,
     dump_file: str | None = None,
     dump_every_steps: int = 1000,
@@ -222,7 +230,7 @@ def _gcmc_builder_inputs(
         "gcmc_every_steps": 1,
         "exchange_attempts": 10,
         "move_attempts": 10,
-        "seed": 12345,
+        "seed": seed,
         "extra_bond_per_atom": extra_special_per_atom,
         "extra_special_per_atom": extra_special_per_atom,
         "fugacity_coeff": fugacity_coeff,

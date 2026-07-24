@@ -99,7 +99,11 @@ class ReferenceResolver:
                 continue
 
             candidates = sorted(
-                self.isotherm_root.glob(f"*_{material_id}_{forcefield}_{component_name}_*.csv")
+                path
+                for path in self.isotherm_root.glob(
+                    f"*_{material_id}_{forcefield}_{component_name}_*.csv"
+                )
+                if not path.name.startswith("._")
             )
             references.extend(
                 _reference_entry(path, component_name, "candidate", "crafted", "crafted_csv")

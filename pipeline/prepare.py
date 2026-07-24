@@ -37,20 +37,29 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
     forcefield_include = forcefield_dir / "forcefield.in"
     run0_input = input_dir / "in.run0"
     gcmc_test_input = input_dir / "in.gcmc_test"
-    input_scripts = [
-        {
-            "kind": "gcmc",
-            "pressure_bar": pressure_bar,
-            "path": str(input_dir / f"gcmc_{pressure_token(pressure_bar)}bar.in"),
-            "log": str(log_dir / f"gcmc_{pressure_token(pressure_bar)}bar.log"),
-            "dump": str(dump_dir / f"gcmc_{pressure_token(pressure_bar)}bar.lammpstrj"),
-            "command": build_lammps_command(
-                input_dir / f"gcmc_{pressure_token(pressure_bar)}bar.in",
-                log_file=log_dir / f"gcmc_{pressure_token(pressure_bar)}bar.log",
-            ),
-        }
-        for pressure_bar in run_plan["conditions"]["pressures_bar"]
-    ]
+    seeds = list(run_plan["simulation"].get("seeds", [12345]))
+    multiple_replicates = len(seeds) > 1
+    save_dumps = bool(run_plan["outputs"].get("save_dumps", True))
+    dump_every_steps = int(run_plan["outputs"].get("dump_every_steps", 1000))
+    input_scripts = []
+    for pressure_bar in run_plan["conditions"]["pressures_bar"]:
+        pressure_name = f"gcmc_{pressure_token(pressure_bar)}bar"
+        for replicate_index, seed in enumerate(seeds, start=1):
+            run_name = f"{pressure_name}_seed{seed}" if multiple_replicates else pressure_name
+            input_path = input_dir / f"{run_name}.in"
+            log_path = log_dir / f"{run_name}.log"
+            input_scripts.append(
+                {
+                    "kind": "gcmc",
+                    "pressure_bar": pressure_bar,
+                    "replicate_index": replicate_index,
+                    "seed": seed,
+                    "path": str(input_path),
+                    "log": str(log_path),
+                    "dump": str(dump_dir / f"{run_name}.lammpstrj") if save_dumps else None,
+                    "command": build_lammps_command(input_path, log_file=log_path),
+                }
+            )
 
     molecule_templates = {
         component: plan_molecule_template(
@@ -73,6 +82,11 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
             "reference_files": run_plan["resources"]["references"],
         },
         "evaluation": run_plan.get("evaluation", {}),
+        "convergence": run_plan.get("convergence", {}),
+        "output": {
+            "save_dumps": save_dumps,
+            "dump_every_steps": dump_every_steps,
+        },
         "planned_files": {
             "framework_data": plan_cif_to_lammps_data(
                 cif_path=Path(run_plan["resources"]["cif_path"]),
@@ -99,8 +113,7 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
             },
             "input_scripts": input_scripts,
             "logs": [
-                str(log_dir / f"gcmc_{pressure_token(pressure_bar)}bar.log")
-                for pressure_bar in run_plan["conditions"]["pressures_bar"]
+                script["log"] for script in input_scripts
             ],
             "summary": str(working_dir / "prepare_summary.json"),
         },
@@ -111,6 +124,10 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
             "temperature_K": run_plan["conditions"]["temperature_K"],
             "pressures_bar": run_plan["conditions"]["pressures_bar"],
             "unit_cells": run_plan["simulation"]["unit_cells"],
+            "seeds": seeds,
+            "replicate_count": len(seeds),
+            "save_dumps": save_dumps,
+            "dump_every_steps": dump_every_steps,
             "forcefield": run_plan["resources"]["forcefield"]["framework"],
             "production_steps": production_steps,
             "equilibration_steps": equilibration_steps,

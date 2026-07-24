@@ -81,8 +81,19 @@
       1,
       1
     ],
-    "cycles": 500000,
-    "initialization_cycles": 500000
+    "seeds": [
+      104729,
+      209759,
+      314159,
+      420001,
+      531017
+    ],
+    "cycles": 10000000,
+    "initialization_cycles": 10000000
+  },
+  "convergence": {
+    "minimum_replicates": 3,
+    "relative_ci95_target": 0.05
   },
   "evaluation": {
     "simulation_basis": "absolute",
@@ -98,6 +109,8 @@
     "run_id": "tao2022_mof5_co2_paper",
     "overwrite": false,
     "save_logs": true,
+    "save_dumps": false,
+    "dump_every_steps": 100000,
     "save_plots": true,
     "save_csv": true
   }

@@ -30,6 +30,7 @@ from converter.molecule_to_lammps_template import build_molecule_template, parse
 from parsers.lammps_log_parser import summarize_adsorption, get_log, log_to_json, parse_lammps_log
 from pipeline.evaluate import evaluate_all_references, evaluate_isotherm, framework_mass_from_lammps_data, sim_results_to_csv
 from pipeline.nist_isodb_parser import find_nist_isotherm_candidates, load_nist_isotherm
+from pipeline.runners import _aggregate_replicates, _convergence_report
 
 
 HAS_ASE = importlib.util.find_spec("ase") is not None
@@ -54,6 +55,76 @@ class BenchmarkPipelineTests(unittest.TestCase):
         self.assertEqual(config["benchmark"]["task"], "auto")
         self.assertIsNone(config["output"]["directory"])
         self.assertEqual(config["simulation"]["method"], "GCMC")
+        self.assertEqual(config["simulation"]["seeds"], [12345])
+        self.assertEqual(config["convergence"]["minimum_replicates"], 3)
+        self.assertTrue(config["output"]["save_dumps"])
+        self.assertEqual(config["output"]["dump_every_steps"], 1000)
+
+    def test_normalize_config_rejects_duplicate_seeds(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must not contain duplicates"):
+            benchmark.normalize_config(
+                {"material": {"name": "MOF-5"}, "simulation": {"seeds": [12345, 12345]}}
+            )
+
+    def test_prepare_builds_one_run_per_pressure_and_seed(self) -> None:
+        config = benchmark.load_benchmark_data("benchmark.json")
+        config["conditions"]["pressures_bar"] = [0.1, 1.0]
+        config["simulation"]["seeds"] = [101, 202, 303]
+
+        prepare_plan = benchmark.prepare_benchmark(benchmark.build_run_plan(config))
+        scripts = prepare_plan["planned_files"]["input_scripts"]
+
+        self.assertEqual(len(scripts), 6)
+        self.assertEqual({script["seed"] for script in scripts}, {101, 202, 303})
+        self.assertTrue(all(f"seed{script['seed']}" in script["path"] for script in scripts))
+
+    def test_prepare_can_disable_dump_files(self) -> None:
+        config = benchmark.load_benchmark_data("benchmark.json")
+        config["conditions"]["pressures_bar"] = [1.0]
+        config["output"]["save_dumps"] = False
+        config["output"]["dump_every_steps"] = 100000
+
+        prepare_plan = benchmark.prepare_benchmark(benchmark.build_run_plan(config))
+        scripts = prepare_plan["planned_files"]["input_scripts"]
+
+        self.assertIsNone(scripts[0]["dump"])
+        self.assertEqual(prepare_plan["parameters"]["dump_every_steps"], 100000)
+
+    def test_aggregate_replicates_reports_seed_uncertainty_and_convergence(self) -> None:
+        replicate_results = [
+            {
+                "pressure_bar": 1.0,
+                "replicate_index": index,
+                "seed": seed,
+                "summary": {
+                    "sample_count": 10,
+                    "inserted": True,
+                    "max_atoms": 112,
+                    "max_adsorbates": 2.0,
+                    "mean_adsorbates": value,
+                },
+            }
+            for index, (seed, value) in enumerate(
+                [(101, 0.99), (202, 1.00), (303, 1.01), (404, 1.00), (505, 1.00)],
+                start=1,
+            )
+        ]
+
+        aggregated = _aggregate_replicates(
+            replicate_results,
+            {"minimum_replicates": 3, "relative_ci95_target": 0.05},
+        )
+        report = _convergence_report(
+            aggregated,
+            {"minimum_replicates": 3, "relative_ci95_target": 0.05},
+        )
+
+        self.assertEqual(len(aggregated), 1)
+        self.assertEqual(aggregated[0]["replicate_count"], 5)
+        self.assertAlmostEqual(aggregated[0]["summary"]["mean_adsorbates"], 1.0)
+        self.assertIsNotNone(aggregated[0]["summary"]["standard_error_adsorbates"])
+        self.assertTrue(aggregated[0]["converged"])
+        self.assertTrue(report["all_pressure_points_converged"])
 
     def test_mof5_alias_resolves_to_irmof1(self) -> None:
         config = benchmark.normalize_config({"material": {"name": "MOF-5", "charge_scheme": "DDEC"}})

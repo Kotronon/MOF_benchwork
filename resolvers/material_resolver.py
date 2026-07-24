@@ -112,6 +112,11 @@ class MaterialResolver:
 
         index: dict[str, dict[str, Path]] = {}
         for cif_path in self.cif_root.glob("*/*.cif"):
+            # CRAFTED archives created on macOS can contain AppleDouble
+            # metadata files such as ``._IRMOF-1.cif``. They are not CIF
+            # structures and must not participate in material resolution.
+            if cif_path.name.startswith("._") or cif_path.parent.name.startswith("._"):
+                continue
             charge_scheme = cif_path.parent.name
             material_id = cif_path.stem
             index.setdefault(material_id, {})[charge_scheme] = cif_path

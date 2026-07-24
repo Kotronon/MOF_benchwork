@@ -5,8 +5,6 @@ The most important remaining limitations are:
 
 \begin{itemize}
     \item convergence has not yet been quantified,
-    \item uncertainty estimates are not yet calculated,
-    \item multiple independent random seeds are not yet automated,
     \item block averaging is not yet implemented,
     \item MAE and MSE per reference should be made more explicit in a combined report,
     \item the best-matching reference should be highlighted automatically.
@@ -16,8 +14,7 @@ The most important remaining limitations are:
 
 \begin{enumerate}
     \item Add convergence analysis by plotting loading as a function of simulation step or block index.
-    \item Add multiple-seed execution for every pressure point.
-    \item Calculate statistical uncertainty using standard deviation across seeds or block standard error of the mean.
+    \item Add block-based convergence analysis within each independent replicate.
     \item Refactor the combined evaluation report to show MAE and MSE per reference.
     \item Highlight the best-matching reference dataset.
     \item Add a final Module A report that combines input protocol, simulation results, reference comparison, uncertainty, and plots.

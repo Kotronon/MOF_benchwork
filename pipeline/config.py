@@ -115,6 +115,27 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     simulation.setdefault("kspace_style", "pppm")
     simulation.setdefault("kspace_accuracy", 1e-5)
     simulation.setdefault("unit_cells", simulation.get("supercell", "auto"))
+    seeds = simulation.get("seeds")
+    if seeds is None:
+        seeds = [simulation.get("seed", 12345)]
+    if not isinstance(seeds, list) or not seeds:
+        raise ValueError("'simulation.seeds' must be a non-empty list of integers.")
+    if any(isinstance(seed, bool) or not isinstance(seed, int) or seed <= 0 for seed in seeds):
+        raise ValueError("'simulation.seeds' must contain positive integers.")
+    if len(set(seeds)) != len(seeds):
+        raise ValueError("'simulation.seeds' must not contain duplicates.")
+    simulation["seeds"] = seeds
+    simulation.pop("seed", None)
+
+    convergence = config.setdefault("convergence", {})
+    if not isinstance(convergence, dict):
+        raise TypeError("'convergence' must be an object.")
+    convergence.setdefault("minimum_replicates", 3)
+    convergence.setdefault("relative_ci95_target", 0.05)
+    if int(convergence["minimum_replicates"]) < 2:
+        raise ValueError("'convergence.minimum_replicates' must be at least 2.")
+    if float(convergence["relative_ci95_target"]) <= 0:
+        raise ValueError("'convergence.relative_ci95_target' must be positive.")
 
     evaluation = config.setdefault("evaluation", {})
     if not isinstance(evaluation, dict):
@@ -134,8 +155,12 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     output.setdefault("run_id", None)
     output.setdefault("overwrite", True)
     output.setdefault("save_logs", True)
+    output.setdefault("save_dumps", True)
+    output.setdefault("dump_every_steps", 1000)
     output.setdefault("save_plots", True)
     output.setdefault("save_csv", True)
+    if int(output["dump_every_steps"]) <= 0:
+        raise ValueError("'output.dump_every_steps' must be positive.")
 
     return config
 

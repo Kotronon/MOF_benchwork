@@ -100,6 +100,7 @@ def build_run_plan(config: dict[str, Any]) -> dict[str, Any]:
             "metrics": metrics,
         },
         "evaluation": evaluation,
+        "convergence": normalized["convergence"],
         "resources": {
             "cif_path": resolved["material"]["cif_path"],
             "forcefield": resolved["forcefield"],
@@ -113,6 +114,8 @@ def build_run_plan(config: dict[str, Any]) -> dict[str, Any]:
             "run_id": normalized["output"]["run_id"],
             "overwrite": normalized["output"]["overwrite"],
             "save_logs": normalized["output"]["save_logs"],
+            "save_dumps": normalized["output"]["save_dumps"],
+            "dump_every_steps": normalized["output"]["dump_every_steps"],
             "save_plots": normalized["output"]["save_plots"],
             "save_csv": normalized["output"]["save_csv"],
         },

@@ -75,15 +75,18 @@ For comparison against all available references, the pipeline writes:
     \item one evaluation subdirectory per active reference.
 \end{itemize}
 
-\subsection{Planned Statistical Extensions}
+\subsection{Independent Replicates and Convergence}
 
-The next scientific development step is statistical validation.
-The most important additions are:
+Independent GCMC replicates are configured with \texttt{simulation.seeds}.
+Every seed produces separate input, log, dump, and summary files for every pressure point.
+The pipeline aggregates the replicate means and reports the sample standard deviation, standard error, and a two-sided 95\% Student-$t$ confidence interval.
+A pressure point is marked as converged when the configured minimum number of replicates is available and the relative confidence-interval half-width is below \texttt{convergence.relative\_ci95\_target}.
+The outputs are \texttt{convergence\_report.json} and \texttt{convergence\_report.csv}.
+
+Further statistical extensions are:
 
 \begin{itemize}
     \item convergence analysis by plotting loading as a function of simulation step or block index,
-    \item multiple independent runs using different random seeds,
-    \item standard deviation across seeds,
     \item block standard error of the mean,
     \item MAE and MSE per reference dataset,
     \item automatic highlighting of the best-matching reference.
