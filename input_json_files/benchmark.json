@@ -59,6 +59,8 @@
       "cross_interactions": "auto"
     },
     "framework": "rigid",
+    "cell_representation": "conventional",
+    "minimum_image_policy": "error",
     "units": "real",
     "atom_style": "full",
     "pair_style": "lj/cut/coul/long",

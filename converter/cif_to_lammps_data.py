@@ -4,6 +4,11 @@ from dataclasses import asdict, dataclass
 import math
 from pathlib import Path
 from typing import Any
+import warnings
+
+
+CELL_REPRESENTATIONS = {"source", "primitive", "conventional", "auto"}
+MINIMUM_IMAGE_POLICIES = {"error", "warn", "ignore"}
 
 
 @dataclass(frozen=True)
@@ -28,13 +33,25 @@ class FrameworkStructure:
         return asdict(self)
 
 
-def plan_cif_to_lammps_data(cif_path: str | Path, output_path: str | Path, atom_style: str = "full") -> dict[str, Any]:
+def plan_cif_to_lammps_data(
+    cif_path: str | Path,
+    output_path: str | Path,
+    atom_style: str = "full",
+    cell_representation: str = "source",
+    unit_cells: list[int] | tuple[int, int, int] = (1, 1, 1),
+    cutoff_A: float | None = None,
+    minimum_image_policy: str = "error",
+) -> dict[str, Any]:
     """Return the planned CIF-to-LAMMPS conversion without writing files."""
     return {
         "converter": "cif_to_lammps_data",
         "input_cif": str(cif_path),
         "output_data": str(output_path),
         "atom_style": atom_style,
+        "cell_representation": cell_representation,
+        "unit_cells": list(unit_cells),
+        "cutoff_A": cutoff_A,
+        "minimum_image_policy": minimum_image_policy,
         "status": "planned",
     }
 
@@ -89,13 +106,23 @@ def parse_cif_atom_site_charges(cif_path: str | Path) -> list[CifAtomRecord]:
     return records
 
 
-def load_framework_structure(cif_path: str | Path) -> FrameworkStructure:
+def load_framework_structure(
+    cif_path: str | Path,
+    *,
+    cell_representation: str = "source",
+    unit_cells: list[int] | tuple[int, int, int] = (1, 1, 1),
+    cutoff_A: float | None = None,
+    minimum_image_policy: str = "error",
+) -> FrameworkStructure:
     """Load framework geometry with ASE and charges from the CRAFTED CIF atom-site loop."""
     try:
         from ase.io import read
     except ImportError as exc:
         raise ImportError("ASE is required to load CIF geometry. Install it in the active environment.") from exc
 
+    representation = _normalize_cell_representation(cell_representation)
+    repetitions = _validate_unit_cells(unit_cells)
+    policy = _normalize_minimum_image_policy(minimum_image_policy)
     atoms = read(str(cif_path))
     charge_records = parse_cif_atom_site_charges(cif_path)
     if len(atoms) != len(charge_records):
@@ -103,10 +130,16 @@ def load_framework_structure(cif_path: str | Path) -> FrameworkStructure:
             f"ASE atom count and CIF charge count differ for {cif_path}: {len(atoms)} != {len(charge_records)}."
         )
 
+    atoms.set_initial_charges([record.charge for record in charge_records])
+    atoms = _apply_cell_representation(atoms, representation)
+    if repetitions != (1, 1, 1):
+        atoms = atoms.repeat(repetitions)
+    _validate_minimum_image(atoms.cell.array, cutoff_A, policy)
+
     return FrameworkStructure(
         atom_count=len(atoms),
         symbols=tuple(atoms.get_chemical_symbols()),
-        charges=tuple(record.charge for record in charge_records),
+        charges=tuple(float(value) for value in atoms.get_initial_charges()),
         cell_lengths=tuple(float(value) for value in atoms.cell.lengths()),
         cell_angles=tuple(float(value) for value in atoms.cell.angles()),
         positions=tuple(tuple(float(value) for value in position) for position in atoms.get_positions()),
@@ -121,6 +154,10 @@ def convert_cif_to_lammps_data(
     atom_style: str = "full",
     extra_atom_types: dict[str, float] | None = None,
     extra_bond_types: int = 0,
+    cell_representation: str = "source",
+    unit_cells: list[int] | tuple[int, int, int] = (1, 1, 1),
+    cutoff_A: float | None = None,
+    minimum_image_policy: str = "error",
 ) -> Path:
     """Write a minimal LAMMPS data file with framework atoms and optional extra type masses."""
     if atom_style != "full":
@@ -128,7 +165,13 @@ def convert_cif_to_lammps_data(
     if extra_bond_types < 0:
         raise ValueError("extra_bond_types must be non-negative.")
 
-    structure = load_framework_structure(cif_path)
+    structure = load_framework_structure(
+        cif_path,
+        cell_representation=cell_representation,
+        unit_cells=unit_cells,
+        cutoff_A=cutoff_A,
+        minimum_image_policy=minimum_image_policy,
+    )
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -178,6 +221,97 @@ def convert_cif_to_lammps_data(
 
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return output
+
+
+def _normalize_cell_representation(value: str) -> str:
+    normalized = str(value).strip().casefold()
+    if normalized not in CELL_REPRESENTATIONS:
+        raise ValueError(
+            f"cell_representation must be one of {sorted(CELL_REPRESENTATIONS)}, got {value!r}."
+        )
+    return "source" if normalized == "auto" else normalized
+
+
+def _normalize_minimum_image_policy(value: str) -> str:
+    normalized = str(value).strip().casefold()
+    if normalized not in MINIMUM_IMAGE_POLICIES:
+        raise ValueError(
+            f"minimum_image_policy must be one of {sorted(MINIMUM_IMAGE_POLICIES)}, got {value!r}."
+        )
+    return normalized
+
+
+def _validate_unit_cells(values: list[int] | tuple[int, int, int]) -> tuple[int, int, int]:
+    if len(values) != 3 or any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 for value in values):
+        raise ValueError("unit_cells must contain three positive integers.")
+    return tuple(values)
+
+
+def _apply_cell_representation(atoms: Any, representation: str) -> Any:
+    lengths = atoms.cell.lengths()
+    angles = atoms.cell.angles()
+    is_rhombohedral_primitive = (
+        max(lengths) - min(lengths) < 1e-3
+        and all(abs(float(angle) - 60.0) < 1e-3 for angle in angles)
+    )
+    is_orthogonal = all(abs(float(angle) - 90.0) < 1e-3 for angle in angles)
+    if representation in {"source", "primitive"}:
+        if representation == "primitive" and not is_rhombohedral_primitive:
+            raise ValueError(
+                "Requested primitive representation, but the source CIF is not the supported "
+                "60-degree rhombohedral primitive cell."
+            )
+        return atoms
+    if representation == "conventional":
+        if is_orthogonal:
+            return atoms
+        if not is_rhombohedral_primitive:
+            raise ValueError(
+                "Conventional-cell conversion currently supports orthogonal source cells and "
+                "60-degree rhombohedral primitive cells such as IRMOF-1."
+            )
+        try:
+            from ase.build import make_supercell
+        except ImportError as exc:
+            raise ImportError("ASE is required for conventional-cell construction.") from exc
+        transformation = ((-1, 1, 1), (1, -1, 1), (1, 1, -1))
+        return make_supercell(atoms, transformation, wrap=True)
+    raise AssertionError(f"Unhandled cell representation: {representation}")
+
+
+def cell_perpendicular_widths(
+    cell_vectors: Any,
+) -> tuple[float, float, float]:
+    """Return perpendicular periodic widths for a general triclinic cell."""
+    a, b, c = [tuple(float(value) for value in vector) for vector in cell_vectors]
+    volume = abs(_dot(a, _cross(b, c)))
+    if volume <= 0:
+        raise ValueError("Cell volume must be positive.")
+    return (
+        volume / _norm(_cross(b, c)),
+        volume / _norm(_cross(c, a)),
+        volume / _norm(_cross(a, b)),
+    )
+
+
+def _validate_minimum_image(cell_vectors: Any, cutoff_A: float | None, policy: str) -> None:
+    if cutoff_A is None or policy == "ignore":
+        return
+    cutoff = float(cutoff_A)
+    if cutoff <= 0:
+        raise ValueError("cutoff_A must be positive.")
+    widths = cell_perpendicular_widths(cell_vectors)
+    required = 2.0 * cutoff
+    if min(widths) + 1e-8 >= required:
+        return
+    message = (
+        f"Minimum periodic cell width {min(widths):.6g} A is smaller than twice the "
+        f"real-space cutoff ({required:.6g} A). Increase unit_cells or choose a larger "
+        "cell representation."
+    )
+    if policy == "error":
+        raise ValueError(message)
+    warnings.warn(message, RuntimeWarning, stacklevel=2)
 
 
 def _atomic_masses(type_map: dict[str, int]) -> dict[str, float]:
@@ -239,3 +373,14 @@ def _norm(vector: tuple[float, float, float]) -> float:
 
 def _scale(vector: tuple[float, float, float], factor: float) -> tuple[float, float, float]:
     return tuple(value * factor for value in vector)
+
+
+def _cross(
+    left: tuple[float, float, float],
+    right: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    return (
+        left[1] * right[2] - left[2] * right[1],
+        left[2] * right[0] - left[0] * right[2],
+        left[0] * right[1] - left[1] * right[0],
+    )

@@ -12,6 +12,7 @@ import unittest
 
 import benchmark
 from converter.cif_to_lammps_data import (
+    cell_perpendicular_widths,
     convert_cif_to_lammps_data,
     load_framework_structure,
     parse_cif_atom_site_charges,
@@ -215,6 +216,9 @@ class BenchmarkPipelineTests(unittest.TestCase):
             self.assertTrue(run0_input.exists())
             self.assertTrue(gcmc_test_input.exists())
             self.assertTrue(summary.exists())
+            self.assertEqual(result["parameters"]["framework_atom_count"], 424)
+            self.assertEqual(result["parameters"]["adsorbate_atoms_per_molecule"], 3)
+            self.assertIn("424 atoms", framework_data.read_text(encoding="utf-8"))
             self.assertIn("extra/special/per/atom 2", run0_input.read_text(encoding="utf-8"))
             self.assertIn("extra/bond/per/atom 2 extra/special/per/atom 2", gcmc_test_input.read_text(encoding="utf-8"))
             self.assertIn("fix gcmc_co2 adsorbate gcmc", gcmc_test_input.read_text(encoding="utf-8"))
@@ -586,6 +590,60 @@ class BenchmarkPipelineTests(unittest.TestCase):
         self.assertAlmostEqual(structure.charges[0], 1.103828)
         self.assertGreater(max(abs(charge) for charge in structure.charges), 0.1)
 
+    @unittest.skipUnless(HAS_ASE, "ASE is required for framework cell construction.")
+    def test_conventional_irmof1_cell_has_424_atoms_and_preserves_charges(self) -> None:
+        source = load_framework_structure("CRAFTED-2.0.0/CIF_FILES/DDEC/IRMOF-1.cif")
+        structure = load_framework_structure(
+            "CRAFTED-2.0.0/CIF_FILES/DDEC/IRMOF-1.cif",
+            cell_representation="conventional",
+            unit_cells=[1, 1, 1],
+            cutoff_A=12.8,
+        )
+
+        self.assertEqual(structure.atom_count, 424)
+        self.assertTrue(all(abs(length - 25.832) < 1e-5 for length in structure.cell_lengths))
+        self.assertTrue(all(abs(angle - 90.0) < 1e-8 for angle in structure.cell_angles))
+        self.assertAlmostEqual(sum(structure.charges), 4 * sum(source.charges), places=8)
+        self.assertGreaterEqual(min(cell_perpendicular_widths(structure.cell_vectors)), 25.6)
+
+    @unittest.skipUnless(HAS_ASE, "ASE is required for framework cell construction.")
+    def test_crafted_primitive_2x2x2_cell_has_848_atoms(self) -> None:
+        structure = load_framework_structure(
+            "CRAFTED-2.0.0/CIF_FILES/DDEC/IRMOF-1.cif",
+            cell_representation="primitive",
+            unit_cells=[2, 2, 2],
+            cutoff_A=12.8,
+        )
+
+        self.assertEqual(structure.atom_count, 848)
+        self.assertGreaterEqual(min(cell_perpendicular_widths(structure.cell_vectors)), 25.6)
+
+    @unittest.skipUnless(HAS_ASE, "ASE is required for framework cell validation.")
+    def test_primitive_1x1x1_cell_is_rejected_for_12p8_angstrom_cutoff(self) -> None:
+        with self.assertRaisesRegex(ValueError, "smaller than twice the real-space cutoff"):
+            load_framework_structure(
+                "CRAFTED-2.0.0/CIF_FILES/DDEC/IRMOF-1.cif",
+                cell_representation="primitive",
+                unit_cells=[1, 1, 1],
+                cutoff_A=12.8,
+            )
+
+    @unittest.skipUnless(HAS_ASE, "ASE is required for framework data conversion.")
+    def test_framework_converter_writes_conventional_irmof1_data_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "IRMOF-1-conventional.data"
+            convert_cif_to_lammps_data(
+                "CRAFTED-2.0.0/CIF_FILES/DDEC/IRMOF-1.cif",
+                output_path,
+                cell_representation="conventional",
+                unit_cells=[1, 1, 1],
+                cutoff_A=12.8,
+            )
+            text = output_path.read_text(encoding="utf-8")
+
+        self.assertIn("424 atoms", text)
+        self.assertIn("0.00000000 0.00000000 0.00000000 xy xz yz", text)
+
     @unittest.skipUnless(HAS_ASE, "ASE is required for framework data conversion.")
     def test_framework_converter_writes_triclinic_irmof1_data_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -630,6 +688,32 @@ class BenchmarkPipelineTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn("106 atoms", result.stdout)
+
+    @unittest.skipUnless(HAS_ASE and HAS_LAMMPS, "ASE and lmp are required for the conventional-cell smoke test.")
+    def test_lammps_can_read_conventional_irmof1_data_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            data_file = root / "IRMOF-1-conventional.data"
+            input_file = root / "read_conventional.in"
+            convert_cif_to_lammps_data(
+                "CRAFTED-2.0.0/CIF_FILES/DDEC/IRMOF-1.cif",
+                data_file,
+                cell_representation="conventional",
+                unit_cells=[1, 1, 1],
+                cutoff_A=12.8,
+            )
+            input_file.write_text(
+                f"units real\natom_style full\nboundary p p p\nread_data {data_file}\nrun 0\n",
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                ["lmp", "-in", str(input_file), "-log", str(root / "log.lammps")],
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("424 atoms", result.stdout)
 
     @unittest.skipUnless(HAS_ASE and HAS_LAMMPS, "ASE and lmp are required for the LAMMPS forcefield smoke test.")
     def test_lammps_run_zero_reads_data_pair_coeffs_and_co2_template(self) -> None:

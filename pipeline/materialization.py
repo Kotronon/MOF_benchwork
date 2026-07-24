@@ -43,7 +43,13 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
     source_files = _copy_prepare_sources(prepare_plan, working_dir / "source")
     forcefield_config = prepare_plan["planned_files"]["forcefield_include"]["forcefield_config"]
     parameters = load_forcefield_parameters(forcefield_config)
-    framework_structure = load_framework_structure(prepare_plan["inputs"]["framework_cif"])
+    framework_structure = load_framework_structure(
+        prepare_plan["inputs"]["framework_cif"],
+        cell_representation=prepare_plan["parameters"].get("cell_representation", "source"),
+        unit_cells=prepare_plan["parameters"].get("unit_cells", [1, 1, 1]),
+        cutoff_A=prepare_plan["parameters"].get("cutoff_A"),
+        minimum_image_policy=prepare_plan["parameters"].get("minimum_image_policy", "error"),
+    )
     framework_symbols = unique(framework_structure.symbols)
 
     molecule_definitions = prepare_plan["inputs"]["adsorbate_definitions"]
@@ -92,6 +98,10 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
         atom_style=prepare_plan["planned_files"]["framework_data"].get("atom_style", "full"),
         extra_atom_types=extra_atom_masses,
         extra_bond_types=extra_bond_types,
+        cell_representation=prepare_plan["parameters"].get("cell_representation", "source"),
+        unit_cells=prepare_plan["parameters"].get("unit_cells", [1, 1, 1]),
+        cutoff_A=prepare_plan["parameters"].get("cutoff_A"),
+        minimum_image_policy=prepare_plan["parameters"].get("minimum_image_policy", "error"),
     )
 
     molecule_template_paths = {}
@@ -175,7 +185,13 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
     result = {
         "status": "materialized",
         "working_directory": str(working_dir),
-        "parameters": prepare_plan["parameters"],
+        "parameters": {
+            **prepare_plan["parameters"],
+            "framework_atom_count": framework_structure.atom_count,
+            "framework_cell_lengths_A": list(framework_structure.cell_lengths),
+            "framework_cell_angles_deg": list(framework_structure.cell_angles),
+            "adsorbate_atoms_per_molecule": len(molecules[component].atoms),
+        },
         "evaluation": prepare_plan.get("evaluation", {}),
         "convergence": prepare_plan.get("convergence", {}),
         "files": {

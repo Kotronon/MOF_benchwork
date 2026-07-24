@@ -115,6 +115,21 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     simulation.setdefault("kspace_style", "pppm")
     simulation.setdefault("kspace_accuracy", 1e-5)
     simulation.setdefault("unit_cells", simulation.get("supercell", "auto"))
+    simulation["cell_representation"] = str(
+        simulation.get("cell_representation", "source")
+    ).strip().casefold()
+    if simulation["cell_representation"] not in {"source", "primitive", "conventional", "auto"}:
+        raise ValueError(
+            "'simulation.cell_representation' must be 'source', 'primitive', "
+            "'conventional', or 'auto'."
+        )
+    simulation["minimum_image_policy"] = str(
+        simulation.get("minimum_image_policy", "error")
+    ).strip().casefold()
+    if simulation["minimum_image_policy"] not in {"error", "warn", "ignore"}:
+        raise ValueError(
+            "'simulation.minimum_image_policy' must be 'error', 'warn', or 'ignore'."
+        )
     seeds = simulation.get("seeds")
     if seeds is None:
         seeds = [simulation.get("seed", 12345)]

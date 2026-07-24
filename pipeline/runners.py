@@ -28,8 +28,8 @@ def run_benchmark(materialized_plan: dict[str, Any]) -> dict[str, Any]:
     summary = log_to_json(
         log_file,
         summary_file,
-        framework_atoms=106,
-        adsorbate_atoms_per_molecule=3,
+        framework_atoms=_framework_atom_count(materialized_plan),
+        adsorbate_atoms_per_molecule=_adsorbate_atom_count(materialized_plan),
         discard_fraction=_discard_fraction(materialized_plan),
     )
 
@@ -51,9 +51,18 @@ def run_isotherm(materialized_plan: dict[str, Any], jobs: int = 1) -> dict[str, 
     runs = materialized_plan["files"]["gcmc_runs"]
     total_runs = len(runs)
     discard_fraction = _discard_fraction(materialized_plan)
+    framework_atoms = _framework_atom_count(materialized_plan)
+    adsorbate_atoms_per_molecule = _adsorbate_atom_count(materialized_plan)
     if jobs == 1:
         results = [
-            _run_pressure_point(run, index, total_runs, discard_fraction)
+            _run_pressure_point(
+                run,
+                index,
+                total_runs,
+                discard_fraction,
+                framework_atoms,
+                adsorbate_atoms_per_molecule,
+            )
             for index, run in enumerate(runs, start=1)
         ]
     else:
@@ -62,7 +71,15 @@ def run_isotherm(materialized_plan: dict[str, Any], jobs: int = 1) -> dict[str, 
         results_by_index: dict[int, dict[str, Any]] = {}
         with ThreadPoolExecutor(max_workers=jobs) as executor:
             futures = {
-                executor.submit(_run_pressure_point, run, index, total_runs, discard_fraction): index
+                executor.submit(
+                    _run_pressure_point,
+                    run,
+                    index,
+                    total_runs,
+                    discard_fraction,
+                    framework_atoms,
+                    adsorbate_atoms_per_molecule,
+                ): index
                 for index, run in indexed_runs
             }
             for future in as_completed(futures):
@@ -104,6 +121,8 @@ def _run_pressure_point(
     index: int,
     total_runs: int,
     discard_fraction: float,
+    framework_atoms: int,
+    adsorbate_atoms_per_molecule: int,
 ) -> dict[str, Any]:
     input_script = run["path"]
     pressure_bar = run["pressure_bar"]
@@ -121,8 +140,8 @@ def _run_pressure_point(
     summary = log_to_json(
         log_file,
         summary_file,
-        framework_atoms=106,
-        adsorbate_atoms_per_molecule=3,
+        framework_atoms=framework_atoms,
+        adsorbate_atoms_per_molecule=adsorbate_atoms_per_molecule,
         discard_fraction=discard_fraction,
     )
 
@@ -280,3 +299,19 @@ def _discard_fraction(materialized_plan: dict[str, Any]) -> float:
     if run_steps <= 0 or equilibration_steps <= 0:
         return 0.0
     return min(equilibration_steps / run_steps, 0.999999)
+
+
+def _framework_atom_count(materialized_plan: dict[str, Any]) -> int:
+    count = int(materialized_plan.get("parameters", {}).get("framework_atom_count", 0))
+    if count <= 0:
+        raise ValueError("Materialized plan is missing a positive framework_atom_count.")
+    return count
+
+
+def _adsorbate_atom_count(materialized_plan: dict[str, Any]) -> int:
+    count = int(
+        materialized_plan.get("parameters", {}).get("adsorbate_atoms_per_molecule", 0)
+    )
+    if count <= 0:
+        raise ValueError("Materialized plan is missing a positive adsorbate_atoms_per_molecule.")
+    return count

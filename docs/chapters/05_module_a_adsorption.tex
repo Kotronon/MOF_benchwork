@@ -36,7 +36,8 @@ Temperature & 298.15 K \\
 Pressure points & 0.1, 0.5, 1, 2, 5, 10, 20, 35 bar \\
 Force field & UFF framework and CRAFTED CO2 definition \\
 Framework model & Rigid \\
-Unit cells & 1 x 1 x 1 \\
+Cell representation & Conventional cubic, 424 framework atoms \\
+Unit cells & 1 x 1 x 1 of the conventional cell \\
 LAMMPS units & real \\
 Pair style & \texttt{lj/cut/coul/long} \\
 Cutoff & 12.8 Angstrom \\
@@ -62,7 +63,8 @@ The generated framework data file contains:
     \item \texttt{Atoms \# full} section with molecule ID, atom type, charge, and Cartesian coordinates.
 \end{itemize}
 
-For IRMOF-1, the framework contains 106 atoms in the primitive simulation cell.
+For the Tao-like IRMOF-1 setup, the primitive 106-atom CRAFTED CIF is transformed into the conventional cubic 424-atom simulation cell.
+The transformation preserves the explicit CIF charges and is followed by the configured cell repetitions.
 
 \subsection{Molecule Templates}
 
