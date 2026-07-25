@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 from statistics import mean, stdev
 import subprocess
+from time import perf_counter
 from typing import Any
 
 from engines.lammps_runner import build_lammps_command
@@ -20,7 +21,9 @@ def run_benchmark(materialized_plan: dict[str, Any]) -> dict[str, Any]:
     summary_file = Path(materialized_plan["working_directory"]) / "gcmc_test_summary.json"
 
     command = build_lammps_command(gcmc_input, log_file=log_file)
+    started_at = perf_counter()
     result = subprocess.run(command, capture_output=True, text=True)
+    wall_time_seconds = perf_counter() - started_at
 
     if result.returncode != 0:
         raise RuntimeError(result.stderr + result.stdout)
@@ -39,6 +42,7 @@ def run_benchmark(materialized_plan: dict[str, Any]) -> dict[str, Any]:
         "log_file": str(log_file),
         "summary_file": str(summary_file),
         "discard_fraction": _discard_fraction(materialized_plan),
+        "wall_time_seconds": wall_time_seconds,
         "summary": summary,
     }
 
@@ -48,6 +52,7 @@ def run_isotherm(materialized_plan: dict[str, Any], jobs: int = 1) -> dict[str, 
     if jobs < 1:
         raise ValueError("jobs must be at least 1.")
 
+    isotherm_started_at = perf_counter()
     runs = materialized_plan["files"]["gcmc_runs"]
     total_runs = len(runs)
     discard_fraction = _discard_fraction(materialized_plan)
@@ -93,6 +98,7 @@ def run_isotherm(materialized_plan: dict[str, Any], jobs: int = 1) -> dict[str, 
     isotherm_summary = {
         "status": "completed",
         "jobs": jobs,
+        "wall_time_seconds": perf_counter() - isotherm_started_at,
         "results": aggregated_results,
         "replicate_results": results,
         "convergence": convergence_report,
@@ -132,7 +138,9 @@ def _run_pressure_point(
     print(f"[{index}/{total_runs}] Running {pressure_bar} bar", flush=True)
 
     command = build_lammps_command(input_script, log_file=log_file)
+    started_at = perf_counter()
     result = subprocess.run(command, capture_output=True, text=True)
+    wall_time_seconds = perf_counter() - started_at
 
     if result.returncode != 0:
         raise RuntimeError(result.stderr + result.stdout)
@@ -155,6 +163,7 @@ def _run_pressure_point(
         "log_file": str(log_file),
         "summary_file": str(summary_file),
         "discard_fraction": discard_fraction,
+        "wall_time_seconds": wall_time_seconds,
         "summary": summary,
     }
 
@@ -175,6 +184,11 @@ def _aggregate_replicates(
     for pressure_bar, replicates in grouped.items():
         replicates.sort(key=lambda item: (int(item.get("replicate_index", 1)), int(item.get("seed", 0))))
         values = [float(item["summary"]["mean_adsorbates"]) for item in replicates]
+        wall_times = [
+            float(item["wall_time_seconds"])
+            for item in replicates
+            if item.get("wall_time_seconds") is not None
+        ]
         replicate_count = len(values)
         average = mean(values)
         standard_deviation = stdev(values) if replicate_count >= 2 else None
@@ -201,6 +215,8 @@ def _aggregate_replicates(
                 "replicate_count": replicate_count,
                 "seeds": [int(item.get("seed", 12345)) for item in replicates],
                 "converged": converged,
+                "mean_wall_time_seconds": mean(wall_times) if wall_times else None,
+                "total_wall_time_seconds": sum(wall_times) if wall_times else None,
                 "summary": {
                     **sample_summary,
                     "sample_count": sum(int(item["summary"].get("sample_count", 0)) for item in replicates),

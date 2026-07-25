@@ -11,6 +11,9 @@ import tempfile
 import unittest
 
 import benchmark
+from analysis.block_convergence import analyze_block_convergence
+from analysis.cell_comparison import compare_cell_runs
+from analysis.reproducibility_manifest import create_reproducibility_manifest
 from converter.cif_to_lammps_data import (
     cell_perpendicular_widths,
     convert_cif_to_lammps_data,
@@ -40,6 +43,157 @@ HAS_NIST_ISODB = Path("isodb-library/Library").exists()
 
 
 class BenchmarkPipelineTests(unittest.TestCase):
+    def test_block_convergence_analyzes_completed_production_blocks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            run = root / "run"
+            (run / "data").mkdir(parents=True)
+            (run / "inputs").mkdir()
+            (run / "logs").mkdir()
+            (run / "data" / "IRMOF-1.data").write_text(
+                "LAMMPS data\n\n106 atoms\n",
+                encoding="utf-8",
+            )
+            (run / "prepare_summary.json").write_text(
+                json.dumps(
+                    {
+                        "prepare_plan": {
+                            "parameters": {
+                                "production_steps": 500,
+                                "equilibration_steps": 500,
+                                "adsorbate_atoms_per_molecule": 3,
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (run / "inputs" / "gcmc_1bar.in").write_text(
+                "# pressure_bar metadata: 1.0\n"
+                "fix gcmc_co2 adsorbate gcmc 1 10 10 0 12345 298.15 0 1\n"
+                "run 1000\n",
+                encoding="utf-8",
+            )
+            thermo_rows = "\n".join(
+                f"{step} {112 if step >= 500 else 106} 0 0"
+                for step in range(0, 1001, 100)
+            )
+            (run / "logs" / "gcmc_1bar.log").write_text(
+                f"Step Atoms Temp Press\n{thermo_rows}\n",
+                encoding="utf-8",
+            )
+
+            report = analyze_block_convergence(
+                run,
+                root / "analysis",
+                block_size=250,
+            )
+
+            self.assertFalse(report["provisional"])
+            self.assertTrue(report["all_completed_runs_converged"])
+            self.assertEqual(report["runs"][0]["complete_block_count"], 2)
+            self.assertEqual(report["runs"][0]["latest_step"], 1000)
+            self.assertTrue(Path(report["outputs"]["csv"]).exists())
+            self.assertTrue(Path(report["outputs"]["json"]).exists())
+            if report["outputs"]["plot"] is not None:
+                self.assertTrue(Path(report["outputs"]["plot"]).exists())
+
+    def test_reproducibility_manifest_hashes_immutable_run_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            run = root / "run"
+            (run / "data").mkdir(parents=True)
+            (run / "inputs").mkdir()
+            (run / "data" / "framework.data").write_text(
+                "framework\n",
+                encoding="utf-8",
+            )
+            (run / "inputs" / "gcmc.in").write_text(
+                "run 10\n",
+                encoding="utf-8",
+            )
+            (run / "prepare_summary.json").write_text(
+                "{}\n",
+                encoding="utf-8",
+            )
+            config = root / "benchmark.json"
+            config.write_text('{"material": "MOF-5"}\n', encoding="utf-8")
+
+            manifest = create_reproducibility_manifest(
+                run,
+                root / "manifest",
+                project_root=root,
+                config_file=config,
+                launch_command="python benchmark.py benchmark.json",
+            )
+
+            self.assertEqual(
+                manifest["launch_command"],
+                "python benchmark.py benchmark.json",
+            )
+            self.assertEqual(len(manifest["checksums_sha256"]), 4)
+            self.assertTrue(Path(manifest["outputs"]["json"]).exists())
+            self.assertTrue(Path(manifest["outputs"]["checksums"]).exists())
+
+    def test_cell_comparison_reports_expected_ratios_and_slowest_pressure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            primitive = root / "primitive"
+            conventional = root / "conventional"
+            for run, atom_count, molecule_counts, runtimes in [
+                (primitive, 106, [2.0, 4.0], [10.0, 20.0]),
+                (conventional, 424, [8.0, 16.0], [30.0, 80.0]),
+            ]:
+                (run / "data").mkdir(parents=True)
+                (run / "data" / "IRMOF-1.data").write_text(
+                    f"LAMMPS data\n\n{atom_count} atoms\n",
+                    encoding="utf-8",
+                )
+                (run / "evaluated_isotherm.csv").write_text(
+                    "pressure_bar,loading_mol_per_kg\n1.0,1.0\n5.0,2.0\n",
+                    encoding="utf-8",
+                )
+                (run / "isotherm_summary.json").write_text(
+                    json.dumps(
+                        {
+                            "status": "completed",
+                            "results": [
+                                {
+                                    "pressure_bar": pressure,
+                                    "wall_time_seconds": runtime,
+                                    "summary": {"mean_adsorbates": count},
+                                }
+                                for pressure, runtime, count in zip(
+                                    [1.0, 5.0], runtimes, molecule_counts, strict=True
+                                )
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+            report = compare_cell_runs(primitive, conventional, root / "comparison")
+
+            self.assertEqual(report["expected_r_n"], 4.0)
+            self.assertTrue(report["runtime_ratio_available"])
+            self.assertTrue(all(row["r_n"] == 4.0 for row in report["rows"]))
+            self.assertTrue(all(row["r_q"] == 1.0 for row in report["rows"]))
+            self.assertEqual(
+                report["slowest_conventional_pressure"]["pressure_bar"], 5.0
+            )
+            self.assertEqual(
+                report["slowest_runtime_ratio_pressure"][
+                    "runtime_ratio_conventional_primitive"
+                ],
+                4.0,
+            )
+            self.assertTrue(Path(report["outputs"]["csv"]).exists())
+            self.assertTrue(Path(report["outputs"]["replicate_csv"]).exists())
+            self.assertEqual(report["replicate_row_count"], 4)
+            self.assertTrue(Path(report["outputs"]["json"]).exists())
+            if report["outputs"]["plot"] is not None:
+                self.assertTrue(Path(report["outputs"]["plot"]).exists())
+
     def test_load_benchmark_data_reads_valid_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "benchmark.json"
@@ -97,6 +251,7 @@ class BenchmarkPipelineTests(unittest.TestCase):
                 "pressure_bar": 1.0,
                 "replicate_index": index,
                 "seed": seed,
+                "wall_time_seconds": float(index),
                 "summary": {
                     "sample_count": 10,
                     "inserted": True,
@@ -123,6 +278,8 @@ class BenchmarkPipelineTests(unittest.TestCase):
         self.assertEqual(len(aggregated), 1)
         self.assertEqual(aggregated[0]["replicate_count"], 5)
         self.assertAlmostEqual(aggregated[0]["summary"]["mean_adsorbates"], 1.0)
+        self.assertAlmostEqual(aggregated[0]["mean_wall_time_seconds"], 3.0)
+        self.assertAlmostEqual(aggregated[0]["total_wall_time_seconds"], 15.0)
         self.assertIsNotNone(aggregated[0]["summary"]["standard_error_adsorbates"])
         self.assertTrue(aggregated[0]["converged"])
         self.assertTrue(report["all_pressure_points_converged"])
