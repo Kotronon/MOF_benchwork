@@ -1,0 +1,23 @@
+{
+  "criterion": "two-sided_95_percent_t_interval_relative_half_width",
+  "minimum_replicates": 3,
+  "relative_ci95_target": 0.05,
+  "pressure_point_count": 1,
+  "converged_pressure_point_count": 0,
+  "all_pressure_points_converged": false,
+  "pressure_points": [
+    {
+      "pressure_bar": 5.0,
+      "replicate_count": 1,
+      "seeds": [
+        12345
+      ],
+      "mean_adsorbates": 6.514851485148514,
+      "standard_deviation_adsorbates": null,
+      "standard_error_adsorbates": null,
+      "ci95_half_width_adsorbates": null,
+      "relative_ci95_half_width": null,
+      "converged": false
+    }
+  ]
+}

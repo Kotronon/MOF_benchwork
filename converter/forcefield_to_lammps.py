@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 
 KCAL_PER_MOL_PER_K = 0.0019872041
+VIRTUAL_SITE_MASS_AMU = 1.0e-6
+NON_INTERACTING_SIGMA_A = 1.0
 
 
 @dataclass(frozen=True)
@@ -123,7 +125,11 @@ def build_atom_type_assignments(
                 label=atom_type,
                 lj_type=atom_type,
                 source="adsorbate",
-                mass=pseudo_atom.mass,
+                mass=(
+                    pseudo_atom.mass
+                    if pseudo_atom.mass > 0.0
+                    else VIRTUAL_SITE_MASS_AMU
+                ),
                 charge=pseudo_atom.charge,
             )
         )
@@ -249,6 +255,14 @@ def parse_mixing_rules(mixing_rules_path: str | Path) -> tuple[dict[str, LjParam
         line_parts = line.split()
         if len(line_parts) == 1 and line_parts[0] == "Lorentz-Berthelot":
             mixing_rule = "Lorentz-Berthelot"
+            continue
+        elif len(line_parts) == 2 and line_parts[1].casefold() == "none":
+            name = line_parts[0]
+            lj_parameters[name] = LjParameter(
+                name=name,
+                epsilon_K=0.0,
+                sigma_A=NON_INTERACTING_SIGMA_A,
+            )
             continue
         elif len(line_parts) != 4:
             continue

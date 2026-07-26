@@ -1,0 +1,78 @@
+{
+  "status": "completed",
+  "jobs": 1,
+  "results": [
+    {
+      "pressure_bar": 5.0,
+      "replicate_count": 1,
+      "seeds": [
+        12345
+      ],
+      "converged": false,
+      "summary": {
+        "sample_count": 101,
+        "inserted": true,
+        "max_atoms": 469,
+        "max_adsorbates": 15.0,
+        "mean_adsorbates": 6.514851485148514,
+        "replicate_mean_adsorbates": [
+          6.514851485148514
+        ],
+        "standard_deviation_adsorbates": null,
+        "standard_error_adsorbates": null,
+        "ci95_half_width_adsorbates": null,
+        "ci95_lower_adsorbates": null,
+        "ci95_upper_adsorbates": null,
+        "relative_ci95_half_width": null
+      }
+    }
+  ],
+  "replicate_results": [
+    {
+      "pressure_bar": 5,
+      "replicate_index": 1,
+      "seed": 12345,
+      "input_script": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/inputs/gcmc_5bar.in",
+      "command": [
+        "lmp",
+        "-in",
+        "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/inputs/gcmc_5bar.in",
+        "-log",
+        "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/logs/gcmc_5bar.log"
+      ],
+      "log_file": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/logs/gcmc_5bar.log",
+      "summary_file": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/logs/gcmc_5bar_summary.json",
+      "discard_fraction": 0.5,
+      "summary": {
+        "sample_count": 101,
+        "inserted": true,
+        "max_atoms": 469,
+        "max_adsorbates": 15.0,
+        "mean_adsorbates": 6.514851485148514
+      }
+    }
+  ],
+  "convergence": {
+    "criterion": "two-sided_95_percent_t_interval_relative_half_width",
+    "minimum_replicates": 3,
+    "relative_ci95_target": 0.05,
+    "pressure_point_count": 1,
+    "converged_pressure_point_count": 0,
+    "all_pressure_points_converged": false,
+    "pressure_points": [
+      {
+        "pressure_bar": 5.0,
+        "replicate_count": 1,
+        "seeds": [
+          12345
+        ],
+        "mean_adsorbates": 6.514851485148514,
+        "standard_deviation_adsorbates": null,
+        "standard_error_adsorbates": null,
+        "ci95_half_width_adsorbates": null,
+        "relative_ci95_half_width": null,
+        "converged": false
+      }
+    ]
+  }
+}

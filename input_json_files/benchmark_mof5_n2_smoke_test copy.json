@@ -7,27 +7,19 @@
   },
   "adsorbates": {
     "components": [
-      "CO2"
+      "N2"
     ],
     "mixture": null
   },
   "conditions": {
     "temperature_K": 298.15,
     "pressures_bar": [
-      0.1,
-      0.5,
-      1,
-      2,
-      5,
-      10,
-      20,
-      35
+      5
     ]
   },
   "benchmark": {
     "task": "auto",
     "metrics": [
-      "co2_uptake",
       "isotherm",
       "error_to_reference",
       "runtime",
@@ -54,11 +46,11 @@
       "allow_excess_reference_basis": true,
       "require_known_nist_article_source": false,
       "material": "MOF-5",
-      "adsorbate": "CO2"
+      "adsorbate": "N2"
     },
     "paper": {
       "citation": "Tao, Zhang, Xu, Sustainable Materials and Technologies 32 (2022) e00383",
-      "target_protocol": "Pure CO2 GCMC for MOF-5 at 298 K, 0.1-35 bar, Peng-Robinson fugacity, rigid 1x1x1 cell, 10M equilibration + 10M production steps."
+     "target_protocol": "Technical pure N2 GCMC smoke test for MOF-5 at 298 K and 5 bar using the rigid conventional 1x1x1 cell."
     }
   },
   "simulation": {
@@ -84,11 +76,10 @@
       1
     ],
     "seeds": [
-      104729,
-      209759
+      12345
     ],
-    "cycles": 500000,
-    "initialization_cycles": 500000
+    "cycles": 10000,
+    "initialization_cycles": 10000
   },
   "convergence": {
     "minimum_replicates": 3,
@@ -104,8 +95,8 @@
     "reference_matching": "by_basis"
   },
   "output": {
-    "directory": "outputs/module_A_co2_isotherm",
-    "run_id": "tao2022_mof5_co2_paper",
+    "directory": "outputs/module_A_n2_isotherm",
+    "run_id": "mof5_n2_smoke",
     "overwrite": false,
     "save_logs": true,
     "save_dumps": false,

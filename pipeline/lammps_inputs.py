@@ -85,7 +85,11 @@ def gcmc_input_builder(inputs: dict[str, Any]) -> str:
         f"# pressure_bar metadata: {inputs.get('pressure_bar', 'not_set')}",
         gcmc_fix,
         "thermo 100",
-        "thermo_style custom step atoms temp pe etotal press f_gcmc_co2[3] f_gcmc_co2[4] f_gcmc_co2[5] f_gcmc_co2[6]",
+        (
+            "thermo_style custom step atoms temp pe etotal press "
+            f"f_gcmc_{molecule_id}[3] f_gcmc_{molecule_id}[4] "
+            f"f_gcmc_{molecule_id}[5] f_gcmc_{molecule_id}[6]"
+        ),
         *(
             [
                 f"dump traj all custom {dump_every_steps} {dump_file} id mol type q x y z",

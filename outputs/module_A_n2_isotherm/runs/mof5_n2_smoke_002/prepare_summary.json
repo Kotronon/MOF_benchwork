@@ -1,0 +1,680 @@
+{
+  "prepare_plan": {
+    "module": {
+      "id": "A",
+      "name": "Baseline GCMC adsorption",
+      "slug": "module_A_co2_isotherm"
+    },
+    "status": "prepared_plan",
+    "side_effects": "none",
+    "working_directory": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002",
+    "overwrite": false,
+    "inputs": {
+      "framework_cif": "CRAFTED-2.0.0/CIF_FILES/DDEC/IRMOF-1.cif",
+      "forcefield_files": {
+        "force_field": "CRAFTED-2.0.0/FORCEFIELDS/UFF/force_field.def",
+        "mixing_rules": "CRAFTED-2.0.0/FORCEFIELDS/UFF/force_field_mixing_rules.def",
+        "pseudo_atoms": "CRAFTED-2.0.0/FORCEFIELDS/UFF/pseudo_atoms.def"
+      },
+      "adsorbate_definitions": {
+        "N2": "CRAFTED-2.0.0/FORCEFIELDS/UFF/N2.def"
+      },
+      "reference_files": [
+        {
+          "component": "N2",
+          "path": "CRAFTED-2.0.0/ISOTHERM_FILES/DDEC_IRMOF-1_UFF_N2_298.csv",
+          "matched_by": "exact",
+          "source": "crafted",
+          "format": "crafted_csv",
+          "selected": true
+        },
+        {
+          "component": "N2",
+          "path": "isodb-library/Library/10.1039b807470d/10.1039b807470d.Isotherm10.json",
+          "matched_by": "nist_isodb_ranked",
+          "source": "nist_isodb",
+          "format": "nist_json",
+          "selected": false,
+          "score": {
+            "temperature_delta_K": 0.14999999999997726,
+            "pressure_overlap_count": 1,
+            "unit_rank": 0,
+            "point_count": 27
+          },
+          "material": "IRMOF-1",
+          "adsorbates": [
+            "Nitrogen"
+          ],
+          "temperature_K": 298.0,
+          "temperature_delta_K": 0.14999999999997726,
+          "pressure_units": "bar",
+          "adsorption_units": "mmol/g",
+          "pressure_min_bar": 0.199581,
+          "pressure_max_bar": 98.4827,
+          "point_count": 27,
+          "doi": "10.1039/b807470d",
+          "category": "sim",
+          "article_source": "Figure 2b",
+          "adsorption_basis": "excess",
+          "excluded": false,
+          "exclusion_reasons": [],
+          "use_in_evaluation": true
+        },
+        {
+          "component": "N2",
+          "path": "isodb-library/Library/10.1007s1045001093053/10.1007s10450-010-9305-3.Isotherm21.json",
+          "matched_by": "nist_isodb_ranked",
+          "source": "nist_isodb",
+          "format": "nist_json",
+          "selected": false,
+          "score": {
+            "temperature_delta_K": 0.14999999999997726,
+            "pressure_overlap_count": 1,
+            "unit_rank": 0,
+            "point_count": 15
+          },
+          "material": "IRMOF-1",
+          "adsorbates": [
+            "Nitrogen"
+          ],
+          "temperature_K": 298.0,
+          "temperature_delta_K": 0.14999999999997726,
+          "pressure_units": "bar",
+          "adsorption_units": "mmol/g",
+          "pressure_min_bar": 1.01695,
+          "pressure_max_bar": 15.0,
+          "point_count": 15,
+          "doi": "10.1007/s10450-010-9305-3",
+          "category": "",
+          "article_source": "UNKNOWN",
+          "adsorption_basis": "unknown",
+          "excluded": false,
+          "exclusion_reasons": [],
+          "use_in_evaluation": true
+        },
+        {
+          "component": "N2",
+          "path": "isodb-library/Library/10.1021jp105899t/10.1021Jp105899t.Isotherm2-1.json",
+          "matched_by": "nist_isodb_ranked",
+          "source": "nist_isodb",
+          "format": "nist_json",
+          "selected": false,
+          "score": {
+            "temperature_delta_K": 0.14999999999997726,
+            "pressure_overlap_count": 0,
+            "unit_rank": 0,
+            "point_count": 14
+          },
+          "material": "IRMOF-1",
+          "adsorbates": [
+            "Nitrogen"
+          ],
+          "temperature_K": 298.0,
+          "temperature_delta_K": 0.14999999999997726,
+          "pressure_units": "bar",
+          "adsorption_units": "mmol/g",
+          "pressure_min_bar": 0.0267062,
+          "pressure_max_bar": 1.05638,
+          "point_count": 14,
+          "doi": "10.1021/Jp105899t",
+          "category": "",
+          "article_source": "UNKNOWN",
+          "adsorption_basis": "unknown",
+          "excluded": false,
+          "exclusion_reasons": [],
+          "use_in_evaluation": true
+        },
+        {
+          "component": "N2",
+          "path": "isodb-library/Library/10.1002cjce.20700/10.1002Cjce.20700.Isotherm3.json",
+          "matched_by": "nist_isodb_ranked",
+          "source": "nist_isodb",
+          "format": "nist_json",
+          "selected": false,
+          "score": {
+            "temperature_delta_K": 0.14999999999997726,
+            "pressure_overlap_count": 0,
+            "unit_rank": 0,
+            "point_count": 5
+          },
+          "material": "IRMOF-1",
+          "adsorbates": [
+            "Nitrogen"
+          ],
+          "temperature_K": 298.0,
+          "temperature_delta_K": 0.14999999999997726,
+          "pressure_units": "bar",
+          "adsorption_units": "mmol/g",
+          "pressure_min_bar": 0.08484849999999998,
+          "pressure_max_bar": 0.836364,
+          "point_count": 5,
+          "doi": "10.1002/Cjce.20700",
+          "category": "",
+          "article_source": "UNKNOWN",
+          "adsorption_basis": "unknown",
+          "excluded": false,
+          "exclusion_reasons": [],
+          "use_in_evaluation": true
+        },
+        {
+          "component": "N2",
+          "path": "isodb-library/Library/10.1016s2095495614601716/10.1016S2095-4956(14)60171-6.Isotherm5.json",
+          "matched_by": "nist_isodb_ranked",
+          "source": "nist_isodb",
+          "format": "nist_json",
+          "selected": false,
+          "score": {
+            "temperature_delta_K": 0.14999999999997726,
+            "pressure_overlap_count": 1,
+            "unit_rank": 1,
+            "point_count": 3
+          },
+          "material": "IRMOF-1",
+          "adsorbates": [
+            "Nitrogen"
+          ],
+          "temperature_K": 298.0,
+          "temperature_delta_K": 0.14999999999997726,
+          "pressure_units": "bar",
+          "adsorption_units": "cm3(STP)/g",
+          "pressure_min_bar": 0.223752,
+          "pressure_max_bar": 5.02582,
+          "point_count": 3,
+          "doi": "10.1016/S2095-4956(14)60171-6",
+          "category": "",
+          "article_source": "UNKNOWN",
+          "adsorption_basis": "unknown",
+          "excluded": false,
+          "exclusion_reasons": [],
+          "use_in_evaluation": true
+        },
+        {
+          "component": "N2",
+          "path": "isodb-library/Library/10.1016j.micromeso.2008.04.033/10.1016j.micromeso.2008.04.033.isotherm1.json",
+          "matched_by": "nist_isodb_ranked",
+          "source": "nist_isodb",
+          "format": "nist_json",
+          "selected": false,
+          "score": {
+            "temperature_delta_K": 0.14999999999997726,
+            "pressure_overlap_count": 0,
+            "unit_rank": 1,
+            "point_count": 10
+          },
+          "material": "IRMOF-1",
+          "adsorbates": [
+            "Nitrogen"
+          ],
+          "temperature_K": 298.0,
+          "temperature_delta_K": 0.14999999999997726,
+          "pressure_units": "bar",
+          "adsorption_units": "cm3(STP)/g",
+          "pressure_min_bar": 0.00182509,
+          "pressure_max_bar": 0.980649,
+          "point_count": 10,
+          "doi": "10.1016/j.micromeso.2008.04.033",
+          "category": "",
+          "article_source": "UNKNOWN",
+          "adsorption_basis": "unknown",
+          "excluded": true,
+          "exclusion_reasons": [
+            "loading_ratio_gt_3_vs_primary_reference"
+          ],
+          "use_in_evaluation": false
+        }
+      ]
+    },
+    "evaluation": {
+      "simulation_basis": "absolute",
+      "report_excess": true,
+      "pore_volume_cm3_g": 0.845545,
+      "pore_volume_source": "CRAFTED-2.0.0/RAC_DBSCAN/CRAFTED_MOF_geometric.csv:AV_cm^3/g",
+      "pore_volume_method": "Zeo++ accessible volume",
+      "gas_density_backend": "HEOS",
+      "reference_matching": "by_basis",
+      "temperature_K": 298.15
+    },
+    "convergence": {
+      "minimum_replicates": 3,
+      "relative_ci95_target": 0.05
+    },
+    "output": {
+      "save_dumps": false,
+      "dump_every_steps": 100000
+    },
+    "planned_files": {
+      "framework_data": {
+        "converter": "cif_to_lammps_data",
+        "input_cif": "CRAFTED-2.0.0/CIF_FILES/DDEC/IRMOF-1.cif",
+        "output_data": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/data/IRMOF-1.data",
+        "atom_style": "full",
+        "cell_representation": "conventional",
+        "unit_cells": [
+          1,
+          1,
+          1
+        ],
+        "cutoff_A": 12.8,
+        "minimum_image_policy": "error",
+        "status": "planned"
+      },
+      "forcefield_include": {
+        "converter": "forcefield_to_lammps",
+        "forcefield_config": {
+          "framework": "UFF",
+          "adsorbate": "auto",
+          "cross_interactions": "auto",
+          "files": {
+            "force_field": "CRAFTED-2.0.0/FORCEFIELDS/UFF/force_field.def",
+            "mixing_rules": "CRAFTED-2.0.0/FORCEFIELDS/UFF/force_field_mixing_rules.def",
+            "pseudo_atoms": "CRAFTED-2.0.0/FORCEFIELDS/UFF/pseudo_atoms.def"
+          },
+          "adsorbates": {
+            "N2": "CRAFTED-2.0.0/FORCEFIELDS/UFF/N2.def"
+          }
+        },
+        "components": [
+          "N2"
+        ],
+        "output_file": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/forcefield/forcefield.in",
+        "status": "planned"
+      },
+      "molecule_templates": {
+        "N2": {
+          "converter": "molecule_to_lammps_template",
+          "input_definition": "CRAFTED-2.0.0/FORCEFIELDS/UFF/N2.def",
+          "output_template": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/molecules/n2.template",
+          "status": "planned"
+        }
+      },
+      "run0_input": {
+        "kind": "run0",
+        "path": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/inputs/in.run0",
+        "log": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/logs/run0.log",
+        "command": [
+          "lmp",
+          "-in",
+          "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/inputs/in.run0",
+          "-log",
+          "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/logs/run0.log"
+        ]
+      },
+      "gcmc_test_input": {
+        "kind": "gcmc_test",
+        "path": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/inputs/in.gcmc_test",
+        "log": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/logs/gcmc_test.log",
+        "command": [
+          "lmp",
+          "-in",
+          "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/inputs/in.gcmc_test",
+          "-log",
+          "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/logs/gcmc_test.log"
+        ]
+      },
+      "input_scripts": [
+        {
+          "kind": "gcmc",
+          "pressure_bar": 5,
+          "replicate_index": 1,
+          "seed": 12345,
+          "path": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/inputs/gcmc_5bar.in",
+          "log": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/logs/gcmc_5bar.log",
+          "dump": null,
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/inputs/gcmc_5bar.in",
+            "-log",
+            "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/logs/gcmc_5bar.log"
+          ]
+        }
+      ],
+      "logs": [
+        "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/logs/gcmc_5bar.log"
+      ],
+      "summary": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/prepare_summary.json"
+    },
+    "parameters": {
+      "material_id": "IRMOF-1",
+      "charge_scheme": "DDEC",
+      "components": [
+        "N2"
+      ],
+      "temperature_K": 298.15,
+      "pressures_bar": [
+        5
+      ],
+      "unit_cells": [
+        1,
+        1,
+        1
+      ],
+      "cell_representation": "conventional",
+      "cutoff_A": 12.8,
+      "minimum_image_policy": "error",
+      "seeds": [
+        12345
+      ],
+      "replicate_count": 1,
+      "save_dumps": false,
+      "dump_every_steps": 100000,
+      "forcefield": "UFF",
+      "production_steps": 10000,
+      "equilibration_steps": 10000,
+      "run_steps": 20000
+    }
+  },
+  "result": {
+    "status": "materialized",
+    "working_directory": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002",
+    "parameters": {
+      "material_id": "IRMOF-1",
+      "charge_scheme": "DDEC",
+      "components": [
+        "N2"
+      ],
+      "temperature_K": 298.15,
+      "pressures_bar": [
+        5
+      ],
+      "unit_cells": [
+        1,
+        1,
+        1
+      ],
+      "cell_representation": "conventional",
+      "cutoff_A": 12.8,
+      "minimum_image_policy": "error",
+      "seeds": [
+        12345
+      ],
+      "replicate_count": 1,
+      "save_dumps": false,
+      "dump_every_steps": 100000,
+      "forcefield": "UFF",
+      "production_steps": 10000,
+      "equilibration_steps": 10000,
+      "run_steps": 20000,
+      "framework_atom_count": 424,
+      "framework_cell_lengths_A": [
+        25.831999997721844,
+        25.831999997721848,
+        25.831999997721848
+      ],
+      "framework_cell_angles_deg": [
+        90.0,
+        90.0,
+        90.0
+      ],
+      "adsorbate_atoms_per_molecule": 3
+    },
+    "evaluation": {
+      "simulation_basis": "absolute",
+      "report_excess": true,
+      "pore_volume_cm3_g": 0.845545,
+      "pore_volume_source": "CRAFTED-2.0.0/RAC_DBSCAN/CRAFTED_MOF_geometric.csv:AV_cm^3/g",
+      "pore_volume_method": "Zeo++ accessible volume",
+      "gas_density_backend": "HEOS",
+      "reference_matching": "by_basis",
+      "temperature_K": 298.15
+    },
+    "convergence": {
+      "minimum_replicates": 3,
+      "relative_ci95_target": 0.05
+    },
+    "files": {
+      "framework_data": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/data/IRMOF-1.data",
+      "forcefield_include": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/forcefield/forcefield.in",
+      "molecule_templates": {
+        "N2": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/molecules/n2.template"
+      },
+      "run0_input": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/inputs/in.run0",
+      "gcmc_test_input": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/inputs/in.gcmc_test",
+      "summary": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/prepare_summary.json",
+      "source_files": {
+        "framework_cif": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/source/IRMOF-1.cif",
+        "forcefield_files": {
+          "force_field": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/source/forcefield/force_field.def",
+          "mixing_rules": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/source/forcefield/force_field_mixing_rules.def",
+          "pseudo_atoms": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/source/forcefield/pseudo_atoms.def"
+        },
+        "adsorbate_definitions": {
+          "N2": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/source/molecules/N2.def"
+        },
+        "reference_files": [
+          {
+            "component": "N2",
+            "path": "CRAFTED-2.0.0/ISOTHERM_FILES/DDEC_IRMOF-1_UFF_N2_298.csv",
+            "matched_by": "exact",
+            "source": "crafted",
+            "format": "crafted_csv",
+            "selected": true,
+            "copied_path": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/source/references/DDEC_IRMOF-1_UFF_N2_298.csv"
+          },
+          {
+            "component": "N2",
+            "path": "isodb-library/Library/10.1039b807470d/10.1039b807470d.Isotherm10.json",
+            "matched_by": "nist_isodb_ranked",
+            "source": "nist_isodb",
+            "format": "nist_json",
+            "selected": false,
+            "score": {
+              "temperature_delta_K": 0.14999999999997726,
+              "pressure_overlap_count": 1,
+              "unit_rank": 0,
+              "point_count": 27
+            },
+            "material": "IRMOF-1",
+            "adsorbates": [
+              "Nitrogen"
+            ],
+            "temperature_K": 298.0,
+            "temperature_delta_K": 0.14999999999997726,
+            "pressure_units": "bar",
+            "adsorption_units": "mmol/g",
+            "pressure_min_bar": 0.199581,
+            "pressure_max_bar": 98.4827,
+            "point_count": 27,
+            "doi": "10.1039/b807470d",
+            "category": "sim",
+            "article_source": "Figure 2b",
+            "adsorption_basis": "excess",
+            "excluded": false,
+            "exclusion_reasons": [],
+            "use_in_evaluation": true,
+            "copied_path": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/source/references/10.1039b807470d.Isotherm10.json"
+          },
+          {
+            "component": "N2",
+            "path": "isodb-library/Library/10.1007s1045001093053/10.1007s10450-010-9305-3.Isotherm21.json",
+            "matched_by": "nist_isodb_ranked",
+            "source": "nist_isodb",
+            "format": "nist_json",
+            "selected": false,
+            "score": {
+              "temperature_delta_K": 0.14999999999997726,
+              "pressure_overlap_count": 1,
+              "unit_rank": 0,
+              "point_count": 15
+            },
+            "material": "IRMOF-1",
+            "adsorbates": [
+              "Nitrogen"
+            ],
+            "temperature_K": 298.0,
+            "temperature_delta_K": 0.14999999999997726,
+            "pressure_units": "bar",
+            "adsorption_units": "mmol/g",
+            "pressure_min_bar": 1.01695,
+            "pressure_max_bar": 15.0,
+            "point_count": 15,
+            "doi": "10.1007/s10450-010-9305-3",
+            "category": "",
+            "article_source": "UNKNOWN",
+            "adsorption_basis": "unknown",
+            "excluded": false,
+            "exclusion_reasons": [],
+            "use_in_evaluation": true,
+            "copied_path": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/source/references/10.1007s10450-010-9305-3.Isotherm21.json"
+          },
+          {
+            "component": "N2",
+            "path": "isodb-library/Library/10.1021jp105899t/10.1021Jp105899t.Isotherm2-1.json",
+            "matched_by": "nist_isodb_ranked",
+            "source": "nist_isodb",
+            "format": "nist_json",
+            "selected": false,
+            "score": {
+              "temperature_delta_K": 0.14999999999997726,
+              "pressure_overlap_count": 0,
+              "unit_rank": 0,
+              "point_count": 14
+            },
+            "material": "IRMOF-1",
+            "adsorbates": [
+              "Nitrogen"
+            ],
+            "temperature_K": 298.0,
+            "temperature_delta_K": 0.14999999999997726,
+            "pressure_units": "bar",
+            "adsorption_units": "mmol/g",
+            "pressure_min_bar": 0.0267062,
+            "pressure_max_bar": 1.05638,
+            "point_count": 14,
+            "doi": "10.1021/Jp105899t",
+            "category": "",
+            "article_source": "UNKNOWN",
+            "adsorption_basis": "unknown",
+            "excluded": false,
+            "exclusion_reasons": [],
+            "use_in_evaluation": true,
+            "copied_path": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/source/references/10.1021Jp105899t.Isotherm2-1.json"
+          },
+          {
+            "component": "N2",
+            "path": "isodb-library/Library/10.1002cjce.20700/10.1002Cjce.20700.Isotherm3.json",
+            "matched_by": "nist_isodb_ranked",
+            "source": "nist_isodb",
+            "format": "nist_json",
+            "selected": false,
+            "score": {
+              "temperature_delta_K": 0.14999999999997726,
+              "pressure_overlap_count": 0,
+              "unit_rank": 0,
+              "point_count": 5
+            },
+            "material": "IRMOF-1",
+            "adsorbates": [
+              "Nitrogen"
+            ],
+            "temperature_K": 298.0,
+            "temperature_delta_K": 0.14999999999997726,
+            "pressure_units": "bar",
+            "adsorption_units": "mmol/g",
+            "pressure_min_bar": 0.08484849999999998,
+            "pressure_max_bar": 0.836364,
+            "point_count": 5,
+            "doi": "10.1002/Cjce.20700",
+            "category": "",
+            "article_source": "UNKNOWN",
+            "adsorption_basis": "unknown",
+            "excluded": false,
+            "exclusion_reasons": [],
+            "use_in_evaluation": true,
+            "copied_path": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/source/references/10.1002Cjce.20700.Isotherm3.json"
+          },
+          {
+            "component": "N2",
+            "path": "isodb-library/Library/10.1016s2095495614601716/10.1016S2095-4956(14)60171-6.Isotherm5.json",
+            "matched_by": "nist_isodb_ranked",
+            "source": "nist_isodb",
+            "format": "nist_json",
+            "selected": false,
+            "score": {
+              "temperature_delta_K": 0.14999999999997726,
+              "pressure_overlap_count": 1,
+              "unit_rank": 1,
+              "point_count": 3
+            },
+            "material": "IRMOF-1",
+            "adsorbates": [
+              "Nitrogen"
+            ],
+            "temperature_K": 298.0,
+            "temperature_delta_K": 0.14999999999997726,
+            "pressure_units": "bar",
+            "adsorption_units": "cm3(STP)/g",
+            "pressure_min_bar": 0.223752,
+            "pressure_max_bar": 5.02582,
+            "point_count": 3,
+            "doi": "10.1016/S2095-4956(14)60171-6",
+            "category": "",
+            "article_source": "UNKNOWN",
+            "adsorption_basis": "unknown",
+            "excluded": false,
+            "exclusion_reasons": [],
+            "use_in_evaluation": true,
+            "copied_path": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/source/references/10.1016S2095-4956(14)60171-6.Isotherm5.json"
+          },
+          {
+            "component": "N2",
+            "path": "isodb-library/Library/10.1016j.micromeso.2008.04.033/10.1016j.micromeso.2008.04.033.isotherm1.json",
+            "matched_by": "nist_isodb_ranked",
+            "source": "nist_isodb",
+            "format": "nist_json",
+            "selected": false,
+            "score": {
+              "temperature_delta_K": 0.14999999999997726,
+              "pressure_overlap_count": 0,
+              "unit_rank": 1,
+              "point_count": 10
+            },
+            "material": "IRMOF-1",
+            "adsorbates": [
+              "Nitrogen"
+            ],
+            "temperature_K": 298.0,
+            "temperature_delta_K": 0.14999999999997726,
+            "pressure_units": "bar",
+            "adsorption_units": "cm3(STP)/g",
+            "pressure_min_bar": 0.00182509,
+            "pressure_max_bar": 0.980649,
+            "point_count": 10,
+            "doi": "10.1016/j.micromeso.2008.04.033",
+            "category": "",
+            "article_source": "UNKNOWN",
+            "adsorption_basis": "unknown",
+            "excluded": true,
+            "exclusion_reasons": [
+              "loading_ratio_gt_3_vs_primary_reference"
+            ],
+            "use_in_evaluation": false,
+            "copied_path": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/source/references/10.1016j.micromeso.2008.04.033.isotherm1.json"
+          }
+        ]
+      },
+      "gcmc_inputs": [
+        "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/inputs/gcmc_5bar.in"
+      ],
+      "gcmc_runs": [
+        {
+          "kind": "gcmc",
+          "pressure_bar": 5,
+          "replicate_index": 1,
+          "seed": 12345,
+          "path": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/inputs/gcmc_5bar.in",
+          "log": "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/logs/gcmc_5bar.log",
+          "dump": null,
+          "command": [
+            "lmp",
+            "-in",
+            "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/inputs/gcmc_5bar.in",
+            "-log",
+            "outputs/module_A_n2_isotherm/runs/mof5_n2_smoke_002/logs/gcmc_5bar.log"
+          ]
+        }
+      ],
+      "dump_files": []
+    }
+  }
+}

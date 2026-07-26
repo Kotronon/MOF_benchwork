@@ -225,8 +225,15 @@ CRAFTED-2.0.0/
 CRAFTED-2.0.0.tar.xz
 isodb-library/
 external/
-outputs/
 reports/
+
+
+# Output files but push the JSON files to git
+outputs/**
+!outputs/**/
+!outputs/*.json
+!outputs/**/*.json
+
 
 presentations/
 guidelines_for_project_developement/
