@@ -560,7 +560,13 @@ def _write_isotherm_plot(rows: list[dict[str, Any]], output_path: str | Path) ->
             label="Simulation excess",
         )
     if valid_ref:
-        ax.plot([p for p, _y in valid_ref], [y for _p, y in valid_ref], marker="s", linestyle="--", label="Reference")
+        ax.plot(
+            [p for p, _y in valid_ref],
+            [y for _p, y in valid_ref],
+            marker="s",
+            linestyle="--",
+            label=_single_reference_label(rows),
+        )
     ax.set_xlabel("Pressure / bar")
     ax.set_ylabel("Loading / mol kg$^{-1}$")
     ax.set_title("MOF-5 CO2 adsorption isotherm")
@@ -568,6 +574,7 @@ def _write_isotherm_plot(rows: list[dict[str, Any]], output_path: str | Path) ->
     ax.legend()
     if all(p and p > 0 for p in pressures if p is not None):
         ax.set_xscale("log")
+        _set_decimal_pressure_ticks(ax, pressures)
     fig.tight_layout()
 
     output = Path(output_path)
@@ -728,6 +735,9 @@ def _write_combined_reference_plot(
     ax.grid(True, alpha=0.3)
     if all(pressure > 0 for pressure, _loading in valid_abs):
         ax.set_xscale("log")
+        _set_decimal_pressure_ticks(
+            ax, [pressure for pressure, _loading in valid_abs]
+        )
     ax.legend(fontsize="small")
     fig.tight_layout()
 
@@ -736,6 +746,39 @@ def _write_combined_reference_plot(
     fig.savefig(output, dpi=200)
     plt.close(fig)
     return output
+
+
+def _set_decimal_pressure_ticks(axis: Any, pressures: list[float | None]) -> None:
+    """Keep logarithmic spacing while showing pressure values as decimals."""
+    ticks = sorted(
+        {float(value) for value in pressures if value is not None and value > 0}
+    )
+    if not ticks:
+        return
+    axis.set_xticks(ticks)
+    axis.set_xticklabels([f"{value:g}" for value in ticks])
+    axis.minorticks_off()
+
+
+def _single_reference_label(rows: list[dict[str, Any]]) -> str:
+    reference_rows = [
+        row
+        for row in rows
+        if row.get("reference_mol_per_kg") not in (None, "")
+    ]
+    if not reference_rows:
+        return "Reference"
+    row = reference_rows[0]
+    source = str(row.get("reference_source", "")).casefold()
+    reference_path = str(row.get("reference_path", "")).casefold()
+    if source == "crafted":
+        if "ddec" in reference_path and "uff" in reference_path and "298" in reference_path:
+            return "CRAFTED DDEC/UFF (298 K)"
+        return "CRAFTED reference"
+    doi = str(row.get("reference_doi", "")).strip()
+    if source == "nist_isodb":
+        return f"NIST ISODB {doi}" if doi else "NIST ISODB reference"
+    return "Reference"
 
 
 def _mean_abs(rows: list[dict[str, Any]], key: str) -> float | None:

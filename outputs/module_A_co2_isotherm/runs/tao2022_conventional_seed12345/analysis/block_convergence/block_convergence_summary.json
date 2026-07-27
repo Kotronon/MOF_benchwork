@@ -1,0 +1,86 @@
+{
+  "run_directory": "outputs/module_A_co2_isotherm/runs/tao2022_conventional_seed12345",
+  "equilibration_step": 500000,
+  "production_steps": 500000,
+  "planned_end_step": 1000000,
+  "block_size": 50000,
+  "relative_tolerance": 0.05,
+  "framework_atoms": 424,
+  "adsorbate_atoms_per_molecule": 3,
+  "log_count": 5,
+  "completed_log_count": 1,
+  "all_completed_runs_converged": true,
+  "provisional": true,
+  "runs": [
+    {
+      "pressure_bar": 0.1,
+      "seed": 12345,
+      "log_file": "outputs/module_A_co2_isotherm/runs/tao2022_conventional_seed12345/logs/gcmc_0p1bar.log",
+      "latest_step": 1000000,
+      "progress_fraction": 1.0,
+      "run_complete": true,
+      "production_sample_count": 5001,
+      "complete_block_count": 10,
+      "last_two_block_relative_change": 0.047545454545454544,
+      "half_to_full_cumulative_relative_change": 0.004490589184752016,
+      "converged": true
+    },
+    {
+      "pressure_bar": 0.5,
+      "seed": 12345,
+      "log_file": "outputs/module_A_co2_isotherm/runs/tao2022_conventional_seed12345/logs/gcmc_0p5bar.log",
+      "latest_step": 665100,
+      "progress_fraction": 0.6651,
+      "run_complete": false,
+      "production_sample_count": 1652,
+      "complete_block_count": 3,
+      "last_two_block_relative_change": 0.01260192735359535,
+      "half_to_full_cumulative_relative_change": null,
+      "converged": null
+    },
+    {
+      "pressure_bar": 1.0,
+      "seed": 12345,
+      "log_file": "outputs/module_A_co2_isotherm/runs/tao2022_conventional_seed12345/logs/gcmc_1bar.log",
+      "latest_step": 608200,
+      "progress_fraction": 0.6082,
+      "run_complete": false,
+      "production_sample_count": 1083,
+      "complete_block_count": 2,
+      "last_two_block_relative_change": 0.02373361671980169,
+      "half_to_full_cumulative_relative_change": null,
+      "converged": null
+    },
+    {
+      "pressure_bar": 2.0,
+      "seed": 12345,
+      "log_file": "outputs/module_A_co2_isotherm/runs/tao2022_conventional_seed12345/logs/gcmc_2bar.log",
+      "latest_step": 548500,
+      "progress_fraction": 0.5485,
+      "run_complete": false,
+      "production_sample_count": 486,
+      "complete_block_count": 0,
+      "last_two_block_relative_change": null,
+      "half_to_full_cumulative_relative_change": null,
+      "converged": null
+    },
+    {
+      "pressure_bar": 5.0,
+      "seed": 12345,
+      "log_file": "outputs/module_A_co2_isotherm/runs/tao2022_conventional_seed12345/logs/gcmc_5bar.log",
+      "latest_step": 30800,
+      "progress_fraction": 0.0308,
+      "run_complete": false,
+      "production_sample_count": 0,
+      "complete_block_count": 0,
+      "last_two_block_relative_change": null,
+      "half_to_full_cumulative_relative_change": null,
+      "converged": null
+    }
+  ],
+  "outputs": {
+    "csv": "outputs/module_A_co2_isotherm/runs/tao2022_conventional_seed12345/analysis/block_convergence/block_convergence.csv",
+    "json": "outputs/module_A_co2_isotherm/runs/tao2022_conventional_seed12345/analysis/block_convergence/block_convergence_summary.json",
+    "plot": "outputs/module_A_co2_isotherm/runs/tao2022_conventional_seed12345/analysis/block_convergence/block_convergence.png"
+  }
+}

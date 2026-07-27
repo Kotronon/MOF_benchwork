@@ -1,0 +1,77 @@
+{
+  "created_at_utc": "2026-07-25T13:47:23.743991+00:00",
+  "run_directory": "/home/ge64zuq/MOF_benchwork/outputs/module_A_co2_isotherm/runs/tao2022_conventional_seed12345",
+  "launch_command": "python benchmark.py input_json_files/benchmark_tao2022_mof5_co2_conventional_single_seed.json --run-isotherm --run-id tao2022_conventional_seed12345 --no-overwrite --jobs 4",
+  "system": {
+    "hostname": "TUMWMFM-GPU02",
+    "platform": "Linux-6.8.0-117-generic-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "processor": "x86_64",
+    "cpu_count": 64
+  },
+  "python": {
+    "version": "3.11.15 | packaged by conda-forge | (main, Jun 11 2026, 03:34:02) [GCC 14.3.0]",
+    "executable": "/home/ge64zuq/miniforge3/envs/MOF_sim/bin/python",
+    "prefix": "/home/ge64zuq/miniforge3/envs/MOF_sim"
+  },
+  "packages": {
+    "ase": "3.29.0",
+    "CoolProp": "7.1.0",
+    "matplotlib": "3.11.1",
+    "numpy": "2.4.6",
+    "pandas": "3.0.3"
+  },
+  "conda": {
+    "executable": "/home/ge64zuq/miniforge3/bin/conda",
+    "prefix": "/home/ge64zuq/miniforge3/envs/MOF_sim",
+    "explicit_environment_available": true
+  },
+  "lammps": {
+    "executable": "/home/ge64zuq/miniforge3/envs/MOF_sim/bin/lmp",
+    "version_line": "Large-scale Atomic/Molecular Massively Parallel Simulator - 22 Jul 2025 - Update 4"
+  },
+  "git": {
+    "project_root": "/home/ge64zuq/MOF_benchwork",
+    "commit": "c1cf277dab007ba4b3d6088084ef9eeca96f0501",
+    "branch": "main",
+    "dirty": false,
+    "status_short": []
+  },
+  "configuration_file": "/home/ge64zuq/MOF_benchwork/input_json_files/benchmark_tao2022_mof5_co2_conventional_single_seed.json",
+  "checksums_sha256": {
+    "project/input_json_files/benchmark_tao2022_mof5_co2_conventional_single_seed.json": "6d5a0663e614e89cb360aeab5ec555e174b96ed118fdd5bbe7d6e048f73d1e53",
+    "run/data/IRMOF-1.data": "211eaba9f3c2747c7a810426dce65eb5e838330c857d004289393e5257278cf7",
+    "run/forcefield/forcefield.in": "813948a47cdba7b2da96134ff86742bab1c214e73db1f8c7cfbc3a29eca6cae8",
+    "run/inputs/gcmc_0p1bar.in": "a2d8e392c18e4121547506b4e0f7099687d277d451162eff47afe99f6ff2ca68",
+    "run/inputs/gcmc_0p5bar.in": "094a88724e8a83d153bcb34bf2ee5738675e07a2ae7db184b500b07cf9391498",
+    "run/inputs/gcmc_10bar.in": "d388607ef0fd8e923b1c11aadeaa63067b5cbed0dfceb162983dee17cc6cbec7",
+    "run/inputs/gcmc_1bar.in": "1841be4fbad90e678f2e74cfe39631467d7526601e08f71e7d79c2f7eec2d9b2",
+    "run/inputs/gcmc_20bar.in": "ed992b85ef76b44b4e84e98dce6ff9675b536f665f486df8f84ad16f88682c21",
+    "run/inputs/gcmc_2bar.in": "8cbd4ee50ba6acbf54c58376b647948bbf130c5891880f12f560fa2b0a498318",
+    "run/inputs/gcmc_35bar.in": "ba38274f9c7c3ca697bc23efbc9eea817c0b192327d6e2618f56f352c2a0e107",
+    "run/inputs/gcmc_5bar.in": "b09c167d072e525335943731a38290594a1b9b25bd168cad4e3f2eeca18941ef",
+    "run/inputs/in.gcmc_test": "df2d81c45b9c48de75157e9fda84c7ff387aa0f83886993800beec28e735f873",
+    "run/inputs/in.run0": "18de958961693c31bef1a612883e519d7f8a65b30b4a31dabe38f7375fdf01de",
+    "run/molecules/co2.template": "f1e4862850300a1ec0941a6c033baed796c28634aa88b713fe2ad48fe706d294",
+    "run/prepare_summary.json": "62309919a1df1905046cafc999dd88c3526d5e64139c5f13639bcdbc7e2452c0",
+    "run/source/IRMOF-1.cif": "b9b96f51979429349f86a390359e6c4d35f300bc8c98837d0810b2ecb736e62b",
+    "run/source/forcefield/force_field.def": "965cd0fe3c6386465ca2c6dec10d5706f0b3267ffe104e3dfa20ba9b46f73dc8",
+    "run/source/forcefield/force_field_mixing_rules.def": "8becd473594f52bdf15c95cd6511b749fac768ebc9e536de1037b2a32d0bbb82",
+    "run/source/forcefield/pseudo_atoms.def": "f84fae3073525e87fe887a6ea635ea63c3c25764c665da3c465466b76c4d4504",
+    "run/source/molecules/CO2.def": "105b7f387de658034e0812362054b3a8ee8c09280e207a42ada9e37b431a9417",
+    "run/source/references/10.1007s00894-010-0720-x.Isotherm3.json": "5f55f742df1a75cddcfe54f7e168bfd60592ed1ffb4ee2030605b051c74db009",
+    "run/source/references/10.1021Ct400549q.isotherm1.json": "ed62f57b6552767dc68b66e4268c0e7023127bd1093dfde192f8484436573d94",
+    "run/source/references/10.1021Ie202777q.isotherm1.json": "e50c40484089c7cbb31461e68392aae282050b9b0424e0597b62b04737807870",
+    "run/source/references/10.1021Ja076595g.Isotherm2.json": "50e653d3f888666649c3d47c5dae73735c80de83b54fae4a58fcf2edb30737f6",
+    "run/source/references/10.1021Jz3008485.Isotherm13.json": "7184527aea98611b01667f798653226e4952f5cd6ed678f2e05ef4c03b2d25ee",
+    "run/source/references/10.1021La800369s.isotherm3a.json": "69418a7d1256aefbb87bf0646338e1f4a41ba940bf5d62fdf11822852f2cf612",
+    "run/source/references/10.1021acs.jctc.5b00093.Isotherm3.json": "b7be0deb3f017740da0602ec6975997a29860a9eef19dad1e4bd474902bc2ad7",
+    "run/source/references/10.1039b807470d.Isotherm9.json": "85462c2e11db35128646d7a9d254fe001664c656fb3734432fcaa4dae4bcd543",
+    "run/source/references/DDEC_IRMOF-1_UFF_CO2_298.csv": "6424d1fb0bb84d20d5aa37a027111c0be17f02d2591bc46445fff57397c2b146"
+  },
+  "outputs": {
+    "json": "/home/ge64zuq/MOF_benchwork/outputs/module_A_co2_isotherm/runs/tao2022_conventional_seed12345/reproducibility/reproducibility_manifest.json",
+    "checksums": "/home/ge64zuq/MOF_benchwork/outputs/module_A_co2_isotherm/runs/tao2022_conventional_seed12345/reproducibility/checksums.sha256",
+    "conda_explicit": "/home/ge64zuq/MOF_benchwork/outputs/module_A_co2_isotherm/runs/tao2022_conventional_seed12345/reproducibility/conda-explicit.txt"
+  }
+}

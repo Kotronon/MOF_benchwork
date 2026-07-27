@@ -430,6 +430,9 @@ def _write_plot(
     for axis in axes.flat:
         axis.set_xlabel("Pressure / bar")
         axis.set_xscale("log")
+        axis.set_xticks(pressures)
+        axis.set_xticklabels([f"{pressure:g}" for pressure in pressures])
+        axis.minorticks_off()
         axis.grid(alpha=0.3)
     figure.tight_layout()
     figure.savefig(path, dpi=200)
