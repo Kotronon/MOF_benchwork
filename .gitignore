@@ -226,6 +226,8 @@ CRAFTED-2.0.0.tar.xz
 isodb-library/
 external/
 reports/
+docs/
+docs/**
 
 
 # Output files but push the JSON files to git
@@ -246,3 +248,4 @@ guidelines_for_project_developement/
 *.fls
 *.fdb_latexmk
 *.synctex.gz
+docs/
