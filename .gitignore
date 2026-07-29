@@ -230,13 +230,11 @@ docs/
 docs/**
 
 
-# Output files but push the JSON files to git
+# Output files 
 outputs/**
-!outputs/**/
-!outputs/*.json
-!outputs/**/*.json
+outputs/**/
 
-
+/.tmp_interim_presentation
 presentations/
 guidelines_for_project_developement/
 
@@ -249,3 +247,6 @@ guidelines_for_project_developement/
 *.fdb_latexmk
 *.synctex.gz
 docs/
+presentations/
+presentations/
+outputs/
