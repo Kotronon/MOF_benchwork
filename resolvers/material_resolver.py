@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from difflib import get_close_matches
+from functools import lru_cache
 import json
 from pathlib import Path
 import re
@@ -37,12 +38,18 @@ class MaterialResolver:
         self,
         crafted_root: str | Path = "CRAFTED-2.0.0",
         alias_file: str | Path = "data/material_aliases.json",
+        nist_root: str | Path = "isodb-library",
+        use_nist_aliases: bool = True,
     ) -> None:
         self.crafted_root = Path(crafted_root)
         self.cif_root = self.crafted_root / "CIF_FILES"
         self.alias_file = Path(alias_file)
+        self.nist_root = Path(nist_root)
+        self.use_nist_aliases = use_nist_aliases
         self.alias_map = self._load_aliases()
         self._cif_index = self._build_cif_index()
+        if self.use_nist_aliases:
+            self.alias_map = self._merge_nist_aliases(self.alias_map)
         self._name_index = self._build_name_index()
 
     def resolve(self, name: str, charge_scheme: str = "auto") -> MaterialMatch:
@@ -63,8 +70,13 @@ class MaterialResolver:
 
     def suggest(self, name: str, limit: int = 5) -> tuple[str, ...]:
         normalized_names = list(self._name_index)
+        alias_index = self._alias_index()
+        normalized_names.extend(alias_index)
         matches = get_close_matches(_normalize_name(name), normalized_names, n=limit, cutoff=0.55)
-        return tuple(self._name_index[match] for match in matches)
+        suggestions: list[str] = []
+        for match in matches:
+            suggestions.append(self._name_index.get(match) or alias_index[match])
+        return tuple(_dedupe(suggestions))
 
     def _match(self, query: str, material_id: str, charge_scheme: str, matched_by: str) -> MaterialMatch:
         scheme = self._select_charge_scheme(material_id, charge_scheme)
@@ -141,6 +153,49 @@ class MaterialResolver:
                 aliases[canonical].extend(values)
         return {canonical: _dedupe(values) for canonical, values in aliases.items()}
 
+    def _merge_nist_aliases(self, aliases: dict[str, list[str]]) -> dict[str, list[str]]:
+        names = _load_nist_adsorbent_names(self.nist_root)
+        if not names:
+            return aliases
+
+        known = self._known_alias_targets(aliases)
+        for nist_name in names:
+            if not _looks_like_base_material_name(nist_name):
+                continue
+            for candidate in _nist_name_candidates(nist_name):
+                material_id = known.get(_normalize_name(candidate))
+                if material_id is not None:
+                    aliases.setdefault(material_id, [])
+                    if _normalize_name(nist_name) != _normalize_name(material_id):
+                        aliases[material_id].append(nist_name)
+                    if _normalize_name(candidate) != _normalize_name(material_id):
+                        aliases[material_id].append(candidate)
+
+        return {canonical: _dedupe(values) for canonical, values in aliases.items()}
+
+    def _known_alias_targets(self, aliases: dict[str, list[str]]) -> dict[str, str]:
+        targets: dict[str, str] = {}
+        for material_id in self._cif_index:
+            targets[_normalize_name(material_id)] = material_id
+        for canonical, values in aliases.items():
+            if canonical in self._cif_index:
+                target = canonical
+            else:
+                target = targets.get(_normalize_name(canonical))
+                if target is None:
+                    continue
+            for value in [canonical, *values]:
+                targets[_normalize_name(value)] = target
+        return targets
+
+    def _alias_index(self) -> dict[str, str]:
+        index: dict[str, str] = {}
+        for canonical, aliases in self.alias_map.items():
+            material_id = self._name_index.get(_normalize_name(canonical), canonical)
+            for alias in aliases:
+                index[_normalize_name(alias)] = material_id
+        return index
+
 
 def _normalize_name(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.casefold())
@@ -163,3 +218,60 @@ def _lookup_case_insensitive(value: str, mapping: dict[str, Path]) -> str | None
         if key.casefold() == normalized:
             return key
     return None
+
+
+def _load_nist_adsorbent_names(nist_root: Path) -> tuple[str, ...]:
+    return _load_nist_adsorbent_names_cached(str(nist_root))
+
+
+@lru_cache(maxsize=8)
+def _load_nist_adsorbent_names_cached(nist_root: str) -> tuple[str, ...]:
+    nist_root_path = Path(nist_root)
+    search_root = nist_root_path / "Library" if (nist_root_path / "Library").exists() else nist_root_path
+    if not search_root.exists():
+        return ()
+
+    names: list[str] = []
+    for path in search_root.glob("*/*.json"):
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            continue
+        name = str((data.get("adsorbent") or {}).get("name", "")).strip()
+        if name:
+            names.append(name)
+    return tuple(_dedupe(names))
+
+
+def _nist_name_candidates(name: str) -> list[str]:
+    candidates = [name.strip()]
+    candidates.extend(re.findall(r"\(([^)]+)\)", name))
+    candidates.extend(re.findall(r"\[([^\]]+)\]", name))
+    return _dedupe([candidate.strip() for candidate in candidates if candidate.strip()])
+
+
+def _looks_like_base_material_name(name: str) -> bool:
+    normalized = name.casefold()
+    unsafe_fragments = (
+        "/",
+        "@",
+        " wt",
+        "wt%",
+        "composite",
+        "nanoparticle",
+        "graphene",
+        "oxide",
+        "functionalized",
+        "impregnated",
+        "loaded",
+        "activated carbon",
+        "carbon black",
+        "mwcnt",
+        "cnt",
+    )
+    if any(fragment in normalized for fragment in unsafe_fragments):
+        return False
+    if re.search(r"^\d+\s*(pt|pd|cu|zn|mg|co|ni|fe|ag|au)[/@-]", normalized):
+        return False
+    return True

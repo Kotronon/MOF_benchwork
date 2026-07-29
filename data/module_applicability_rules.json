@@ -1,0 +1,56 @@
+{
+  "module_A": {
+    "default_policy": "supported",
+    "required": {
+      "engine": "LAMMPS",
+      "method": "GCMC",
+      "framework": "rigid",
+      "single_component": true,
+      "min_pore_volume_cm3_g": 0.01
+    },
+    "adsorbate_diameter_policy": {
+      "source": "generated_from_lj_sigma",
+      "sigma_scale": 1.1,
+      "fallback_A": 3.5
+    },
+    "geometry_source": "CRAFTED-2.0.0/RAC_DBSCAN/CRAFTED_MOF_geometric.csv",
+    "warning_materials": {
+      "ZIF-7": {
+        "status": "warning",
+        "current_module_capability": "outside_validated_scope",
+        "can_attempt_simulation": true,
+        "requires_user_confirmation": true,
+        "recommended_module": "D",
+        "reason": "ZIF-7 is a gate-opening/flexibility warning case. The current Module A implementation can run a rigid-framework GCMC calculation, but it cannot validate gate-opening or framework-response physics.",
+        "tags": [
+          "gate_opening",
+          "flexibility_warning"
+        ]
+      },
+      "ZnMOF-74": {
+        "status": "warning",
+        "current_module_capability": "outside_validated_scope",
+        "can_attempt_simulation": true,
+        "requires_user_confirmation": true,
+        "recommended_module": "C",
+        "reason": "ZnMOF-74 is an open-metal-site forcefield warning case. The current Module A implementation can run a generic-UFF rigid GCMC calculation, but it cannot validate site-specific CO2 binding or forcefield transferability.",
+        "tags": [
+          "open_metal_site",
+          "forcefield_warning"
+        ]
+      },
+      "Zn-DOBDC": {
+        "status": "warning",
+        "current_module_capability": "outside_validated_scope",
+        "can_attempt_simulation": true,
+        "requires_user_confirmation": true,
+        "recommended_module": "C",
+        "reason": "Zn-DOBDC is an MOF-74-family forcefield warning case. The current Module A implementation can run a generic-UFF rigid GCMC calculation, but it cannot validate site-specific CO2 binding or forcefield transferability.",
+        "tags": [
+          "open_metal_site",
+          "forcefield_warning"
+        ]
+      }
+    }
+  }
+}

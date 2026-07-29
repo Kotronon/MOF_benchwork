@@ -11,6 +11,7 @@ import tempfile
 import unittest
 
 import benchmark
+from pipeline.applicability import assess_applicability, load_applicability_rules
 from analysis.block_convergence import analyze_block_convergence
 from analysis.cell_comparison import compare_cell_runs
 from analysis.reproducibility_manifest import create_reproducibility_manifest
@@ -33,8 +34,12 @@ from converter.molecule_to_lammps_template import build_molecule_template, parse
 
 from parsers.lammps_log_parser import summarize_adsorption, get_log, log_to_json, parse_lammps_log
 from pipeline.evaluate import evaluate_all_references, evaluate_isotherm, framework_mass_from_lammps_data, sim_results_to_csv
+from pipeline.adsorbate_registry import infer_adsorbate_properties
 from pipeline.nist_isodb_parser import find_nist_isotherm_candidates, load_nist_isotherm
+from pipeline.registry_generation import generate_adsorbate_registry, generate_crafted_material_registry
 from pipeline.runners import _aggregate_replicates, _convergence_report
+from resolvers.forcefield_resolver import ForcefieldResolver
+from resolvers.material_resolver import MaterialResolver
 
 
 HAS_ASE = importlib.util.find_spec("ase") is not None
@@ -312,18 +317,133 @@ class BenchmarkPipelineTests(unittest.TestCase):
         self.assertEqual(module["id"], "B")
 
     def test_zif7_module_a_case_is_automatically_marked_outside_validated_scope(self) -> None:
+        rules = load_applicability_rules()
         run_plan = benchmark.build_run_plan(
             benchmark.load_benchmark_data("input_json_files/benchmark_zif7_co2_module_a_warning_test.json")
         )
         applicability = run_plan["benchmark"]["applicability"]
 
+        self.assertIn("ZIF-7", rules["module_A"]["warning_materials"])
         self.assertEqual(run_plan["module"]["id"], "A")
         self.assertEqual(run_plan["material"]["material_id"], "ZIF-7")
         self.assertEqual(applicability["status"], "warning")
+        self.assertEqual(applicability["matched_rule"], "module_A.warning_materials.ZIF-7")
         self.assertTrue(applicability["can_attempt_simulation"])
         self.assertTrue(applicability["requires_user_confirmation"])
         self.assertEqual(applicability["recommended_module"], "D")
         self.assertIn("gate-opening", applicability["reason"])
+        self.assertEqual(applicability["geometry"]["pore_volume_cm3_g"], 0.0)
+        self.assertTrue(any(check["name"] == "pore_volume_cm3_g" for check in applicability["checks"]))
+
+    def test_applicability_uses_crafted_geometry_for_unknown_warning_cases(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            geometry = root / "geometry.csv"
+            rules = root / "rules.json"
+            geometry.write_text(
+                "FrameworkName,D_is,D_fs,D_isfs,ASA_m^2/cm^3,ASA_m^2/g,NASA_m^2/cm^3,"
+                "NASA_m^2/g,Unitcell_volume,Density,AV_Volume_fraction,AV_cm^3/g,"
+                "NAV_Volume_fraction,NAV_cm^3/g,n_pockets\n"
+                "NARROW-MOF,5.0,2.0,5.0,0,0,0,0,1000,1.0,0.0,0.0,0,0,0\n",
+                encoding="utf-8",
+            )
+            rules.write_text(
+                json.dumps(
+                    {
+                        "module_A": {
+                            "required": {
+                                "engine": "LAMMPS",
+                                "method": "GCMC",
+                                "framework": "rigid",
+                                "single_component": True,
+                                "min_pore_volume_cm3_g": 0.01,
+                            },
+                            "adsorbate_diameter_policy": {
+                                "source": "generated_from_lj_sigma",
+                                "sigma_scale": 1.1,
+                                "fallback_A": 3.5,
+                            },
+                            "geometry_source": str(geometry),
+                            "warning_materials": {},
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            applicability = assess_applicability(
+                benchmark.normalize_config({"material": {"name": "NARROW-MOF"}}),
+                {"id": "A", "name": "Module A", "slug": "module_A"},
+                {
+                    "material": {"material_id": "NARROW-MOF"},
+                    "forcefield": ForcefieldResolver().resolve(
+                        {"framework": "UFF", "adsorbate": "auto", "cross_interactions": "auto"},
+                        ["CO2"],
+                    ),
+                },
+                rules_path=rules,
+            )
+
+        self.assertEqual(applicability["status"], "warning")
+        self.assertTrue(applicability["requires_user_confirmation"])
+        self.assertEqual(applicability["geometry"]["pore_volume_cm3_g"], 0.0)
+        self.assertGreater(applicability["adsorbate_properties"]["access_diameter_A"], 3.3)
+        self.assertTrue(any("pore-limiting diameter" in reason for reason in applicability["reasons"]))
+
+    def test_material_resolver_merges_safe_nist_aliases_without_editing_alias_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            cif_dir = root / "crafted" / "CIF_FILES" / "DDEC"
+            nist_dir = root / "isodb" / "Library" / "10.test"
+            cif_dir.mkdir(parents=True)
+            nist_dir.mkdir(parents=True)
+            (cif_dir / "HKUST-1.cif").write_text("data_HKUST-1\n", encoding="utf-8")
+            (root / "aliases.json").write_text("{}", encoding="utf-8")
+            (nist_dir / "safe.json").write_text(
+                json.dumps({"adsorbent": {"name": "CuBTC (HKUST-1)"}}),
+                encoding="utf-8",
+            )
+            (nist_dir / "composite.json").write_text(
+                json.dumps({"adsorbent": {"name": "CNT@HKUST-1"}}),
+                encoding="utf-8",
+            )
+
+            resolver = MaterialResolver(
+                crafted_root=root / "crafted",
+                alias_file=root / "aliases.json",
+                nist_root=root / "isodb",
+            )
+            match = resolver.resolve("CuBTC (HKUST-1)", charge_scheme="DDEC")
+
+        self.assertEqual(match.material_id, "HKUST-1")
+        self.assertEqual(match.matched_by, "alias")
+        self.assertIn("CuBTC (HKUST-1)", match.aliases)
+        self.assertNotIn("CNT@HKUST-1", match.aliases)
+
+    def test_adsorbate_properties_are_generated_from_crafted_forcefield(self) -> None:
+        forcefield = ForcefieldResolver().resolve(
+            {"framework": "UFF", "adsorbate": "auto", "cross_interactions": "auto"},
+            ["CO2"],
+        )
+
+        properties = infer_adsorbate_properties("CO2", forcefield)
+
+        self.assertEqual(properties["source"], "generated_from_crafted_forcefield")
+        self.assertEqual(properties["component"], "CO2")
+        self.assertEqual(properties["atom_count"], 3)
+        self.assertAlmostEqual(properties["molar_mass_g_mol"], 44.0095, places=4)
+        self.assertAlmostEqual(properties["net_charge_e"], 0.0, places=6)
+        self.assertGreater(properties["access_diameter_A"], 3.3)
+
+    def test_generated_registries_include_material_and_adsorbate_metadata(self) -> None:
+        materials = generate_crafted_material_registry()
+        adsorbates = generate_adsorbate_registry()
+
+        self.assertIn("IRMOF-1", materials)
+        self.assertEqual(materials["IRMOF-1"]["geometry"]["pore_volume_cm3_g"], 0.845545)
+        self.assertIn("CO2", adsorbates)
+        self.assertIn("UFF", adsorbates["CO2"])
+        self.assertGreater(adsorbates["CO2"]["UFF"]["access_diameter_A"], 3.3)
 
     def test_run_confirmation_rejects_not_implemented_module_before_prepare(self) -> None:
         config = benchmark.normalize_config(

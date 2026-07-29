@@ -225,6 +225,7 @@ CRAFTED-2.0.0/
 CRAFTED-2.0.0.tar.xz
 isodb-library/
 external/
+data/generated/
 reports/
 docs/
 docs/**
