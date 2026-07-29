@@ -311,6 +311,35 @@ class BenchmarkPipelineTests(unittest.TestCase):
 
         self.assertEqual(module["id"], "B")
 
+    def test_zif7_module_a_case_is_automatically_marked_outside_validated_scope(self) -> None:
+        run_plan = benchmark.build_run_plan(
+            benchmark.load_benchmark_data("input_json_files/benchmark_zif7_co2_module_a_warning_test.json")
+        )
+        applicability = run_plan["benchmark"]["applicability"]
+
+        self.assertEqual(run_plan["module"]["id"], "A")
+        self.assertEqual(run_plan["material"]["material_id"], "ZIF-7")
+        self.assertEqual(applicability["status"], "warning")
+        self.assertTrue(applicability["can_attempt_simulation"])
+        self.assertTrue(applicability["requires_user_confirmation"])
+        self.assertEqual(applicability["recommended_module"], "D")
+        self.assertIn("gate-opening", applicability["reason"])
+
+    def test_run_confirmation_rejects_not_implemented_module_before_prepare(self) -> None:
+        config = benchmark.normalize_config(
+            {
+                "material": {"name": "MOF-5"},
+                "adsorbates": {
+                    "components": ["CO2", "N2"],
+                    "mixture": {"CO2": 0.2, "N2": 0.8},
+                },
+            }
+        )
+        run_plan = benchmark.build_run_plan(config)
+
+        with self.assertRaisesRegex(RuntimeError, "only materializes and runs Module A"):
+            benchmark._confirm_supported_capability(run_plan)
+
     def test_unknown_material_has_clear_error(self) -> None:
         config = benchmark.normalize_config({"material": {"name": "NOT_A_REAL_MOF"}})
 

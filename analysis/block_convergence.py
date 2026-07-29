@@ -9,6 +9,8 @@ import re
 from statistics import mean, stdev
 from typing import Any
 
+from analysis.plotting import legend_outside_right, repeated_seed_labels_needed
+from converter.cif_to_lammps_data import load_framework_structure
 from parsers.lammps_log_parser import get_log, parse_lammps_log
 
 
@@ -125,10 +127,7 @@ def _run_parameters(run_dir: Path) -> dict[str, int]:
     production = _find_key(prepare, "production_steps")
     equilibration = _find_key(prepare, "equilibration_steps")
     adsorbate_atoms = _find_key(prepare, "adsorbate_atoms_per_molecule")
-    data_files = sorted((run_dir / "data").glob("*.data"))
-    if len(data_files) != 1:
-        raise ValueError(f"Expected exactly one data file in {run_dir / 'data'}.")
-    framework_atoms = _framework_atom_count(data_files[0])
+    framework_atoms = _framework_atom_count_for_run(run_dir, prepare)
     if production is None or equilibration is None or adsorbate_atoms is None:
         raise ValueError("prepare_summary.json lacks convergence parameters.")
     return {
@@ -137,6 +136,34 @@ def _run_parameters(run_dir: Path) -> dict[str, int]:
         "framework_atoms": framework_atoms,
         "adsorbate_atoms_per_molecule": int(adsorbate_atoms),
     }
+
+
+def _framework_atom_count_for_run(run_dir: Path, prepare: dict[str, Any]) -> int:
+    data_files = sorted((run_dir / "data").glob("*.data"))
+    if len(data_files) == 1:
+        return _framework_atom_count(data_files[0])
+    if len(data_files) > 1:
+        raise ValueError(f"Expected at most one data file in {run_dir / 'data'}.")
+
+    framework_plan = (
+        prepare.get("prepare_plan", {})
+        .get("planned_files", {})
+        .get("framework_data", {})
+    )
+    input_cif = framework_plan.get("input_cif")
+    if not input_cif:
+        raise ValueError(
+            f"No data file found in {run_dir / 'data'} and no CIF conversion plan "
+            f"found in {run_dir / 'prepare_summary.json'}."
+        )
+    structure = load_framework_structure(
+        input_cif,
+        cell_representation=str(framework_plan.get("cell_representation", "source")),
+        unit_cells=framework_plan.get("unit_cells", [1, 1, 1]),
+        cutoff_A=framework_plan.get("cutoff_A"),
+        minimum_image_policy=str(framework_plan.get("minimum_image_policy", "error")),
+    )
+    return structure.atom_count
 
 
 def _find_key(value: Any, key: str) -> Any:
@@ -337,14 +364,17 @@ def _write_plot(
     if not rows:
         return None
 
-    figure, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    figure, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
     grouped: dict[tuple[float, Any], list[dict[str, Any]]] = {}
     for row in rows:
         grouped.setdefault((row["pressure_bar"], row["seed"]), []).append(row)
+    include_seed = repeated_seed_labels_needed(grouped)
     for (pressure, seed), values in sorted(grouped.items()):
         values.sort(key=lambda row: row["block_index"])
         steps = [row["end_step"] for row in values]
-        label = f"{pressure:g} bar, seed {seed}"
+        label = f"{pressure:g} bar"
+        if include_seed and seed is not None:
+            label = f"{label}, seed {seed}"
         axes[0].plot(
             steps,
             [row["mean_adsorbates"] for row in values],
@@ -364,8 +394,8 @@ def _write_plot(
     axes[1].axvline(equilibration_step, color="black", linestyle="--", alpha=0.5)
     for axis in axes:
         axis.grid(alpha=0.3)
-        axis.legend(fontsize="small", ncol=2)
-    figure.tight_layout()
+        legend_outside_right(axis, fontsize="small")
+    figure.tight_layout(rect=(0, 0, 0.78, 1))
     figure.savefig(path, dpi=200)
     plt.close(figure)
     return path

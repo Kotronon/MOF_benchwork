@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import csv
 import json
 from pathlib import Path
@@ -10,6 +11,8 @@ from typing import Any
 
 from analysis.block_convergence import analyze_block_convergence, _input_metadata
 from analysis.cell_comparison import compare_cell_runs
+from analysis.plotting import legend_outside_right
+from converter.cif_to_lammps_data import convert_cif_to_lammps_data
 from pipeline.evaluate import evaluate_all_references, evaluate_isotherm
 from pipeline.runners import _aggregate_replicates, _convergence_report
 
@@ -116,10 +119,11 @@ def create_interim_report(
         conventional_view,
         target / "cell_comparison",
     )
-    block_report = analyze_block_convergence(
+    block_report = _safe_block_convergence(
         conventional_path,
         target / "block_convergence",
         block_size=block_size,
+        planned_log_count=len(conventional_replicates),
     )
 
     progress_rows = _progress_rows(block_report)
@@ -188,6 +192,44 @@ def create_interim_report(
     )
     _write_markdown(target / "interim_report.md", report, interim_rows, progress_rows)
     return report
+
+
+def _safe_block_convergence(
+    run_path: Path,
+    output_dir: Path,
+    *,
+    block_size: int,
+    planned_log_count: int,
+) -> dict[str, Any]:
+    try:
+        return analyze_block_convergence(
+            run_path,
+            output_dir,
+            block_size=block_size,
+        )
+    except FileNotFoundError as exc:
+        if "No pressure-point logs found" not in str(exc):
+            raise
+        output_dir.mkdir(parents=True, exist_ok=True)
+        summary = {
+            "run_directory": str(run_path),
+            "block_size": block_size,
+            "log_count": planned_log_count,
+            "completed_log_count": 0,
+            "all_completed_runs_converged": False,
+            "provisional": True,
+            "unavailable_reason": str(exc),
+            "runs": [],
+            "outputs": {
+                "csv": None,
+                "json": str(output_dir / "block_convergence_summary.json"),
+                "plot": None,
+            },
+        }
+        (output_dir / "block_convergence_summary.json").write_text(
+            json.dumps(summary, indent=2) + "\n", encoding="utf-8"
+        )
+        return summary
 
 
 def _collect_completed_replicates(run_dir: Path) -> list[dict[str, Any]]:
@@ -316,10 +358,7 @@ def _write_run_view(
     target.mkdir(parents=True, exist_ok=True)
     data_target = target / "data"
     data_target.mkdir(exist_ok=True)
-    data_files = sorted((source_run / "data").glob("*.data"))
-    if len(data_files) != 1:
-        raise ValueError(f"Expected exactly one framework data file in {source_run / 'data'}")
-    shutil.copy2(data_files[0], data_target / data_files[0].name)
+    _copy_or_generate_framework_data(source_run, data_target)
     prepare_path = source_run / "prepare_summary.json"
     if prepare_path.exists():
         shutil.copy2(prepare_path, target / "prepare_summary.json")
@@ -331,6 +370,42 @@ def _write_run_view(
     }
     (target / "isotherm_summary.json").write_text(
         json.dumps(summary, indent=2) + "\n", encoding="utf-8"
+    )
+    return target
+
+
+def _copy_or_generate_framework_data(source_run: Path, data_target: Path) -> Path:
+    data_files = sorted((source_run / "data").glob("*.data"))
+    if len(data_files) == 1:
+        target = data_target / data_files[0].name
+        shutil.copy2(data_files[0], target)
+        return target
+    if len(data_files) > 1:
+        raise ValueError(f"Expected at most one framework data file in {source_run / 'data'}")
+
+    framework_plan = (
+        _load_prepare(source_run)
+        .get("prepare_plan", {})
+        .get("planned_files", {})
+        .get("framework_data", {})
+    )
+    input_cif = framework_plan.get("input_cif")
+    output_name = Path(str(framework_plan.get("output_data", "IRMOF-1.data"))).name
+    if not input_cif:
+        raise ValueError(
+            f"No framework data file found in {source_run / 'data'} and no CIF conversion plan "
+            f"found in {source_run / 'prepare_summary.json'}."
+        )
+
+    target = data_target / output_name
+    convert_cif_to_lammps_data(
+        input_cif,
+        target,
+        atom_style=str(framework_plan.get("atom_style", "full")),
+        cell_representation=str(framework_plan.get("cell_representation", "source")),
+        unit_cells=framework_plan.get("unit_cells", [1, 1, 1]),
+        cutoff_A=framework_plan.get("cutoff_A"),
+        minimum_image_policy=str(framework_plan.get("minimum_image_policy", "error")),
     )
     return target
 
@@ -417,6 +492,7 @@ def _write_seed_plot(path: Path, results: list[dict[str, Any]]) -> Path | None:
                 label="95% confidence interval" if not ci_label_written else None,
             )
             ci_label_written = True
+    show_seed_labels = len(seeds) > 1
     for seed, values in seeds.items():
         values.sort()
         axes[0].plot(
@@ -425,7 +501,7 @@ def _write_seed_plot(path: Path, results: list[dict[str, Any]]) -> Path | None:
             "o-",
             alpha=0.65,
             linewidth=1.0,
-            label=f"seed {seed}",
+            label=f"seed {seed}" if show_seed_labels else None,
         )
     for result in results:
         axes[0].annotate(
@@ -497,7 +573,7 @@ def _write_seed_plot(path: Path, results: list[dict[str, Any]]) -> Path | None:
         axis.set_xticklabels([f"{pressure:g}" for pressure in pressures])
         axis.minorticks_off()
         axis.grid(alpha=0.3)
-        axis.legend(fontsize="small")
+        legend_outside_right(axis, fontsize="small")
     figure.text(
         0.5,
         0.01,
@@ -505,7 +581,7 @@ def _write_seed_plot(path: Path, results: list[dict[str, Any]]) -> Path | None:
         ha="center",
         fontsize="small",
     )
-    figure.tight_layout(rect=(0, 0.035, 1, 1))
+    figure.tight_layout(rect=(0, 0.035, 0.78, 1))
     figure.savefig(path, dpi=200)
     plt.close(figure)
     return path
@@ -567,8 +643,18 @@ def _write_markdown(
             f"{float(row['progress_percent']):.1f} | {row['run_complete']} | "
             f"{row['block_converged']} |"
         )
+    _append_reference_curation_summary(lines, report)
     lines.extend(
         [
+            "",
+            "## Block convergence plot interpretation",
+            "",
+            "`block_convergence.png` contains two panels for each pressure point with available LAMMPS log data:",
+            "",
+            "- Upper panel: block mean `N_CO2`. Each point is the mean number of CO2 molecules within one production block. This shows local block-to-block fluctuations.",
+            "- Lower panel: cumulative mean `N_CO2`. Each point is the running mean over all production blocks up to that point. This shows whether the final adsorption estimate stabilizes over time.",
+            "",
+            "A stable cumulative mean is the more direct indicator for the final adsorption value. The block mean is useful for detecting noisy or drifting individual blocks. The vertical dashed line marks the end of equilibration and the beginning of the production region used for analysis.",
             "",
             "## Figures",
             "",
@@ -581,6 +667,91 @@ def _write_markdown(
         ]
     )
     path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _append_reference_curation_summary(lines: list[str], report: dict[str, Any]) -> None:
+    reference_report = report.get("reference_evaluation", {})
+    candidates_path = reference_report.get("reference_candidates")
+    candidates = _load_reference_candidates(candidates_path)
+    if not candidates:
+        return
+
+    active = [candidate for candidate in candidates if candidate.get("use_in_evaluation", True) and not candidate.get("excluded")]
+    excluded = [candidate for candidate in candidates if candidate.get("excluded")]
+    active_crafted = sum(candidate.get("source") == "crafted" for candidate in active)
+    active_nist = sum(candidate.get("source") == "nist_isodb" for candidate in active)
+    excluded_nist = sum(candidate.get("source") == "nist_isodb" for candidate in excluded)
+
+    lines.extend(
+        [
+            "",
+            "## Reference curation summary",
+            "",
+            "The full NIST ISODB search space is not listed in the human-readable report. Instead, the report shows the ranked candidates that passed the resolver policy and archives all candidate metadata in `reference_candidates.json`.",
+            "",
+            "| Category | Count |",
+            "|---|---:|",
+            f"| Active CRAFTED references | {active_crafted} |",
+            f"| Active NIST ISODB references | {active_nist} |",
+            f"| Excluded NIST ISODB candidates | {excluded_nist} |",
+            f"| Total ranked candidates stored in metadata | {len(candidates)} |",
+            "",
+        ]
+    )
+
+    reason_counts = Counter(
+        reason
+        for candidate in excluded
+        for reason in candidate.get("exclusion_reasons", [])
+    )
+    if reason_counts:
+        lines.extend(
+            [
+                "Excluded references are not silently removed. They remain archived with explicit reasons:",
+                "",
+                "| Exclusion reason | Count |",
+                "|---|---:|",
+            ]
+        )
+        for reason, count in sorted(reason_counts.items()):
+            lines.append(f"| `{reason}` | {count} |")
+        lines.append("")
+
+    active_references = [
+        candidate for candidate in active if candidate.get("source") in {"crafted", "nist_isodb"}
+    ]
+    if active_references:
+        lines.extend(
+            [
+                "Active references used for plotting and quantitative comparison:",
+                "",
+                "| Source | DOI / key | Basis | Role |",
+                "|---|---|---|---|",
+            ]
+        )
+        for candidate in active_references:
+            source = "CRAFTED" if candidate.get("source") == "crafted" else "NIST ISODB"
+            identifier = candidate.get("doi") or candidate.get("key", "")
+            basis = candidate.get("adsorption_basis") or candidate.get("format", "unknown")
+            role = "selected primary" if candidate.get("selected") else "active comparison"
+            lines.append(f"| {source} | `{identifier}` | `{basis}` | {role} |")
+        lines.append("")
+
+
+def _load_reference_candidates(path_value: str | None) -> list[dict[str, Any]]:
+    if not path_value:
+        return []
+    path = Path(path_value)
+    if not path.exists():
+        return []
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(data, list):
+        return [candidate for candidate in data if isinstance(candidate, dict)]
+    if isinstance(data, dict):
+        candidates = data.get("candidates", [])
+        if isinstance(candidates, list):
+            return [candidate for candidate in candidates if isinstance(candidate, dict)]
+    return []
 
 
 def main(argv: list[str] | None = None) -> int:

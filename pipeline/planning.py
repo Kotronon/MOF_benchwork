@@ -10,6 +10,7 @@ from resolvers.reference_resolver import ReferenceResolver
 from resolvers.task_resolver import default_metrics_for_module, select_module as resolve_task_module
 from resolvers.unitcell_resolver import UnitcellResolver
 
+from pipeline.applicability import assess_applicability
 from pipeline.config import normalize_config
 
 
@@ -76,6 +77,7 @@ def build_run_plan(config: dict[str, Any]) -> dict[str, Any]:
     normalized = normalize_config(config)
     module = select_module(normalized)
     resolved = resolve_benchmark(normalized)
+    applicability = assess_applicability(normalized, module, resolved)
     evaluation = _resolve_evaluation_config(
         normalized["evaluation"],
         resolved["material"]["material_id"],
@@ -98,6 +100,7 @@ def build_run_plan(config: dict[str, Any]) -> dict[str, Any]:
         "benchmark": {
             **normalized["benchmark"],
             "metrics": metrics,
+            "applicability": applicability,
         },
         "evaluation": evaluation,
         "convergence": normalized["convergence"],

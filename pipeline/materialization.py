@@ -66,6 +66,14 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
         framework_symbols=framework_symbols,
         adsorbate_atom_types=adsorbate_atom_types,
         parameters=parameters,
+        pair_style=(
+            f"{prepare_plan['parameters'].get('pair_style', 'lj/cut/coul/long')} "
+            f"{float(prepare_plan['parameters'].get('cutoff_A', 12.0)):g}"
+        ),
+        kspace_style=(
+            f"{prepare_plan['parameters'].get('kspace_style', 'pppm')} "
+            f"{float(prepare_plan['parameters'].get('kspace_accuracy', 1e-5)):g}"
+        ),
     )
     framework_atom_type_ids = [
         atom_type.type_id
@@ -193,6 +201,7 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
             "adsorbate_atoms_per_molecule": len(molecules[component].atoms),
         },
         "evaluation": prepare_plan.get("evaluation", {}),
+        "applicability": prepare_plan.get("applicability", {}),
         "convergence": prepare_plan.get("convergence", {}),
         "files": {
             "framework_data": str(framework_data_path),

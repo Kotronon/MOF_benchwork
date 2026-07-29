@@ -33,6 +33,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--new-run", action="store_true", help="Write outputs to a timestamped run directory.")
     parser.add_argument("--no-overwrite", action="store_true", help="Fail if the target working directory already exists.")
     parser.add_argument("--jobs", type=int, default=1, help="Number of pressure-point LAMMPS jobs to run in parallel.")
+    parser.add_argument(
+        "--allow-unsupported",
+        action="store_true",
+        help="Run cases marked outside the current validated module capability without an interactive prompt.",
+    )
     args = parser.parse_args(argv)
 
     config = load_benchmark_data(args.config)
@@ -52,12 +57,14 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, indent=2))
         return 0
     if args.run_test:
+        _confirm_supported_capability(run_plan, allow_unsupported=args.allow_unsupported)
         prepare_plan = prepare_benchmark(run_plan)
         materialized_plan = materialize_benchmark(prepare_plan)
         result = run_benchmark(materialized_plan)
         print(json.dumps(result, indent=2))
         return 0
     if args.run_isotherm:
+        _confirm_supported_capability(run_plan, allow_unsupported=args.allow_unsupported)
         prepare_plan = prepare_benchmark(run_plan)
         materialized_plan = materialize_benchmark(prepare_plan)
         result = run_isotherm(materialized_plan, jobs=args.jobs)
@@ -82,6 +89,43 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     print(json.dumps(run_plan, indent=2))
     return 0
+
+
+def _confirm_supported_capability(run_plan: dict, *, allow_unsupported: bool = False) -> None:
+    applicability = run_plan.get("benchmark", {}).get("applicability", {})
+    if applicability.get("can_attempt_simulation") is False:
+        module = run_plan.get("module", {})
+        reason = applicability.get("reason") or "This benchmark case cannot be simulated by the current pipeline."
+        raise RuntimeError(
+            f"Cannot run Module {module.get('id', '?')} with the current executable pipeline. "
+            f"{reason}"
+        )
+    if not applicability.get("requires_user_confirmation"):
+        return
+    if allow_unsupported:
+        return
+
+    module = run_plan.get("module", {})
+    material = run_plan.get("material", {})
+    reason = applicability.get("reason") or "This case is outside the current validated module capability."
+    message = (
+        f"\nWARNING: {material.get('material_id', 'unknown material')} is marked as "
+        f"{applicability.get('current_module_capability', 'outside_validated_scope')} for "
+        f"Module {module.get('id', '?')}.\n"
+        f"{reason}\n"
+        "Continue with the simulation anyway? [y/N]: "
+    )
+    try:
+        answer = input(message)
+    except EOFError as exc:
+        raise RuntimeError(
+            "Simulation requires explicit confirmation because the benchmark case is outside "
+            "the current validated module capability. Re-run interactively or pass "
+            "--allow-unsupported if this is intentional."
+        ) from exc
+
+    if answer.strip().casefold() not in {"y", "yes"}:
+        raise RuntimeError("Simulation cancelled by user.")
 
 
 if __name__ == "__main__":

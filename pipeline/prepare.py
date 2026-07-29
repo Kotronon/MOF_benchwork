@@ -82,6 +82,7 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
             "reference_files": run_plan["resources"]["references"],
         },
         "evaluation": run_plan.get("evaluation", {}),
+        "applicability": run_plan.get("benchmark", {}).get("applicability", {}),
         "convergence": run_plan.get("convergence", {}),
         "output": {
             "save_dumps": save_dumps,
@@ -136,6 +137,9 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
             "save_dumps": save_dumps,
             "dump_every_steps": dump_every_steps,
             "forcefield": run_plan["resources"]["forcefield"]["framework"],
+            "pair_style": run_plan["simulation"].get("pair_style", "lj/cut/coul/long"),
+            "kspace_style": run_plan["simulation"].get("kspace_style", "pppm"),
+            "kspace_accuracy": run_plan["simulation"].get("kspace_accuracy", 1e-5),
             "production_steps": production_steps,
             "equilibration_steps": equilibration_steps,
             "run_steps": equilibration_steps + production_steps,

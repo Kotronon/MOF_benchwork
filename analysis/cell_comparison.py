@@ -7,6 +7,8 @@ from pathlib import Path
 from statistics import mean
 from typing import Any
 
+from analysis.plotting import legend_above
+
 
 COMPARISON_FIELDS = [
     "pressure_bar",
@@ -399,14 +401,14 @@ def _write_plot(
     )
     axes[1, 0].plot(pressures, [row["r_n"] for row in rows], "o-")
     axes[1, 0].set_ylabel(r"$R_N$")
-    axes[1, 0].legend()
+    legend_above(axes[1, 0])
 
     axes[1, 1].axhline(
         1.0, color="black", linestyle="--", label="expected 1"
     )
     axes[1, 1].plot(pressures, [row["r_q"] for row in rows], "o-")
     axes[1, 1].set_ylabel(r"$R_q$")
-    axes[1, 1].legend()
+    legend_above(axes[1, 1])
 
     if any(
         row["runtime_ratio_conventional_primitive"] is not None for row in rows
@@ -486,7 +488,7 @@ def _plot_absolute_series(
             color,
         )
     if plotted:
-        axis.legend()
+        legend_above(axis)
     else:
         axis.text(
             0.5,

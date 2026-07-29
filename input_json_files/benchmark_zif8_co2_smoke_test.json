@@ -1,0 +1,105 @@
+{
+  "material": {
+    "name": "ZIF-8",
+    "cif_source": "auto",
+    "charge_scheme": "DDEC",
+    "source": "crafted"
+  },
+  "adsorbates": {
+    "components": [
+      "CO2"
+    ],
+    "mixture": null
+  },
+  "conditions": {
+    "temperature_K": 298.15,
+    "pressures_bar": [
+      1
+    ]
+  },
+  "benchmark": {
+    "task": "auto",
+    "metrics": [
+      "isotherm",
+      "error_to_reference",
+      "runtime",
+      "validity_range"
+    ],
+    "reference": {
+      "source": "auto",
+      "preferred_sources": [
+        "crafted",
+        "nist_isodb"
+      ],
+      "temperature_tolerance_K": 2.0,
+      "max_nist_candidates": 5,
+      "deduplicate_nist_by_doi": true,
+      "exclude_nist_outliers": true,
+      "nist_max_loading_mol_per_kg": 60.0,
+      "nist_max_reference_ratio": 3.0,
+      "allowed_reference_basis": [
+        "absolute",
+        "simulation_reference",
+        "excess"
+      ],
+      "allow_unknown_reference_basis": true,
+      "allow_excess_reference_basis": true,
+      "require_known_nist_article_source": false,
+      "material": "ZIF-8",
+      "adsorbate": "CO2"
+    },
+    "test_case": {
+      "source": "presentations/progress_28_7_to_4_8.pptx",
+      "role": "optional_second_physisorption_case",
+      "expected_module": "A",
+      "expected_behavior": "plan_prepare_and_smoke_run"
+    }
+  },
+  "simulation": {
+    "engine": "LAMMPS",
+    "method": "GCMC",
+    "forcefield": {
+      "framework": "UFF",
+      "adsorbate": "auto",
+      "cross_interactions": "auto"
+    },
+    "framework": "rigid",
+    "cell_representation": "source",
+    "minimum_image_policy": "error",
+    "units": "real",
+    "atom_style": "full",
+    "pair_style": "lj/cut/coul/long",
+    "cutoff_A": 12.8,
+    "kspace_style": "pppm",
+    "kspace_accuracy": 1e-4,
+    "unit_cells": "auto",
+    "seeds": [
+      12345
+    ],
+    "cycles": 10000,
+    "initialization_cycles": 10000
+  },
+  "convergence": {
+    "minimum_replicates": 3,
+    "relative_ci95_target": 0.05
+  },
+  "evaluation": {
+    "simulation_basis": "absolute",
+    "report_excess": true,
+    "pore_volume_cm3_g": "auto",
+    "pore_volume_source": null,
+    "pore_volume_method": null,
+    "gas_density_backend": "HEOS",
+    "reference_matching": "by_basis"
+  },
+  "output": {
+    "directory": "outputs/module_A_zif8_co2_isotherm",
+    "run_id": "zif8_co2_smoke",
+    "overwrite": false,
+    "save_logs": true,
+    "save_dumps": false,
+    "dump_every_steps": 100000,
+    "save_plots": true,
+    "save_csv": true
+  }
+}

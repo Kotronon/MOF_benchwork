@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 from typing import Any
 
+from analysis.plotting import legend_outside_right
 from pipeline.config import load_benchmark_data
 from pipeline.eos import gas_molar_density
 from pipeline.nist_isodb_parser import load_nist_isotherm
@@ -550,7 +551,7 @@ def _write_isotherm_plot(rows: list[dict[str, Any]], output_path: str | Path) ->
     if not valid_abs:
         return None
 
-    fig, ax = plt.subplots(figsize=(7.2, 4.8))
+    fig, ax = plt.subplots(figsize=(9.2, 4.8))
     ax.plot([p for p, _y in valid_abs], [y for _p, y in valid_abs], marker="o", label="Simulation absolute")
     if valid_excess:
         ax.plot(
@@ -571,11 +572,11 @@ def _write_isotherm_plot(rows: list[dict[str, Any]], output_path: str | Path) ->
     ax.set_ylabel("Loading / mol kg$^{-1}$")
     ax.set_title("MOF-5 CO2 adsorption isotherm")
     ax.grid(True, alpha=0.3)
-    ax.legend()
+    legend_outside_right(ax)
     if all(p and p > 0 for p in pressures if p is not None):
         ax.set_xscale("log")
         _set_decimal_pressure_ticks(ax, pressures)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 0.78, 1))
 
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -695,7 +696,7 @@ def _write_combined_reference_plot(
     if not valid_abs:
         return None
 
-    fig, ax = plt.subplots(figsize=(8.4, 5.2))
+    fig, ax = plt.subplots(figsize=(10.8, 5.2))
     ax.plot(
         [pressure for pressure, _loading in valid_abs],
         [loading for _pressure, loading in valid_abs],
@@ -738,8 +739,8 @@ def _write_combined_reference_plot(
         _set_decimal_pressure_ticks(
             ax, [pressure for pressure, _loading in valid_abs]
         )
-    ax.legend(fontsize="small")
-    fig.tight_layout()
+    legend_outside_right(ax, fontsize="small")
+    fig.tight_layout(rect=(0, 0, 0.76, 1))
 
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -930,8 +931,10 @@ def _reference_entries_for_run(
 
     available = []
     for reference in reference_entries:
-        path_value = reference.get("copied_path") or reference.get("path")
-        if path_value and Path(path_value).exists():
+        path = _existing_reference_path(reference)
+        if path:
+            reference["path"] = str(path)
+            reference["copied_path"] = str(path)
             available.append(reference)
     return sorted(available, key=_reference_sort_key)
 
@@ -988,6 +991,14 @@ def _reference_label(reference: dict[str, Any]) -> str:
     return reference.get("key", "NIST")
 
 
+def _existing_reference_path(reference: dict[str, Any]) -> Path | None:
+    for key in ("copied_path", "path"):
+        value = reference.get(key)
+        if value and Path(value).exists():
+            return Path(value)
+    return None
+
+
 def _infer_reference_file(sim_results_path: Path) -> Path | None:
     prepare_summary = sim_results_path.parent / "prepare_summary.json"
     if prepare_summary.exists():
@@ -999,11 +1010,13 @@ def _infer_reference_file(sim_results_path: Path) -> Path | None:
             .get("reference_files", [])
         )
         for reference in references:
-            if reference.get("selected") and (reference.get("copied_path") or reference.get("path")):
-                return Path(reference.get("copied_path") or reference["path"])
+            path = _existing_reference_path(reference)
+            if reference.get("selected") and path:
+                return path
         for reference in references:
-            if reference.get("copied_path") or reference.get("path"):
-                return Path(reference.get("copied_path") or reference["path"])
+            path = _existing_reference_path(reference)
+            if path:
+                return path
 
     reference_dir = sim_results_path.parent / "source" / "references"
     matches = sorted([*reference_dir.glob("*.csv"), *reference_dir.glob("*.json")])
