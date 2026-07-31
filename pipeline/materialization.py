@@ -271,6 +271,16 @@ def _copy_prepare_sources(prepare_plan: dict[str, Any], source_dir: Path) -> dic
         name: str(_copy_file(Path(path), source_dir / "forcefield"))
         for name, path in prepare_plan["inputs"]["forcefield_files"].items()
     }
+    copied["adsorbate_parameter_files"] = [
+        {
+            "source": source.get("source", "unknown"),
+            "files": {
+                name: str(_copy_file(Path(path), source_dir / "forcefield" / source.get("source", "adsorbate")))
+                for name, path in source.get("files", {}).items()
+            },
+        }
+        for source in prepare_plan["inputs"].get("adsorbate_parameter_files", [])
+    ]
     copied["adsorbate_definitions"] = {
         component: str(_copy_file(Path(path), source_dir / "molecules"))
         for component, path in prepare_plan["inputs"]["adsorbate_definitions"].items()
