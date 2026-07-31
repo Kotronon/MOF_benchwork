@@ -32,6 +32,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run-id", help="Write outputs to outputs/<module>/runs/<run-id>.")
     parser.add_argument("--new-run", action="store_true", help="Write outputs to a timestamped run directory.")
     parser.add_argument("--no-overwrite", action="store_true", help="Fail if the target working directory already exists.")
+    parser.add_argument("--resume", action="store_true", help="Reuse completed pressure-point results in an existing run directory.")
     parser.add_argument("--jobs", type=int, default=1, help="Number of pressure-point LAMMPS jobs to run in parallel.")
     parser.add_argument(
         "--allow-unsupported",
@@ -47,6 +48,8 @@ def main(argv: list[str] | None = None) -> int:
         config.setdefault("output", {})["run_id"] = args.run_id
     if args.no_overwrite:
         config.setdefault("output", {})["overwrite"] = False
+    if args.resume:
+        config.setdefault("output", {})["resume"] = True
     run_plan = build_run_plan(config)
     if args.dry_run:
         print(json.dumps(run_plan, indent=2))

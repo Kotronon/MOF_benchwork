@@ -116,6 +116,7 @@ def build_run_plan(config: dict[str, Any]) -> dict[str, Any]:
             "plot_png": str(Path(output_directory) / "isotherm_plot.png"),
             "run_id": normalized["output"]["run_id"],
             "overwrite": normalized["output"]["overwrite"],
+            "resume": normalized["output"]["resume"],
             "save_logs": normalized["output"]["save_logs"],
             "save_dumps": normalized["output"]["save_dumps"],
             "dump_every_steps": normalized["output"]["dump_every_steps"],

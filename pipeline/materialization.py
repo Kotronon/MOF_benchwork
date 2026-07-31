@@ -19,10 +19,11 @@ from pipeline.utils import unique
 def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
     """Materialize a prepare plan into generated benchmark files on disk."""
     working_dir = Path(prepare_plan["working_directory"])
-    if working_dir.exists() and not prepare_plan.get("overwrite", True):
+    resume = bool(prepare_plan.get("resume", False))
+    if working_dir.exists() and not prepare_plan.get("overwrite", True) and not resume:
         raise FileExistsError(
             f"Working directory already exists: {working_dir}. "
-            "Use a new output.run_id or enable output.overwrite."
+            "Use a new output.run_id, enable output.overwrite, or run with --resume."
         )
     working_dir.mkdir(parents=True, exist_ok=True)
 
@@ -203,6 +204,7 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
         "evaluation": prepare_plan.get("evaluation", {}),
         "applicability": prepare_plan.get("applicability", {}),
         "convergence": prepare_plan.get("convergence", {}),
+        "resume": resume,
         "files": {
             "framework_data": str(framework_data_path),
             "forcefield_include": str(forcefield_path),

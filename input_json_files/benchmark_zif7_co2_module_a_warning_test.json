@@ -65,7 +65,7 @@
     },
     "framework": "rigid",
     "cell_representation": "source",
-    "minimum_image_policy": "error",
+    "minimum_image_policy": "warn",
     "units": "real",
     "atom_style": "full",
     "pair_style": "lj/cut/coul/long",
@@ -80,8 +80,8 @@
     "seeds": [
       12345
     ],
-    "cycles": 10000,
-    "initialization_cycles": 10000
+    "cycles": 100,
+    "initialization_cycles": 0
   },
   "convergence": {
     "minimum_replicates": 3,
@@ -101,8 +101,8 @@
     "run_id": "zif7_co2_module_a_warning",
     "overwrite": false,
     "save_logs": true,
-    "save_dumps": false,
-    "dump_every_steps": 100000,
+    "save_dumps": true,
+    "dump_every_steps": 10,
     "save_plots": true,
     "save_csv": true
   }
