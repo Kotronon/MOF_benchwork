@@ -75,6 +75,7 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
         "side_effects": "none",
         "working_directory": str(working_dir),
         "overwrite": run_plan["outputs"].get("overwrite", True),
+        "resume": run_plan["outputs"].get("resume", False),
         "inputs": {
             "framework_cif": run_plan["resources"]["cif_path"],
             "forcefield_files": run_plan["resources"]["forcefield"]["files"],

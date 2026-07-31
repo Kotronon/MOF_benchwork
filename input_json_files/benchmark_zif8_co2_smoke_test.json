@@ -14,7 +14,7 @@
   "conditions": {
     "temperature_K": 298.15,
     "pressures_bar": [
-      1
+      5
     ]
   },
   "benchmark": {
@@ -76,8 +76,8 @@
     "seeds": [
       12345
     ],
-    "cycles": 10000,
-    "initialization_cycles": 10000
+    "cycles": 500,
+    "initialization_cycles": 500
   },
   "convergence": {
     "minimum_replicates": 3,
@@ -97,8 +97,8 @@
     "run_id": "zif8_co2_smoke",
     "overwrite": false,
     "save_logs": true,
-    "save_dumps": false,
-    "dump_every_steps": 100000,
+    "save_dumps": true,
+    "dump_every_steps": 100,
     "save_plots": true,
     "save_csv": true
   }

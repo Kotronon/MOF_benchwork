@@ -10,8 +10,8 @@ from time import perf_counter
 from typing import Any
 
 from engines.lammps_runner import build_lammps_command
-from parsers.lammps_log_parser import log_to_json
-from pipeline.config import save_benchmark_data
+from parsers.lammps_log_parser import get_log, log_to_json, parse_lammps_log
+from pipeline.config import load_benchmark_data, save_benchmark_data
 from pipeline.evaluate import evaluate_isotherm
 
 
@@ -58,9 +58,40 @@ def run_isotherm(materialized_plan: dict[str, Any], jobs: int = 1) -> dict[str, 
     discard_fraction = _discard_fraction(materialized_plan)
     framework_atoms = _framework_atom_count(materialized_plan)
     adsorbate_atoms_per_molecule = _adsorbate_atom_count(materialized_plan)
+    resume = bool(materialized_plan.get("resume", False))
+    expected_steps = int(materialized_plan.get("parameters", {}).get("run_steps", 0) or 0)
+    indexed_runs = list(enumerate(runs, start=1))
+    results_by_index: dict[int, dict[str, Any]] = {}
+    pending_runs: list[tuple[int, dict[str, Any]]] = []
+
+    for index, run in indexed_runs:
+        existing = None
+        if resume:
+            existing = _existing_pressure_point_result(
+                run,
+                index,
+                total_runs,
+                discard_fraction,
+                framework_atoms,
+                adsorbate_atoms_per_molecule,
+                expected_steps,
+            )
+        if existing is None:
+            pending_runs.append((index, run))
+        else:
+            results_by_index[index] = existing
+
+    if resume:
+        reused_count = total_runs - len(pending_runs)
+        print(
+            f"Resuming isotherm: reusing {reused_count} completed pressure points; "
+            f"running {len(pending_runs)} remaining points",
+            flush=True,
+        )
+
     if jobs == 1:
-        results = [
-            _run_pressure_point(
+        for index, run in pending_runs:
+            results_by_index[index] = _run_pressure_point(
                 run,
                 index,
                 total_runs,
@@ -68,12 +99,8 @@ def run_isotherm(materialized_plan: dict[str, Any], jobs: int = 1) -> dict[str, 
                 framework_atoms,
                 adsorbate_atoms_per_molecule,
             )
-            for index, run in enumerate(runs, start=1)
-        ]
-    else:
-        print(f"Running {total_runs} pressure points with {jobs} parallel jobs", flush=True)
-        indexed_runs = list(enumerate(runs, start=1))
-        results_by_index: dict[int, dict[str, Any]] = {}
+    elif pending_runs:
+        print(f"Running {len(pending_runs)} of {total_runs} pressure points with {jobs} parallel jobs", flush=True)
         with ThreadPoolExecutor(max_workers=jobs) as executor:
             futures = {
                 executor.submit(
@@ -85,12 +112,13 @@ def run_isotherm(materialized_plan: dict[str, Any], jobs: int = 1) -> dict[str, 
                     framework_atoms,
                     adsorbate_atoms_per_molecule,
                 ): index
-                for index, run in indexed_runs
+                for index, run in pending_runs
             }
             for future in as_completed(futures):
                 index = futures[future]
                 results_by_index[index] = future.result()
-        results = [results_by_index[index] for index, _run in indexed_runs]
+
+    results = [results_by_index[index] for index, _run in indexed_runs]
 
     convergence_config = materialized_plan.get("convergence", {})
     aggregated_results = _aggregate_replicates(results, convergence_config)
@@ -154,11 +182,107 @@ def _run_pressure_point(
     )
 
     print(f"[{index}/{total_runs}] Finished {pressure_bar} bar", flush=True)
+    return _pressure_point_result(
+        run,
+        command,
+        log_file,
+        summary_file,
+        discard_fraction,
+        wall_time_seconds=wall_time_seconds,
+        summary=summary,
+    )
+
+
+def _existing_pressure_point_result(
+    run: dict[str, Any],
+    index: int,
+    total_runs: int,
+    discard_fraction: float,
+    framework_atoms: int,
+    adsorbate_atoms_per_molecule: int,
+    expected_steps: int,
+) -> dict[str, Any] | None:
+    input_script = run["path"]
+    pressure_bar = run["pressure_bar"]
+    log_file = Path(run["log"])
+    summary_file = log_file.with_name(log_file.stem + "_summary.json")
+    command = build_lammps_command(input_script, log_file=log_file)
+
+    if summary_file.exists():
+        if log_file.exists() and not _lammps_log_completed(log_file, expected_steps):
+            print(
+                f"[{index}/{total_runs}] Existing summary for {pressure_bar} bar ignored "
+                "because the log is incomplete",
+                flush=True,
+            )
+            return None
+        print(f"[{index}/{total_runs}] Reusing completed {pressure_bar} bar", flush=True)
+        return _pressure_point_result(
+            run,
+            command,
+            log_file,
+            summary_file,
+            discard_fraction,
+            wall_time_seconds=None,
+            summary=load_benchmark_data(summary_file),
+            status="reused_summary",
+        )
+
+    if log_file.exists() and _lammps_log_completed(log_file, expected_steps):
+        summary = log_to_json(
+            log_file,
+            summary_file,
+            framework_atoms=framework_atoms,
+            adsorbate_atoms_per_molecule=adsorbate_atoms_per_molecule,
+            discard_fraction=discard_fraction,
+        )
+        print(f"[{index}/{total_runs}] Parsed completed {pressure_bar} bar log", flush=True)
+        return _pressure_point_result(
+            run,
+            command,
+            log_file,
+            summary_file,
+            discard_fraction,
+            wall_time_seconds=None,
+            summary=summary,
+            status="reused_log",
+        )
+
+    return None
+
+
+def _lammps_log_completed(log_file: Path, expected_steps: int) -> bool:
+    try:
+        log_data = get_log(log_file)
+    except FileNotFoundError:
+        return False
+    if "Loop time" not in log_data:
+        return False
+    rows = parse_lammps_log(log_data)["rows"]
+    if not rows:
+        return False
+    if expected_steps <= 0:
+        return True
+    steps = [int(row["Step"]) for row in rows if "Step" in row]
+    return bool(steps) and max(steps) >= expected_steps
+
+
+def _pressure_point_result(
+    run: dict[str, Any],
+    command: list[str],
+    log_file: Path,
+    summary_file: Path,
+    discard_fraction: float,
+    wall_time_seconds: float | None,
+    summary: dict[str, Any],
+    status: str = "completed",
+) -> dict[str, Any]:
     return {
-        "pressure_bar": pressure_bar,
+        "status": status,
+        "pressure_bar": run["pressure_bar"],
         "replicate_index": run.get("replicate_index", 1),
         "seed": run.get("seed", 12345),
-        "input_script": input_script,
+        "input_script": run["path"],
         "command": command,
         "log_file": str(log_file),
         "summary_file": str(summary_file),

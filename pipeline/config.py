@@ -169,6 +169,7 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     output.setdefault("directory", None)
     output.setdefault("run_id", None)
     output.setdefault("overwrite", True)
+    output.setdefault("resume", False)
     output.setdefault("save_logs", True)
     output.setdefault("save_dumps", True)
     output.setdefault("dump_every_steps", 1000)
