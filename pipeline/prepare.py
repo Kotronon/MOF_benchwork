@@ -84,6 +84,7 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
         "inputs": {
             "framework_cif": run_plan["resources"]["cif_path"],
             "forcefield_files": run_plan["resources"]["forcefield"]["files"],
+            "adsorbate_parameter_files": run_plan["resources"]["forcefield"].get("adsorbate_parameter_files", []),
             "adsorbate_definitions": run_plan["resources"]["forcefield"]["adsorbates"],
             "reference_files": run_plan["resources"]["references"],
         },

@@ -46,7 +46,7 @@ def plan_molecule_template(molecule_def_path: str | Path, output_path: str | Pat
 
 
 def parse_crafted_molecule_def(molecule_def_path: str | Path) -> CraftedMolecule:
-    """Parse the subset of CRAFTED/RASPA molecule .def files needed for CO2/N2."""
+    """Parse the subset of CRAFTED/RASPA molecule .def files used by the pipeline."""
     lines = Path(molecule_def_path).read_text(encoding="utf-8").splitlines()
     content = _content_lines(lines)
     cursor = 0
@@ -84,15 +84,21 @@ def parse_crafted_molecule_def(molecule_def_path: str | Path) -> CraftedMolecule
     atoms = []
     for _ in range(group_atom_count):
         parts = content[cursor].split()
-        if len(parts) != 5:
+        if len(parts) == 2:
+            x = y = z = 0.0
+        elif len(parts) == 5:
+            x = float(parts[2])
+            y = float(parts[3])
+            z = float(parts[4])
+        else:
             raise ValueError(f"Invalid atomic position line in {molecule_def_path}: {content[cursor]!r}")
         atoms.append(
             MoleculeAtom(
                 index=int(parts[0]),
                 atom_type=parts[1],
-                x=float(parts[2]),
-                y=float(parts[3]),
-                z=float(parts[4]),
+                x=x,
+                y=y,
+                z=z,
             )
         )
         cursor += 1

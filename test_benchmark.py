@@ -440,7 +440,7 @@ class BenchmarkPipelineTests(unittest.TestCase):
 
         properties = infer_adsorbate_properties("CO2", forcefield)
 
-        self.assertEqual(properties["source"], "generated_from_crafted_forcefield")
+        self.assertEqual(properties["source"], "crafted")
         self.assertEqual(properties["component"], "CO2")
         self.assertEqual(properties["atom_count"], 3)
         self.assertAlmostEqual(properties["molar_mass_g_mol"], 44.0095, places=4)
@@ -456,6 +456,9 @@ class BenchmarkPipelineTests(unittest.TestCase):
         self.assertIn("CO2", adsorbates)
         self.assertIn("UFF", adsorbates["CO2"])
         self.assertGreater(adsorbates["CO2"]["UFF"]["access_diameter_A"], 3.3)
+        self.assertIn("CH4", adsorbates)
+        self.assertIn("RASPA2_ExampleMoleculeForceField", adsorbates["CH4"])
+        self.assertGreater(adsorbates["CH4"]["RASPA2_ExampleMoleculeForceField"]["access_diameter_A"], 3.7)
 
     def test_run_confirmation_rejects_not_implemented_module_before_prepare(self) -> None:
         config = benchmark.normalize_config(
@@ -633,7 +636,7 @@ class BenchmarkPipelineTests(unittest.TestCase):
         config = benchmark.normalize_config(
             {
                 "material": {"name": "MOF-5"},
-                "adsorbates": {"components": ["AR"]},
+                "adsorbates": {"components": ["XE"]},
             }
         )
 
@@ -772,6 +775,16 @@ class BenchmarkPipelineTests(unittest.TestCase):
         self.assertAlmostEqual(lj_parameters["O_co2"].sigma_A, 3.05)
         self.assertNotIn("N_com", lj_parameters)
 
+    def test_parse_raspa_mixing_rules_handles_inline_comments(self) -> None:
+        lj_parameters, mixing_rule = parse_mixing_rules(
+            "external/RASPA2/forcefield/ExampleMoleculeForceField/force_field_mixing_rules.def"
+        )
+
+        self.assertEqual(mixing_rule, "Lorentz-Berthelot")
+        self.assertAlmostEqual(lj_parameters["CH4"].epsilon_K, 158.5)
+        self.assertAlmostEqual(lj_parameters["CH4"].sigma_A, 3.72)
+        self.assertAlmostEqual(lj_parameters["Ar"].sigma_A, 3.38)
+
     def test_load_forcefield_parameters_accepts_resolved_forcefield_config(self) -> None:
         run_plan = benchmark.build_run_plan(benchmark.load_benchmark_data("benchmark.json"))
 
@@ -780,6 +793,19 @@ class BenchmarkPipelineTests(unittest.TestCase):
         self.assertEqual(parameters.mixing_rule, "Lorentz-Berthelot")
         self.assertIn("Zn_", parameters.lj_parameters)
         self.assertIn("C_co2", parameters.pseudo_atoms)
+
+    def test_forcefield_resolver_uses_raspa2_adsorbate_fallback(self) -> None:
+        forcefield = ForcefieldResolver().resolve(
+            {"framework": "UFF", "adsorbate": "auto", "cross_interactions": "auto"},
+            ["CH4"],
+        )
+        parameters = load_forcefield_parameters(forcefield)
+
+        self.assertTrue(forcefield["adsorbates"]["CH4"].endswith("methane.def"))
+        self.assertEqual(forcefield["adsorbate_sources"]["CH4"], "raspa2_example_molecule_forcefield")
+        self.assertIn("CH4", parameters.pseudo_atoms)
+        self.assertIn("CH4", parameters.lj_parameters)
+        self.assertIn("Zn_", parameters.lj_parameters)
         json.dumps(parameters.to_dict())
 
     def test_plan_forcefield_to_lammps_is_side_effect_free_and_serializable(self) -> None:
@@ -913,6 +939,15 @@ class BenchmarkPipelineTests(unittest.TestCase):
         self.assertEqual(len(molecule.atoms), 3)
         self.assertIn("N_com", [atom.atom_type for atom in molecule.atoms])
         self.assertEqual(len(molecule.bonds), 2)
+
+    def test_parse_raspa_single_site_methane_definition(self) -> None:
+        molecule = parse_crafted_molecule_def("external/RASPA2/molecules/ExampleDefinitions/methane.def")
+
+        self.assertEqual(molecule.name, "methane")
+        self.assertEqual(len(molecule.atoms), 1)
+        self.assertEqual(molecule.atoms[0].atom_type, "CH4")
+        self.assertEqual((molecule.atoms[0].x, molecule.atoms[0].y, molecule.atoms[0].z), (0.0, 0.0, 0.0))
+        self.assertEqual(len(molecule.bonds), 0)
 
     def test_build_molecule_template_writes_minimal_template(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

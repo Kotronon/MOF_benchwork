@@ -56,7 +56,24 @@ def generate_crafted_material_registry(crafted_root: str | Path = "CRAFTED-2.0.0
     return dict(sorted(registry.items()))
 
 
-def generate_adsorbate_registry(crafted_root: str | Path = "CRAFTED-2.0.0") -> dict[str, Any]:
+RASPA_COMPONENT_ALIASES = {
+    "argon": "AR",
+    "helium": "HE",
+    "methane": "CH4",
+}
+
+
+def generate_adsorbate_registry(
+    crafted_root: str | Path = "CRAFTED-2.0.0",
+    raspa2_root: str | Path = "external/RASPA2",
+) -> dict[str, Any]:
+    """Generate adsorbate properties from available CRAFTED and RASPA2 forcefield files."""
+    registry = generate_crafted_adsorbate_registry(crafted_root)
+    _merge_registry(registry, generate_raspa2_adsorbate_registry(raspa2_root))
+    return dict(sorted(registry.items()))
+
+
+def generate_crafted_adsorbate_registry(crafted_root: str | Path = "CRAFTED-2.0.0") -> dict[str, Any]:
     """Generate adsorbate properties from all available CRAFTED forcefield molecule defs."""
     root = Path(crafted_root)
     registry: dict[str, Any] = {}
@@ -72,6 +89,7 @@ def generate_adsorbate_registry(crafted_root: str | Path = "CRAFTED-2.0.0") -> d
             continue
         forcefield = {
             "framework": forcefield_dir.name,
+            "source": "generated_from_crafted_forcefield",
             "files": {name: str(path) for name, path in base_files.items()},
             "adsorbates": {},
         }
@@ -89,18 +107,49 @@ def generate_adsorbate_registry(crafted_root: str | Path = "CRAFTED-2.0.0") -> d
     return dict(sorted(registry.items()))
 
 
+def generate_raspa2_adsorbate_registry(raspa2_root: str | Path = "external/RASPA2") -> dict[str, Any]:
+    """Generate adsorbate properties from RASPA2 example molecule definitions."""
+    root = Path(raspa2_root)
+    molecule_dir = root / "molecules" / "ExampleDefinitions"
+    parameter_dir = root / "forcefield" / "ExampleMoleculeForceField"
+    base_files = {
+        "mixing_rules": parameter_dir / "force_field_mixing_rules.def",
+        "pseudo_atoms": parameter_dir / "pseudo_atoms.def",
+    }
+    if not molecule_dir.exists() or any(not path.exists() for path in base_files.values()):
+        return {}
+
+    registry: dict[str, Any] = {}
+    for molecule_def in sorted(molecule_dir.glob("*.def")):
+        component = _canonical_component_name(molecule_def.stem)
+        forcefield = {
+            "framework": "RASPA2_ExampleMoleculeForceField",
+            "source": "generated_from_raspa2_example_molecule_forcefield",
+            "files": {name: str(path) for name, path in base_files.items()},
+            "adsorbates": {component: str(molecule_def)},
+        }
+        try:
+            properties = infer_adsorbate_properties(component, forcefield)
+        except (LookupError, ValueError, OSError, KeyError):
+            continue
+        registry.setdefault(component, {})["RASPA2_ExampleMoleculeForceField"] = properties
+
+    return dict(sorted(registry.items()))
+
+
 def write_generated_registries(
     output_dir: str | Path = "data/generated",
     crafted_root: str | Path = "CRAFTED-2.0.0",
+    raspa2_root: str | Path = "external/RASPA2",
 ) -> dict[str, str]:
     """Write generated registries to disk and return their paths."""
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     material_path = output / "crafted_material_registry.json"
-    adsorbate_path = output / "crafted_adsorbate_registry.json"
+    adsorbate_path = output / "adsorbate_registry.json"
 
     _write_json(material_path, generate_crafted_material_registry(crafted_root))
-    _write_json(adsorbate_path, generate_adsorbate_registry(crafted_root))
+    _write_json(adsorbate_path, generate_adsorbate_registry(crafted_root, raspa2_root))
     return {
         "material_registry": str(material_path),
         "adsorbate_registry": str(adsorbate_path),
@@ -110,9 +159,10 @@ def write_generated_registries(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate derived CRAFTED registry files.")
     parser.add_argument("--crafted-root", default="CRAFTED-2.0.0")
+    parser.add_argument("--raspa2-root", default="external/RASPA2")
     parser.add_argument("--output-dir", default="data/generated")
     args = parser.parse_args(argv)
-    print(json.dumps(write_generated_registries(args.output_dir, args.crafted_root), indent=2))
+    print(json.dumps(write_generated_registries(args.output_dir, args.crafted_root, args.raspa2_root), indent=2))
     return 0
 
 
@@ -124,6 +174,15 @@ def _optional_float(value: Any) -> float | None:
     if value in ("", None):
         return None
     return float(value)
+
+
+def _canonical_component_name(name: str) -> str:
+    return RASPA_COMPONENT_ALIASES.get(name.casefold(), name.upper())
+
+
+def _merge_registry(target: dict[str, Any], source: dict[str, Any]) -> None:
+    for component, forcefields in source.items():
+        target.setdefault(component, {}).update(forcefields)
 
 
 if __name__ == "__main__":

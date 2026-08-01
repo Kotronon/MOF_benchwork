@@ -85,6 +85,18 @@ def plan_forcefield_to_lammps(
 def load_forcefield_parameters(forcefield_config: dict[str, Any]) -> ForcefieldParameters:
     pseudo_atoms = parse_pseudo_atoms(forcefield_config["files"]["pseudo_atoms"])
     lj_parameters, mixing_rule = parse_mixing_rules(forcefield_config["files"]["mixing_rules"])
+    for source in forcefield_config.get("adsorbate_parameter_files", []):
+        source_files = source.get("files", source)
+        if "pseudo_atoms" in source_files:
+            pseudo_atoms.update(parse_pseudo_atoms(source_files["pseudo_atoms"]))
+        if "mixing_rules" in source_files:
+            source_lj_parameters, source_mixing_rule = parse_mixing_rules(source_files["mixing_rules"])
+            if source_mixing_rule != mixing_rule:
+                raise ValueError(
+                    f"Cannot merge adsorbate forcefield parameters with mixing rule "
+                    f"{source_mixing_rule!r} into base mixing rule {mixing_rule!r}."
+                )
+            lj_parameters.update(source_lj_parameters)
     return ForcefieldParameters(lj_parameters=lj_parameters, pseudo_atoms=pseudo_atoms, mixing_rule=mixing_rule)
 
 
@@ -252,7 +264,9 @@ def parse_mixing_rules(mixing_rules_path: str | Path) -> tuple[dict[str, LjParam
     mixing_rule = "Lorentz-Berthelot"
 
     for line in content:
-        line_parts = line.split()
+        line_parts = _strip_inline_comment(line).split()
+        if not line_parts:
+            continue
         if len(line_parts) == 1 and line_parts[0] == "Lorentz-Berthelot":
             mixing_rule = "Lorentz-Berthelot"
             continue
@@ -268,7 +282,7 @@ def parse_mixing_rules(mixing_rules_path: str | Path) -> tuple[dict[str, LjParam
             continue
 
         name, interaction_type, epsilon_K_str, sigma_A_str = line_parts
-        if interaction_type != "lennard-jones":
+        if interaction_type.casefold() != "lennard-jones":
             continue
 
         lj_parameters[name] = LjParameter(
@@ -283,6 +297,10 @@ def parse_mixing_rules(mixing_rules_path: str | Path) -> tuple[dict[str, LjParam
 def _content_lines(lines: list[str]) -> list[str]:
     """Return the non-empty, non-comment lines from a file."""
     return [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
+
+
+def _strip_inline_comment(line: str) -> str:
+    return line.split("//", 1)[0].strip()
 
 
 def _unique(values: Any) -> list[Any]:

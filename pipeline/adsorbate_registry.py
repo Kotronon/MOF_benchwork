@@ -39,9 +39,14 @@ def infer_adsorbate_properties(
         policy=policy,
     )
 
+    adsorbate_source = forcefield.get("adsorbate_sources", {}).get(
+        component_key,
+        forcefield.get("source", "generated_from_crafted_forcefield"),
+    )
+
     return {
         "component": component_key,
-        "source": "generated_from_crafted_forcefield",
+        "source": str(adsorbate_source),
         "molecule_definition": str(molecule_path),
         "critical_temperature_K": molecule.critical_temperature_K,
         "critical_pressure_Pa": molecule.critical_pressure_Pa,
