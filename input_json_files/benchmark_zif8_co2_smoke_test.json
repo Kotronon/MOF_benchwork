@@ -76,8 +76,8 @@
     "seeds": [
       12345
     ],
-    "cycles": 500,
-    "initialization_cycles": 500
+    "cycles": 10000,
+    "initialization_cycles": 10000
   },
   "convergence": {
     "minimum_replicates": 3,
@@ -100,6 +100,8 @@
     "save_dumps": true,
     "dump_every_steps": 100,
     "save_plots": true,
-    "save_csv": true
+    "save_csv": true,
+    "save_restarts": true,
+    "restart_every_steps": 25000
   }
 }

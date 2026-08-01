@@ -3,6 +3,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import math
+import re
 from pathlib import Path
 from statistics import mean, stdev
 import subprocess
@@ -13,6 +14,7 @@ from engines.lammps_runner import build_lammps_command
 from parsers.lammps_log_parser import get_log, log_to_json, parse_lammps_log
 from pipeline.config import load_benchmark_data, save_benchmark_data
 from pipeline.evaluate import evaluate_isotherm
+from pipeline.lammps_inputs import gcmc_input_builder
 
 
 def run_benchmark(materialized_plan: dict[str, Any]) -> dict[str, Any]:
@@ -77,7 +79,12 @@ def run_isotherm(materialized_plan: dict[str, Any], jobs: int = 1) -> dict[str, 
                 expected_steps,
             )
         if existing is None:
-            pending_runs.append((index, run))
+            run_to_submit = dict(run)
+            if resume:
+                restart_file = _latest_restart_file(run)
+                if restart_file is not None:
+                    run_to_submit["read_restart"] = str(restart_file)
+            pending_runs.append((index, run_to_submit))
         else:
             results_by_index[index] = existing
 
@@ -160,12 +167,22 @@ def _run_pressure_point(
 ) -> dict[str, Any]:
     input_script = run["path"]
     pressure_bar = run["pressure_bar"]
-    log_file = Path(run["log"])
-    summary_file = log_file.with_name(log_file.stem + "_summary.json")
+    base_log_file = Path(run["log"])
+    summary_file = base_log_file.with_name(base_log_file.stem + "_summary.json")
+    read_restart = run.get("read_restart")
+    actual_log_file = base_log_file
+    if read_restart:
+        restart_step = _restart_step(Path(read_restart)) or "latest"
+        input_script = _write_resume_input(run, Path(read_restart))
+        actual_log_file = base_log_file.with_name(f"{base_log_file.stem}_resume_{restart_step}.log")
+        print(
+            f"[{index}/{total_runs}] Resuming {pressure_bar} bar from {read_restart}",
+            flush=True,
+        )
+    else:
+        print(f"[{index}/{total_runs}] Running {pressure_bar} bar", flush=True)
 
-    print(f"[{index}/{total_runs}] Running {pressure_bar} bar", flush=True)
-
-    command = build_lammps_command(input_script, log_file=log_file)
+    command = build_lammps_command(input_script, log_file=actual_log_file)
     started_at = perf_counter()
     result = subprocess.run(command, capture_output=True, text=True)
     wall_time_seconds = perf_counter() - started_at
@@ -173,8 +190,9 @@ def _run_pressure_point(
     if result.returncode != 0:
         raise RuntimeError(result.stderr + result.stdout)
 
+    summary_log_file = _combine_pressure_point_logs(base_log_file) if read_restart else base_log_file
     summary = log_to_json(
-        log_file,
+        summary_log_file,
         summary_file,
         framework_atoms=framework_atoms,
         adsorbate_atoms_per_molecule=adsorbate_atoms_per_molecule,
@@ -185,12 +203,49 @@ def _run_pressure_point(
     return _pressure_point_result(
         run,
         command,
-        log_file,
+        summary_log_file,
         summary_file,
         discard_fraction,
         wall_time_seconds=wall_time_seconds,
         summary=summary,
+        status="resumed_from_restart" if read_restart else "completed",
     )
+
+
+def _write_resume_input(run: dict[str, Any], restart_file: Path) -> str:
+    resume_input = Path(run.get("resume_input") or Path(run["path"]).with_suffix(".resume.in"))
+    resume_input.parent.mkdir(parents=True, exist_ok=True)
+    resume_input.write_text(
+        gcmc_input_builder(
+            {
+                "framework_data": run.get("framework_data", "unused_for_restart"),
+                "molecule_templates": run["molecule_templates"],
+                "forcefield_include": run["forcefield_include"],
+                "framework_atom_types": run["framework_atom_types"],
+                "adsorbate_atom_types": run["adsorbate_atom_types"],
+                "component": run["component"],
+                "temperature_K": run["temperature_K"],
+                "pressure_bar": run["pressure_bar"],
+                "chemical_potential_kcal_mol": run.get("chemical_potential_kcal_mol", 0.0),
+                "displacement_A": run.get("displacement_A", 1.0),
+                "run_steps": run["run_steps"],
+                "gcmc_every_steps": run.get("gcmc_every_steps", 1),
+                "exchange_attempts": run.get("exchange_attempts", 10),
+                "move_attempts": run.get("move_attempts", 10),
+                "seed": run.get("seed", 12345),
+                "extra_bond_per_atom": run.get("extra_bond_per_atom", 0),
+                "extra_special_per_atom": run.get("extra_special_per_atom", 0),
+                "fugacity_coeff": run.get("fugacity_coeff", 1.0),
+                "dump_file": run.get("dump"),
+                "dump_every_steps": run.get("dump_every_steps", 1000),
+                "restart_file": run.get("restart"),
+                "restart_every_steps": run.get("restart_every_steps", 0),
+                "read_restart_file": str(restart_file),
+            }
+        ),
+        encoding="utf-8",
+    )
+    return str(resume_input)
 
 
 def _existing_pressure_point_result(
@@ -206,10 +261,11 @@ def _existing_pressure_point_result(
     pressure_bar = run["pressure_bar"]
     log_file = Path(run["log"])
     summary_file = log_file.with_name(log_file.stem + "_summary.json")
+    completed_log = _completed_pressure_point_log(log_file, expected_steps)
     command = build_lammps_command(input_script, log_file=log_file)
 
     if summary_file.exists():
-        if log_file.exists() and not _lammps_log_completed(log_file, expected_steps):
+        if log_file.exists() and completed_log is None:
             print(
                 f"[{index}/{total_runs}] Existing summary for {pressure_bar} bar ignored "
                 "because the log is incomplete",
@@ -220,7 +276,7 @@ def _existing_pressure_point_result(
         return _pressure_point_result(
             run,
             command,
-            log_file,
+            completed_log or log_file,
             summary_file,
             discard_fraction,
             wall_time_seconds=None,
@@ -228,9 +284,9 @@ def _existing_pressure_point_result(
             status="reused_summary",
         )
 
-    if log_file.exists() and _lammps_log_completed(log_file, expected_steps):
+    if completed_log is not None:
         summary = log_to_json(
-            log_file,
+            completed_log,
             summary_file,
             framework_atoms=framework_atoms,
             adsorbate_atoms_per_molecule=adsorbate_atoms_per_molecule,
@@ -240,7 +296,7 @@ def _existing_pressure_point_result(
         return _pressure_point_result(
             run,
             command,
-            log_file,
+            completed_log,
             summary_file,
             discard_fraction,
             wall_time_seconds=None,
@@ -249,6 +305,48 @@ def _existing_pressure_point_result(
         )
 
     return None
+
+
+def _completed_pressure_point_log(base_log_file: Path, expected_steps: int) -> Path | None:
+    combined_log = base_log_file.with_name(f"{base_log_file.stem}_combined.log")
+    if combined_log.exists() and _lammps_log_completed(combined_log, expected_steps):
+        return combined_log
+    if _lammps_log_completed(base_log_file, expected_steps):
+        return base_log_file
+    return None
+
+
+def _latest_restart_file(run: dict[str, Any]) -> Path | None:
+    restart_pattern = run.get("restart")
+    if not restart_pattern:
+        return None
+    pattern_path = Path(restart_pattern)
+    candidates = [path for path in pattern_path.parent.glob(pattern_path.name) if path.is_file()]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: (_restart_step(path) or -1, path.stat().st_mtime))
+
+
+def _restart_step(path: Path) -> int | None:
+    matches = re.findall(r"(\d+)", path.name)
+    return int(matches[-1]) if matches else None
+
+
+def _pressure_point_log_segments(base_log_file: Path) -> list[Path]:
+    resume_logs = sorted(
+        base_log_file.parent.glob(f"{base_log_file.stem}_resume_*.log"),
+        key=lambda path: (_restart_step(path) or -1, path.stat().st_mtime),
+    )
+    return [path for path in [base_log_file, *resume_logs] if path.exists()]
+
+
+def _combine_pressure_point_logs(base_log_file: Path) -> Path:
+    combined_log = base_log_file.with_name(f"{base_log_file.stem}_combined.log")
+    with combined_log.open("w", encoding="utf-8") as output:
+        for segment in _pressure_point_log_segments(base_log_file):
+            output.write(get_log(segment))
+            output.write("\n")
+    return combined_log
 
 
 def _lammps_log_completed(log_file: Path, expected_steps: int) -> bool:

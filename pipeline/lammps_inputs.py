@@ -49,6 +49,9 @@ def gcmc_input_builder(inputs: dict[str, Any]) -> str:
     fugacity_coeff = float(inputs.get("fugacity_coeff", 1.0))
     dump_file = inputs.get("dump_file")
     dump_every_steps = int(inputs.get("dump_every_steps", 1000))
+    restart_file = inputs.get("restart_file")
+    restart_every_steps = int(inputs.get("restart_every_steps", 0) or 0)
+    read_restart_file = inputs.get("read_restart_file")
 
     read_data_options = []
     if extra_bond_per_atom:
@@ -70,11 +73,14 @@ def gcmc_input_builder(inputs: dict[str, Any]) -> str:
         f"mol {molecule_id} group adsorbate full_energy "
         f"pressure {pressure_atm:g} fugacity_coeff {fugacity_coeff:g} "
     )
+    setup_lines = (
+        [f"read_restart {read_restart_file}"]
+        if read_restart_file
+        else ["units real", "atom_style full", "boundary p p p", read_data]
+    )
+    run_line = f"run {run_steps} upto" if read_restart_file else f"run {run_steps}"
     lines = [
-        "units real",
-        "atom_style full",
-        "boundary p p p",
-        read_data,
+        *setup_lines,
         *[
             f"molecule {component.lower()} {template_path}"
             for component, template_path in inputs["molecule_templates"].items()
@@ -98,7 +104,12 @@ def gcmc_input_builder(inputs: dict[str, Any]) -> str:
             if dump_file
             else []
         ),
-        f"run {run_steps}",
+        *(
+            [f"restart {restart_every_steps} {restart_file}"]
+            if restart_file and restart_every_steps > 0
+            else []
+        ),
+        run_line,
     ]
     return "\n".join(lines) + "\n"
 

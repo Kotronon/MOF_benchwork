@@ -38,6 +38,7 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
         "source/molecules",
         "source/references",
         "dumps",
+        "restarts",
     ]:
         (working_dir / directory).mkdir(parents=True, exist_ok=True)
 
@@ -170,24 +171,26 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
         )
         gcmc_input_path = Path(input_script["path"])
         gcmc_input_path.parent.mkdir(parents=True, exist_ok=True)
+        builder_inputs = _gcmc_builder_inputs(
+            prepare_plan=prepare_plan,
+            framework_data_path=framework_data_path,
+            molecule_template_paths=molecule_template_paths,
+            forcefield_path=forcefield_path,
+            framework_atom_type_ids=framework_atom_type_ids,
+            adsorbate_atom_type_ids=adsorbate_atom_type_ids,
+            component=component,
+            pressure_bar=pressure_bar,
+            extra_special_per_atom=extra_special_per_atom,
+            seed=input_script["seed"],
+            fugacity_coeff=fugacity_coeff,
+            dump_file=input_script.get("dump"),
+            dump_every_steps=prepare_plan["parameters"].get("dump_every_steps", 1000),
+            restart_file=input_script.get("restart"),
+            restart_every_steps=prepare_plan["parameters"].get("restart_every_steps", 50000),
+        )
+        input_script.update(builder_inputs)
         gcmc_input_path.write_text(
-            gcmc_input_builder(
-                _gcmc_builder_inputs(
-                    prepare_plan=prepare_plan,
-                    framework_data_path=framework_data_path,
-                    molecule_template_paths=molecule_template_paths,
-                    forcefield_path=forcefield_path,
-                    framework_atom_type_ids=framework_atom_type_ids,
-                    adsorbate_atom_type_ids=adsorbate_atom_type_ids,
-                    component=component,
-                    pressure_bar=pressure_bar,
-                    extra_special_per_atom=extra_special_per_atom,
-                    seed=input_script["seed"],
-                    fugacity_coeff=fugacity_coeff,
-                    dump_file=input_script.get("dump"),
-                    dump_every_steps=prepare_plan["parameters"].get("dump_every_steps", 1000),
-                )
-            ),
+            gcmc_input_builder(builder_inputs),
             encoding="utf-8",
         )
 
@@ -220,6 +223,11 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
                 for script in prepare_plan["planned_files"]["input_scripts"]
                 if script.get("dump") is not None
             ],
+            "restart_files": [
+                script["restart"]
+                for script in prepare_plan["planned_files"]["input_scripts"]
+                if script.get("restart") is not None
+            ],
         },
     }
     save_benchmark_data(prepare_plan["planned_files"]["summary"], {"prepare_plan": prepare_plan, "result": result})
@@ -241,6 +249,9 @@ def _gcmc_builder_inputs(
     fugacity_coeff: float = 1.0,
     dump_file: str | None = None,
     dump_every_steps: int = 1000,
+    restart_file: str | None = None,
+    restart_every_steps: int = 0,
+    read_restart_file: str | None = None,
 ) -> dict[str, Any]:
     return {
         "framework_data": str(framework_data_path),
@@ -263,6 +274,9 @@ def _gcmc_builder_inputs(
         "fugacity_coeff": fugacity_coeff,
         "dump_file": dump_file,
         "dump_every_steps": dump_every_steps,
+        "restart_file": restart_file,
+        "restart_every_steps": restart_every_steps,
+        "read_restart_file": read_restart_file,
     }
 
 
