@@ -50,6 +50,8 @@ from pipeline.runners import (
     _convergence_report,
     _existing_pressure_point_result,
     _lammps_log_completed,
+    _latest_restart_file,
+    _restart_step,
 )
 from resolvers.forcefield_resolver import ForcefieldResolver
 from resolvers.material_resolver import MaterialResolver
@@ -232,6 +234,8 @@ class BenchmarkPipelineTests(unittest.TestCase):
         self.assertEqual(config["convergence"]["minimum_replicates"], 3)
         self.assertTrue(config["output"]["save_dumps"])
         self.assertEqual(config["output"]["dump_every_steps"], 1000)
+        self.assertTrue(config["output"]["save_restarts"])
+        self.assertEqual(config["output"]["restart_every_steps"], 50000)
 
     def test_normalize_config_rejects_duplicate_seeds(self) -> None:
         with self.assertRaisesRegex(ValueError, "must not contain duplicates"):
@@ -250,6 +254,9 @@ class BenchmarkPipelineTests(unittest.TestCase):
         self.assertEqual(len(scripts), 6)
         self.assertEqual({script["seed"] for script in scripts}, {101, 202, 303})
         self.assertTrue(all(f"seed{script['seed']}" in script["path"] for script in scripts))
+        self.assertTrue(all("/restarts/" in script["restart"] for script in scripts))
+        self.assertTrue(all(script["restart"].endswith(".restart.*") for script in scripts))
+        self.assertEqual(prepare_plan["parameters"]["restart_every_steps"], 50000)
 
     def test_prepare_can_disable_dump_files(self) -> None:
         config = benchmark.load_benchmark_data("benchmark.json")
@@ -570,6 +577,7 @@ class BenchmarkPipelineTests(unittest.TestCase):
             forcefield_include = Path(result["files"]["forcefield_include"])
             run0_input = Path(result["files"]["run0_input"])
             gcmc_test_input = Path(result["files"]["gcmc_test_input"])
+            gcmc_input = Path(result["files"]["gcmc_inputs"][0])
             summary = Path(result["files"]["summary"])
 
             self.assertTrue(framework_data.exists())
@@ -584,6 +592,9 @@ class BenchmarkPipelineTests(unittest.TestCase):
             self.assertIn("extra/special/per/atom 2", run0_input.read_text(encoding="utf-8"))
             self.assertIn("extra/bond/per/atom 2 extra/special/per/atom 2", gcmc_test_input.read_text(encoding="utf-8"))
             self.assertIn("fix gcmc_co2 adsorbate gcmc", gcmc_test_input.read_text(encoding="utf-8"))
+            self.assertIn("restart 50000", gcmc_input.read_text(encoding="utf-8"))
+            self.assertTrue(result["files"]["restart_files"][0].endswith(".restart.*"))
+            self.assertIn("molecule_templates", result["files"]["gcmc_runs"][0])
             self.assertIn("pair_coeff", forcefield_include.read_text(encoding="utf-8"))
         self.assertEqual(result["status"], "materialized")
         json.dumps(result)
@@ -608,6 +619,8 @@ class BenchmarkPipelineTests(unittest.TestCase):
                 "seed": 12345,
                 "extra_bond_per_atom": 2,
                 "extra_special_per_atom": 2,
+                "restart_file": "restarts/gcmc_001bar.restart.*",
+                "restart_every_steps": 50,
             }
         )
 
@@ -619,7 +632,36 @@ class BenchmarkPipelineTests(unittest.TestCase):
             "mol co2 group adsorbate full_energy pressure 0.00986923 fugacity_coeff 1",
             script,
         )
+        self.assertIn("restart 50 restarts/gcmc_001bar.restart.*", script)
         self.assertIn("run 1", script)
+
+    def test_gcmc_input_builder_can_resume_from_lammps_restart(self) -> None:
+        script = benchmark.gcmc_input_builder(
+            {
+                "framework_data": "IRMOF-1.data",
+                "molecule_templates": {"CO2": "CO2.template"},
+                "forcefield_include": "forcefield.in",
+                "framework_atom_types": [1, 2, 3, 4],
+                "adsorbate_atom_types": [5, 6],
+                "component": "CO2",
+                "temperature_K": 298.15,
+                "pressure_bar": 1.0,
+                "run_steps": 1000,
+                "gcmc_every_steps": 1,
+                "exchange_attempts": 10,
+                "move_attempts": 10,
+                "seed": 104729,
+                "restart_file": "restarts/gcmc_1bar_seed104729.restart.*",
+                "restart_every_steps": 50,
+                "read_restart_file": "restarts/gcmc_1bar_seed104729.restart.500",
+            }
+        )
+
+        self.assertIn("read_restart restarts/gcmc_1bar_seed104729.restart.500", script)
+        self.assertNotIn("read_data IRMOF-1.data", script)
+        self.assertIn("fix gcmc_co2 adsorbate gcmc", script)
+        self.assertIn("restart 50 restarts/gcmc_1bar_seed104729.restart.*", script)
+        self.assertIn("run 1000 upto", script)
 
     def test_dry_run_does_not_create_output_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1529,6 +1571,68 @@ Atoms # full
 
             self.assertTrue(_lammps_log_completed(completed_log, expected_steps=100))
             self.assertFalse(_lammps_log_completed(incomplete_log, expected_steps=100))
+
+    def test_resume_selects_latest_lammps_restart_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            restart_dir = root / "restarts"
+            restart_dir.mkdir()
+            old_restart = restart_dir / "gcmc_1bar_seed101.restart.50000"
+            new_restart = restart_dir / "gcmc_1bar_seed101.restart.150000"
+            other_restart = restart_dir / "gcmc_2bar_seed101.restart.999999"
+            old_restart.write_text("old", encoding="utf-8")
+            new_restart.write_text("new", encoding="utf-8")
+            other_restart.write_text("other", encoding="utf-8")
+
+            latest = _latest_restart_file(
+                {"restart": str(restart_dir / "gcmc_1bar_seed101.restart.*")}
+            )
+
+        self.assertEqual(_restart_step(old_restart), 50000)
+        self.assertEqual(latest, new_restart)
+
+    def test_resume_reuses_summary_when_combined_restart_log_is_complete(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            base_log = root / "gcmc_1bar_seed101.log"
+            combined_log = root / "gcmc_1bar_seed101_combined.log"
+            summary_file = root / "gcmc_1bar_seed101_summary.json"
+            base_log.write_text(
+                "Step Atoms Temp\n"
+                "0 10 0\n"
+                "80 13 0\n",
+                encoding="utf-8",
+            )
+            combined_log.write_text(
+                "Step Atoms Temp\n"
+                "0 10 0\n"
+                "80 13 0\n"
+                "Step Atoms Temp\n"
+                "100 16 0\n"
+                "Loop time of 1.0 on 1 procs for 20 steps with 16 atoms\n",
+                encoding="utf-8",
+            )
+            summary_file.write_text(json.dumps({"mean_adsorbates": 2.0}), encoding="utf-8")
+
+            reused = _existing_pressure_point_result(
+                {
+                    "path": str(root / "gcmc_1bar_seed101.in"),
+                    "log": str(base_log),
+                    "pressure_bar": 1.0,
+                    "replicate_index": 1,
+                    "seed": 101,
+                },
+                index=1,
+                total_runs=1,
+                discard_fraction=0.0,
+                framework_atoms=10,
+                adsorbate_atoms_per_molecule=3,
+                expected_steps=100,
+            )
+
+        self.assertIsNotNone(reused)
+        self.assertEqual(reused["status"], "reused_summary")
+        self.assertEqual(reused["log_file"], str(combined_log))
 
     def test_resume_parses_completed_log_and_ignores_incomplete_summary(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

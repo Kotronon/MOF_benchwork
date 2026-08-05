@@ -177,10 +177,14 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     output.setdefault("save_logs", True)
     output.setdefault("save_dumps", True)
     output.setdefault("dump_every_steps", 1000)
+    output.setdefault("save_restarts", True)
+    output.setdefault("restart_every_steps", 50000)
     output.setdefault("save_plots", True)
     output.setdefault("save_csv", True)
     if int(output["dump_every_steps"]) <= 0:
         raise ValueError("'output.dump_every_steps' must be positive.")
+    if int(output["restart_every_steps"]) <= 0:
+        raise ValueError("'output.restart_every_steps' must be positive.")
 
     return config
 

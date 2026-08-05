@@ -120,6 +120,8 @@ def build_run_plan(config: dict[str, Any]) -> dict[str, Any]:
             "save_logs": normalized["output"]["save_logs"],
             "save_dumps": normalized["output"]["save_dumps"],
             "dump_every_steps": normalized["output"]["dump_every_steps"],
+            "save_restarts": normalized["output"]["save_restarts"],
+            "restart_every_steps": normalized["output"]["restart_every_steps"],
             "save_plots": normalized["output"]["save_plots"],
             "save_csv": normalized["output"]["save_csv"],
         },

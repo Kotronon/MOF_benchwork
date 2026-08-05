@@ -111,6 +111,8 @@
     "save_dumps": false,
     "dump_every_steps": 100000,
     "save_plots": true,
-    "save_csv": true
+    "save_csv": true,
+    "save_restarts": true,
+    "restart_every_steps": 25000
   }
 }

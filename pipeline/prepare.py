@@ -32,6 +32,7 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
     forcefield_dir = working_dir / "forcefield"
     log_dir = working_dir / "logs"
     dump_dir = working_dir / "dumps"
+    restart_dir = working_dir / "restarts"
 
     framework_data = data_dir / f"{run_plan['material']['material_id']}.data"
     forcefield_include = forcefield_dir / "forcefield.in"
@@ -41,6 +42,8 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
     multiple_replicates = len(seeds) > 1
     save_dumps = bool(run_plan["outputs"].get("save_dumps", True))
     dump_every_steps = int(run_plan["outputs"].get("dump_every_steps", 1000))
+    save_restarts = bool(run_plan["outputs"].get("save_restarts", True))
+    restart_every_steps = int(run_plan["outputs"].get("restart_every_steps", 50000))
     input_scripts = []
     for pressure_bar in run_plan["conditions"]["pressures_bar"]:
         pressure_name = f"gcmc_{pressure_token(pressure_bar)}bar"
@@ -57,6 +60,8 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
                     "path": str(input_path),
                     "log": str(log_path),
                     "dump": str(dump_dir / f"{run_name}.lammpstrj") if save_dumps else None,
+                    "restart": str(restart_dir / f"{run_name}.restart.*") if save_restarts else None,
+                    "resume_input": str(input_dir / f"{run_name}.resume.in"),
                     "command": build_lammps_command(input_path, log_file=log_path),
                 }
             )
@@ -89,6 +94,8 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
         "output": {
             "save_dumps": save_dumps,
             "dump_every_steps": dump_every_steps,
+            "save_restarts": save_restarts,
+            "restart_every_steps": restart_every_steps,
         },
         "planned_files": {
             "framework_data": plan_cif_to_lammps_data(
@@ -138,6 +145,8 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
             "replicate_count": len(seeds),
             "save_dumps": save_dumps,
             "dump_every_steps": dump_every_steps,
+            "save_restarts": save_restarts,
+            "restart_every_steps": restart_every_steps,
             "forcefield": run_plan["resources"]["forcefield"]["framework"],
             "pair_style": run_plan["simulation"].get("pair_style", "lj/cut/coul/long"),
             "kspace_style": run_plan["simulation"].get("kspace_style", "pppm"),
