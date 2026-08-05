@@ -1,0 +1,86 @@
+{
+  "CO2": {
+    "DREIDING": {
+      "component": "CO2",
+      "source": "generated_from_crafted_forcefield",
+      "molecule_definition": "CRAFTED-2.0.0/FORCEFIELDS/DREIDING/CO2.def",
+      "critical_temperature_K": 304.1282,
+      "critical_pressure_Pa": 7377300.0,
+      "acentric_factor": 0.22394,
+      "rigid": true,
+      "atom_count": 3,
+      "atom_types": [
+        "O_co2",
+        "C_co2"
+      ],
+      "molar_mass_g_mol": 44.0095,
+      "net_charge_e": 0.0,
+      "geometry_extent_A": 2.32,
+      "max_lj_sigma_A": 3.05,
+      "access_diameter_A": 3.355,
+      "diameter_source": "max(geometry_extent_A, max_lj_sigma_A * 1.1)"
+    },
+    "UFF": {
+      "component": "CO2",
+      "source": "generated_from_crafted_forcefield",
+      "molecule_definition": "CRAFTED-2.0.0/FORCEFIELDS/UFF/CO2.def",
+      "critical_temperature_K": 304.1282,
+      "critical_pressure_Pa": 7377300.0,
+      "acentric_factor": 0.22394,
+      "rigid": true,
+      "atom_count": 3,
+      "atom_types": [
+        "O_co2",
+        "C_co2"
+      ],
+      "molar_mass_g_mol": 44.0095,
+      "net_charge_e": 0.0,
+      "geometry_extent_A": 2.32,
+      "max_lj_sigma_A": 3.05,
+      "access_diameter_A": 3.355,
+      "diameter_source": "max(geometry_extent_A, max_lj_sigma_A * 1.1)"
+    }
+  },
+  "N2": {
+    "DREIDING": {
+      "component": "N2",
+      "source": "generated_from_crafted_forcefield",
+      "molecule_definition": "CRAFTED-2.0.0/FORCEFIELDS/DREIDING/N2.def",
+      "critical_temperature_K": 126.192,
+      "critical_pressure_Pa": 3395800.0,
+      "acentric_factor": 0.0372,
+      "rigid": true,
+      "atom_count": 3,
+      "atom_types": [
+        "N_n2",
+        "N_com"
+      ],
+      "molar_mass_g_mol": 28.0134,
+      "net_charge_e": 0.0,
+      "geometry_extent_A": 1.1,
+      "max_lj_sigma_A": 3.31,
+      "access_diameter_A": 3.6410000000000005,
+      "diameter_source": "max(geometry_extent_A, max_lj_sigma_A * 1.1)"
+    },
+    "UFF": {
+      "component": "N2",
+      "source": "generated_from_crafted_forcefield",
+      "molecule_definition": "CRAFTED-2.0.0/FORCEFIELDS/UFF/N2.def",
+      "critical_temperature_K": 126.192,
+      "critical_pressure_Pa": 3395800.0,
+      "acentric_factor": 0.0372,
+      "rigid": true,
+      "atom_count": 3,
+      "atom_types": [
+        "N_n2",
+        "N_com"
+      ],
+      "molar_mass_g_mol": 28.0134,
+      "net_charge_e": 0.0,
+      "geometry_extent_A": 1.1,
+      "max_lj_sigma_A": 3.31,
+      "access_diameter_A": 3.6410000000000005,
+      "diameter_source": "max(geometry_extent_A, max_lj_sigma_A * 1.1)"
+    }
+  }
+}

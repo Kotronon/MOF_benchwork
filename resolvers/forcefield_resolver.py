@@ -14,6 +14,12 @@ RASPA_COMPONENT_FILES = {
     "O2": "O2.def",
 }
 
+RASPA_COMPONENT_ALIASES = {
+    "ARGON": "AR",
+    "HELIUM": "HE",
+    "METHANE": "CH4",
+}
+
 
 class ForcefieldResolver:
     def __init__(
@@ -80,11 +86,9 @@ class ForcefieldResolver:
         }
 
     def _resolve_raspa2_adsorbate(self, component_name: str) -> dict[str, Any] | None:
-        molecule_name = RASPA_COMPONENT_FILES.get(component_name)
-        if molecule_name is None:
+        molecule_path = self._raspa2_molecule_path(component_name)
+        if molecule_path is None:
             return None
-
-        molecule_path = self.raspa2_root / "molecules" / "ExampleDefinitions" / molecule_name
         parameter_dir = self.raspa2_root / "forcefield" / "ExampleMoleculeForceField"
         parameter_files = {
             "mixing_rules": parameter_dir / "force_field_mixing_rules.def",
@@ -99,9 +103,26 @@ class ForcefieldResolver:
             "files": {name: str(path) for name, path in parameter_files.items()},
         }
 
+    def _raspa2_molecule_path(self, component_name: str) -> Path | None:
+        molecule_dir = self.raspa2_root / "molecules" / "ExampleDefinitions"
+        molecule_name = RASPA_COMPONENT_FILES.get(component_name)
+        if molecule_name is not None:
+            path = molecule_dir / molecule_name
+            return path if path.exists() else None
+
+        for molecule_path in sorted(molecule_dir.glob("*.def")):
+            if _canonical_raspa_component(molecule_path.stem) == component_name:
+                return molecule_path
+        return None
+
 
 def _normalize_forcefield_name(value: Any) -> str:
     normalized = str(value or "UFF").upper()
     if normalized == "AUTO":
         return "UFF"
     return normalized
+
+
+def _canonical_raspa_component(value: str) -> str:
+    normalized = value.upper()
+    return RASPA_COMPONENT_ALIASES.get(normalized, normalized)

@@ -48,6 +48,27 @@ ISOTHERM_CSV_FIELDS = [
     "summary_file",
 ]
 
+BASIS_COMPARISON_CSV_FIELDS = [
+    "pressure_bar",
+    "pressure_Pa",
+    "sample_count",
+    "mean_adsorbates_per_cell",
+    "simulation_absolute_mol_per_kg",
+    "simulation_excess_mol_per_kg",
+    "reference_key",
+    "reference_source",
+    "reference_doi",
+    "reference_basis",
+    "reference_compared_against",
+    "selected_simulation_mol_per_kg",
+    "reference_mol_per_kg",
+    "comparison_error_mol_per_kg",
+    "comparison_relative_error_percent",
+    "reference_match",
+    "basis_interpretation",
+    "reference_path",
+]
+
 
 def sim_results_to_csv(
     sim_results: str | Path,
@@ -186,11 +207,22 @@ def evaluate_all_references(
     candidates_path = evaluations_dir / "reference_candidates.json"
     combined_csv_path = evaluations_dir / "combined_reference_comparison.csv"
     combined_plot_path = evaluations_dir / "combined_reference_comparison.png"
+    basis_csv_path = evaluations_dir / "basis_reference_comparison.csv"
+    basis_report_path = evaluations_dir / "basis_reference_comparison.md"
+    basis_absolute_plot_path = evaluations_dir / "basis_absolute_reference_comparison.png"
+    basis_excess_plot_path = evaluations_dir / "basis_excess_reference_comparison.png"
 
     candidates_path.write_text(json.dumps(normalized_references, indent=2) + "\n", encoding="utf-8")
     active_reference_list = list(active_by_key.values())
     combined_rows = _write_combined_reference_csv(reference_rows, active_reference_list, combined_csv_path)
     combined_plot = _write_combined_reference_plot(reference_rows, active_reference_list, combined_plot_path)
+    basis_rows = _write_basis_comparison_csv(reference_rows, active_reference_list, basis_csv_path)
+    _write_basis_comparison_report(basis_rows, basis_report_path, run_dir)
+    basis_plots = _write_basis_comparison_plots(
+        basis_rows,
+        absolute_output_path=basis_absolute_plot_path,
+        excess_output_path=basis_excess_plot_path,
+    )
 
     return {
         "status": "completed",
@@ -201,6 +233,11 @@ def evaluate_all_references(
         "combined_csv": str(combined_csv_path),
         "combined_plot": str(combined_plot) if combined_plot else None,
         "combined_row_count": len(combined_rows),
+        "basis_comparison_csv": str(basis_csv_path),
+        "basis_comparison_report": str(basis_report_path),
+        "basis_absolute_plot": str(basis_plots.get("absolute")) if basis_plots.get("absolute") else None,
+        "basis_excess_plot": str(basis_plots.get("excess")) if basis_plots.get("excess") else None,
+        "basis_comparison_row_count": len(basis_rows),
         "evaluations": results,
     }
 
@@ -660,6 +697,287 @@ def _write_combined_reference_csv(
         writer.writeheader()
         writer.writerows(combined_rows)
     return combined_rows
+
+
+def _write_basis_comparison_csv(
+    reference_rows: dict[str, list[dict[str, Any]]],
+    references: list[dict[str, Any]],
+    output_path: str | Path,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for reference in references:
+        key = reference["key"]
+        for row in reference_rows.get(key, []):
+            selected_loading = _selected_simulation_loading(row)
+            rows.append(
+                {
+                    "pressure_bar": row["pressure_bar"],
+                    "pressure_Pa": row["pressure_Pa"],
+                    "sample_count": row["sample_count"],
+                    "mean_adsorbates_per_cell": row["mean_adsorbates_per_cell"],
+                    "simulation_absolute_mol_per_kg": row["loading_absolute_mol_per_kg"],
+                    "simulation_excess_mol_per_kg": row["loading_excess_mol_per_kg"],
+                    "reference_key": key,
+                    "reference_source": row["reference_source"],
+                    "reference_doi": row["reference_doi"],
+                    "reference_basis": row["reference_basis"],
+                    "reference_compared_against": row["reference_compared_against"],
+                    "selected_simulation_mol_per_kg": selected_loading if selected_loading is not None else "",
+                    "reference_mol_per_kg": row["reference_mol_per_kg"],
+                    "comparison_error_mol_per_kg": row["comparison_error_mol_per_kg"],
+                    "comparison_relative_error_percent": row["comparison_relative_error_percent"],
+                    "reference_match": row["reference_match"],
+                    "basis_interpretation": _basis_interpretation(row),
+                    "reference_path": row["reference_path"],
+                }
+            )
+
+    rows.sort(key=lambda item: (float(item["pressure_bar"]), str(item["reference_key"])))
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=BASIS_COMPARISON_CSV_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+    return rows
+
+
+def _write_basis_comparison_report(
+    rows: list[dict[str, Any]],
+    output_path: str | Path,
+    run_dir: Path,
+) -> Path:
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# Basis-Separated Reference Comparison",
+        "",
+        f"Source: `{run_dir}`",
+        "",
+        "## Summary by reference basis",
+        "",
+        "| reference basis | rows | mean abs. rel. error / % | interpretation |",
+        "|:---|---:|---:|:---|",
+    ]
+    for basis, basis_rows in _basis_groups(rows).items():
+        lines.append(
+            "| "
+            f"{basis} | "
+            f"{len(basis_rows)} | "
+            f"{_format_optional(_mean_abs(basis_rows, 'comparison_relative_error_percent'))} | "
+            f"{_basis_group_note(basis)} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Comparison rows",
+            "",
+            "| pressure / bar | reference | basis | compared simulation | simulation / mol kg^-1 | reference / mol kg^-1 | rel. error / % | note |",
+            "|---:|:---|:---|:---|---:|---:|---:|:---|",
+        ]
+    )
+    for row in rows:
+        label = row["reference_doi"] or row["reference_key"]
+        lines.append(
+            "| "
+            f"{_format_optional(row['pressure_bar'])} | "
+            f"{label} | "
+            f"{row['reference_basis']} | "
+            f"{row['reference_compared_against']} | "
+            f"{_format_optional(row['selected_simulation_mol_per_kg'])} | "
+            f"{_format_optional(row['reference_mol_per_kg'])} | "
+            f"{_format_optional(row['comparison_relative_error_percent'])} | "
+            f"{row['basis_interpretation']} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Notes",
+            "",
+            "- Absolute or simulation-reference data are compared against the absolute GCMC loading.",
+            "- Excess references are compared against the excess loading when excess reporting is available.",
+            "- Unknown-basis references are retained, but the comparison assumes absolute loading and should be interpreted as orienting evidence.",
+        ]
+    )
+    output.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return output
+
+
+def _write_basis_comparison_plots(
+    rows: list[dict[str, Any]],
+    *,
+    absolute_output_path: str | Path,
+    excess_output_path: str | Path,
+) -> dict[str, Path | None]:
+    return {
+        "absolute": _write_basis_comparison_plot(
+            rows,
+            output_path=absolute_output_path,
+            mode="absolute",
+            title="Absolute adsorption reference comparison",
+            simulation_column="simulation_absolute_mol_per_kg",
+            simulation_label="Simulation absolute",
+        ),
+        "excess": _write_basis_comparison_plot(
+            rows,
+            output_path=excess_output_path,
+            mode="excess",
+            title="Excess adsorption reference comparison",
+            simulation_column="simulation_excess_mol_per_kg",
+            simulation_label="Simulation excess",
+        ),
+    }
+
+
+def _write_basis_comparison_plot(
+    rows: list[dict[str, Any]],
+    *,
+    output_path: str | Path,
+    mode: str,
+    title: str,
+    simulation_column: str,
+    simulation_label: str,
+) -> Path | None:
+    plot_rows = [row for row in rows if _row_matches_basis_plot(row, mode)]
+    if not plot_rows:
+        return None
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        return None
+
+    sim_points = _unique_pressure_series(plot_rows, simulation_column)
+    if not sim_points:
+        return None
+
+    fig, ax = plt.subplots(figsize=(10.2, 5.2))
+    ax.plot(
+        [pressure for pressure, _loading in sim_points],
+        [loading for _pressure, loading in sim_points],
+        marker="o",
+        linewidth=2.2,
+        label=simulation_label,
+    )
+
+    for key, reference_rows in _rows_by_reference(plot_rows).items():
+        ref_points = [
+            (_as_float(row["pressure_bar"]), _as_float(row["reference_mol_per_kg"]))
+            for row in reference_rows
+            if row.get("reference_mol_per_kg") not in ("", None)
+        ]
+        valid_ref_points = [
+            (pressure, loading)
+            for pressure, loading in ref_points
+            if pressure is not None and loading is not None
+        ]
+        if not valid_ref_points:
+            continue
+        first = reference_rows[0]
+        label = _basis_plot_reference_label(first, key)
+        marker = "s" if first.get("reference_source") == "crafted" else "^"
+        ax.plot(
+            [pressure for pressure, _loading in valid_ref_points],
+            [loading for _pressure, loading in valid_ref_points],
+            marker=marker,
+            linestyle="--",
+            label=label,
+        )
+
+    ax.set_xlabel("Pressure / bar")
+    ax.set_ylabel("Loading / mol kg$^{-1}$")
+    ax.set_title(title)
+    ax.grid(True, alpha=0.3)
+    if all(pressure > 0 for pressure, _loading in sim_points):
+        ax.set_xscale("log")
+        _set_decimal_pressure_ticks(ax, [pressure for pressure, _loading in sim_points])
+    legend_outside_right(ax, fontsize="small")
+    fig.tight_layout(rect=(0, 0, 0.76, 1))
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=200)
+    plt.close(fig)
+    return output
+
+
+def _row_matches_basis_plot(row: dict[str, Any], mode: str) -> bool:
+    if row.get("reference_mol_per_kg") in ("", None):
+        return False
+    compared_against = str(row.get("reference_compared_against", "")).casefold()
+    if mode == "excess":
+        return compared_against == "excess"
+    return compared_against in ("absolute", "absolute_assumed_for_unknown_reference")
+
+
+def _unique_pressure_series(rows: list[dict[str, Any]], column: str) -> list[tuple[float, float]]:
+    series: dict[float, float] = {}
+    for row in rows:
+        pressure = _as_float(row.get("pressure_bar"))
+        loading = _as_float(row.get(column))
+        if pressure is not None and loading is not None:
+            series.setdefault(pressure, loading)
+    return sorted(series.items())
+
+
+def _rows_by_reference(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        grouped.setdefault(str(row["reference_key"]), []).append(row)
+    return dict(sorted(grouped.items(), key=lambda item: item[0]))
+
+
+def _basis_plot_reference_label(row: dict[str, Any], key: str) -> str:
+    doi = str(row.get("reference_doi", "")).strip()
+    basis = str(row.get("reference_basis", "") or "unknown").strip()
+    if row.get("reference_source") == "crafted":
+        return f"CRAFTED ({basis})"
+    return f"{doi or key} ({basis})"
+
+
+def _selected_simulation_loading(row: dict[str, Any]) -> float | None:
+    return _loading_for_basis(
+        str(row.get("reference_compared_against", "")),
+        absolute_loading=_as_float(row.get("loading_absolute_mol_per_kg")),
+        excess_loading=_as_float(row.get("loading_excess_mol_per_kg")),
+    )
+
+
+def _basis_interpretation(row: dict[str, Any]) -> str:
+    basis = str(row.get("reference_basis", "")).casefold()
+    compared_against = str(row.get("reference_compared_against", "")).casefold()
+    selected_loading = _selected_simulation_loading(row)
+    if row.get("reference_mol_per_kg") in ("", None):
+        return "no_reference_at_pressure"
+    if compared_against == "excess" and selected_loading is None:
+        return "excess_reference_without_excess_loading"
+    if basis == "excess":
+        return "matched_excess_reference"
+    if basis in ("absolute", "simulation_reference"):
+        return "matched_absolute_reference"
+    if basis == "unknown":
+        return "unknown_basis_absolute_assumed"
+    return "missing_basis_absolute_assumed"
+
+
+def _basis_groups(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        basis = str(row.get("reference_basis") or "missing")
+        groups.setdefault(basis, []).append(row)
+    return dict(sorted(groups.items(), key=lambda item: item[0]))
+
+
+def _basis_group_note(basis: str) -> str:
+    normalized = basis.casefold()
+    if normalized in ("absolute", "simulation_reference"):
+        return "direct comparison to absolute loading"
+    if normalized == "excess":
+        return "direct comparison to excess loading"
+    if normalized == "unknown":
+        return "absolute assumed; use as orienting comparison"
+    return "basis missing; use as orienting comparison"
 
 
 def _write_combined_reference_plot(

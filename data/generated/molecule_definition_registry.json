@@ -1,0 +1,194 @@
+{
+  "2-METHYLBUTANE": [
+    {
+      "component": "2-METHYLBUTANE",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/2-methylbutane.def",
+      "properties_inferred": false,
+      "usable_by_current_lammps_pipeline": false
+    }
+  ],
+  "23-DIMETHYLBUTANE": [
+    {
+      "component": "23-DIMETHYLBUTANE",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/23-dimethylbutane.def",
+      "properties_inferred": false,
+      "usable_by_current_lammps_pipeline": false
+    }
+  ],
+  "AR": [
+    {
+      "component": "AR",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/argon.def",
+      "properties_inferred": true,
+      "usable_by_current_lammps_pipeline": true
+    }
+  ],
+  "BUTANE": [
+    {
+      "component": "BUTANE",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/butane.def",
+      "properties_inferred": false,
+      "usable_by_current_lammps_pipeline": false
+    }
+  ],
+  "CH4": [
+    {
+      "component": "CH4",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/methane.def",
+      "properties_inferred": true,
+      "usable_by_current_lammps_pipeline": true
+    }
+  ],
+  "CO2": [
+    {
+      "component": "CO2",
+      "source": "crafted",
+      "forcefield": "DREIDING",
+      "molecule_definition": "CRAFTED-2.0.0/FORCEFIELDS/DREIDING/CO2.def",
+      "properties_inferred": true,
+      "usable_by_current_lammps_pipeline": true
+    },
+    {
+      "component": "CO2",
+      "source": "crafted",
+      "forcefield": "UFF",
+      "molecule_definition": "CRAFTED-2.0.0/FORCEFIELDS/UFF/CO2.def",
+      "properties_inferred": true,
+      "usable_by_current_lammps_pipeline": true
+    },
+    {
+      "component": "CO2",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/CO2.def",
+      "properties_inferred": true,
+      "usable_by_current_lammps_pipeline": true
+    }
+  ],
+  "ETHANE": [
+    {
+      "component": "ETHANE",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/ethane.def",
+      "properties_inferred": false,
+      "usable_by_current_lammps_pipeline": false
+    }
+  ],
+  "HE": [
+    {
+      "component": "HE",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/helium.def",
+      "properties_inferred": true,
+      "usable_by_current_lammps_pipeline": true
+    }
+  ],
+  "HEPTANE": [
+    {
+      "component": "HEPTANE",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/heptane.def",
+      "properties_inferred": false,
+      "usable_by_current_lammps_pipeline": false
+    }
+  ],
+  "HEXANE": [
+    {
+      "component": "HEXANE",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/hexane.def",
+      "properties_inferred": false,
+      "usable_by_current_lammps_pipeline": false
+    }
+  ],
+  "N2": [
+    {
+      "component": "N2",
+      "source": "crafted",
+      "forcefield": "DREIDING",
+      "molecule_definition": "CRAFTED-2.0.0/FORCEFIELDS/DREIDING/N2.def",
+      "properties_inferred": true,
+      "usable_by_current_lammps_pipeline": true
+    },
+    {
+      "component": "N2",
+      "source": "crafted",
+      "forcefield": "UFF",
+      "molecule_definition": "CRAFTED-2.0.0/FORCEFIELDS/UFF/N2.def",
+      "properties_inferred": true,
+      "usable_by_current_lammps_pipeline": true
+    },
+    {
+      "component": "N2",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/N2.def",
+      "properties_inferred": true,
+      "usable_by_current_lammps_pipeline": true
+    }
+  ],
+  "NONANE": [
+    {
+      "component": "NONANE",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/nonane.def",
+      "properties_inferred": false,
+      "usable_by_current_lammps_pipeline": false
+    }
+  ],
+  "O2": [
+    {
+      "component": "O2",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/O2.def",
+      "properties_inferred": true,
+      "usable_by_current_lammps_pipeline": true
+    }
+  ],
+  "OCTANE": [
+    {
+      "component": "OCTANE",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/octane.def",
+      "properties_inferred": false,
+      "usable_by_current_lammps_pipeline": false
+    }
+  ],
+  "PENTANE": [
+    {
+      "component": "PENTANE",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/pentane.def",
+      "properties_inferred": false,
+      "usable_by_current_lammps_pipeline": false
+    }
+  ],
+  "PROPANE": [
+    {
+      "component": "PROPANE",
+      "source": "raspa2",
+      "forcefield": "RASPA2_ExampleMoleculeForceField",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/propane.def",
+      "properties_inferred": false,
+      "usable_by_current_lammps_pipeline": false
+    }
+  ]
+}

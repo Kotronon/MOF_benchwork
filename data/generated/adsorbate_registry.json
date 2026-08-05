@@ -1,0 +1,211 @@
+{
+  "AR": {
+    "RASPA2_ExampleMoleculeForceField": {
+      "component": "AR",
+      "source": "generated_from_raspa2_example_molecule_forcefield",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/argon.def",
+      "critical_temperature_K": 154.58,
+      "critical_pressure_Pa": 5043000.0,
+      "acentric_factor": 0.0,
+      "rigid": false,
+      "atom_count": 1,
+      "atom_types": [
+        "Ar"
+      ],
+      "molar_mass_g_mol": 39.948,
+      "net_charge_e": 0.0,
+      "geometry_extent_A": 0.0,
+      "max_lj_sigma_A": 3.38,
+      "access_diameter_A": 3.718,
+      "diameter_source": "max(geometry_extent_A, max_lj_sigma_A * 1.1)"
+    }
+  },
+  "CH4": {
+    "RASPA2_ExampleMoleculeForceField": {
+      "component": "CH4",
+      "source": "generated_from_raspa2_example_molecule_forcefield",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/methane.def",
+      "critical_temperature_K": 190.564,
+      "critical_pressure_Pa": 4599200.0,
+      "acentric_factor": 0.01142,
+      "rigid": false,
+      "atom_count": 1,
+      "atom_types": [
+        "CH4"
+      ],
+      "molar_mass_g_mol": 16.04246,
+      "net_charge_e": 0.0,
+      "geometry_extent_A": 0.0,
+      "max_lj_sigma_A": 3.72,
+      "access_diameter_A": 4.0920000000000005,
+      "diameter_source": "max(geometry_extent_A, max_lj_sigma_A * 1.1)"
+    }
+  },
+  "CO2": {
+    "DREIDING": {
+      "component": "CO2",
+      "source": "generated_from_crafted_forcefield",
+      "molecule_definition": "CRAFTED-2.0.0/FORCEFIELDS/DREIDING/CO2.def",
+      "critical_temperature_K": 304.1282,
+      "critical_pressure_Pa": 7377300.0,
+      "acentric_factor": 0.22394,
+      "rigid": true,
+      "atom_count": 3,
+      "atom_types": [
+        "O_co2",
+        "C_co2"
+      ],
+      "molar_mass_g_mol": 44.0095,
+      "net_charge_e": 0.0,
+      "geometry_extent_A": 2.32,
+      "max_lj_sigma_A": 3.05,
+      "access_diameter_A": 3.355,
+      "diameter_source": "max(geometry_extent_A, max_lj_sigma_A * 1.1)"
+    },
+    "UFF": {
+      "component": "CO2",
+      "source": "generated_from_crafted_forcefield",
+      "molecule_definition": "CRAFTED-2.0.0/FORCEFIELDS/UFF/CO2.def",
+      "critical_temperature_K": 304.1282,
+      "critical_pressure_Pa": 7377300.0,
+      "acentric_factor": 0.22394,
+      "rigid": true,
+      "atom_count": 3,
+      "atom_types": [
+        "O_co2",
+        "C_co2"
+      ],
+      "molar_mass_g_mol": 44.0095,
+      "net_charge_e": 0.0,
+      "geometry_extent_A": 2.32,
+      "max_lj_sigma_A": 3.05,
+      "access_diameter_A": 3.355,
+      "diameter_source": "max(geometry_extent_A, max_lj_sigma_A * 1.1)"
+    },
+    "RASPA2_ExampleMoleculeForceField": {
+      "component": "CO2",
+      "source": "generated_from_raspa2_example_molecule_forcefield",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/CO2.def",
+      "critical_temperature_K": 304.1282,
+      "critical_pressure_Pa": 7377300.0,
+      "acentric_factor": 0.22394,
+      "rigid": true,
+      "atom_count": 3,
+      "atom_types": [
+        "O_co2",
+        "C_co2"
+      ],
+      "molar_mass_g_mol": 43.9988,
+      "net_charge_e": 0.0,
+      "geometry_extent_A": 2.298,
+      "max_lj_sigma_A": 3.017,
+      "access_diameter_A": 3.3187,
+      "diameter_source": "max(geometry_extent_A, max_lj_sigma_A * 1.1)"
+    }
+  },
+  "HE": {
+    "RASPA2_ExampleMoleculeForceField": {
+      "component": "HE",
+      "source": "generated_from_raspa2_example_molecule_forcefield",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/helium.def",
+      "critical_temperature_K": 5.2,
+      "critical_pressure_Pa": 228000.0,
+      "acentric_factor": -0.39,
+      "rigid": false,
+      "atom_count": 1,
+      "atom_types": [
+        "He"
+      ],
+      "molar_mass_g_mol": 4.002602,
+      "net_charge_e": 0.0,
+      "geometry_extent_A": 0.0,
+      "max_lj_sigma_A": 2.64,
+      "access_diameter_A": 2.9040000000000004,
+      "diameter_source": "max(geometry_extent_A, max_lj_sigma_A * 1.1)"
+    }
+  },
+  "N2": {
+    "DREIDING": {
+      "component": "N2",
+      "source": "generated_from_crafted_forcefield",
+      "molecule_definition": "CRAFTED-2.0.0/FORCEFIELDS/DREIDING/N2.def",
+      "critical_temperature_K": 126.192,
+      "critical_pressure_Pa": 3395800.0,
+      "acentric_factor": 0.0372,
+      "rigid": true,
+      "atom_count": 3,
+      "atom_types": [
+        "N_n2",
+        "N_com"
+      ],
+      "molar_mass_g_mol": 28.0134,
+      "net_charge_e": 0.0,
+      "geometry_extent_A": 1.1,
+      "max_lj_sigma_A": 3.31,
+      "access_diameter_A": 3.6410000000000005,
+      "diameter_source": "max(geometry_extent_A, max_lj_sigma_A * 1.1)"
+    },
+    "UFF": {
+      "component": "N2",
+      "source": "generated_from_crafted_forcefield",
+      "molecule_definition": "CRAFTED-2.0.0/FORCEFIELDS/UFF/N2.def",
+      "critical_temperature_K": 126.192,
+      "critical_pressure_Pa": 3395800.0,
+      "acentric_factor": 0.0372,
+      "rigid": true,
+      "atom_count": 3,
+      "atom_types": [
+        "N_n2",
+        "N_com"
+      ],
+      "molar_mass_g_mol": 28.0134,
+      "net_charge_e": 0.0,
+      "geometry_extent_A": 1.1,
+      "max_lj_sigma_A": 3.31,
+      "access_diameter_A": 3.6410000000000005,
+      "diameter_source": "max(geometry_extent_A, max_lj_sigma_A * 1.1)"
+    },
+    "RASPA2_ExampleMoleculeForceField": {
+      "component": "N2",
+      "source": "generated_from_raspa2_example_molecule_forcefield",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/N2.def",
+      "critical_temperature_K": 126.192,
+      "critical_pressure_Pa": 3395800.0,
+      "acentric_factor": 0.0372,
+      "rigid": true,
+      "atom_count": 3,
+      "atom_types": [
+        "N_n2",
+        "N_com"
+      ],
+      "molar_mass_g_mol": 28.01348,
+      "net_charge_e": 0.0,
+      "geometry_extent_A": 1.1,
+      "max_lj_sigma_A": 3.306,
+      "access_diameter_A": 3.6366000000000005,
+      "diameter_source": "max(geometry_extent_A, max_lj_sigma_A * 1.1)"
+    }
+  },
+  "O2": {
+    "RASPA2_ExampleMoleculeForceField": {
+      "component": "O2",
+      "source": "generated_from_raspa2_example_molecule_forcefield",
+      "molecule_definition": "external/RASPA2/molecules/ExampleDefinitions/O2.def",
+      "critical_temperature_K": 154.581,
+      "critical_pressure_Pa": 5043000.0,
+      "acentric_factor": 0.0222,
+      "rigid": true,
+      "atom_count": 3,
+      "atom_types": [
+        "O_o2",
+        "O_com"
+      ],
+      "molar_mass_g_mol": 31.9988,
+      "net_charge_e": 0.0,
+      "geometry_extent_A": 1.2,
+      "max_lj_sigma_A": 3.045,
+      "access_diameter_A": 3.3495000000000004,
+      "diameter_source": "max(geometry_extent_A, max_lj_sigma_A * 1.1)"
+    }
+  }
+}

@@ -14,6 +14,7 @@ import benchmark
 from pipeline.applicability import assess_applicability, load_applicability_rules
 from analysis.block_convergence import analyze_block_convergence
 from analysis.cell_comparison import compare_cell_runs
+from analysis.kspace_sensitivity import compare_kspace_runs
 from analysis.reproducibility_manifest import create_reproducibility_manifest
 from converter.cif_to_lammps_data import (
     cell_perpendicular_widths,
@@ -36,7 +37,14 @@ from parsers.lammps_log_parser import summarize_adsorption, get_log, log_to_json
 from pipeline.evaluate import evaluate_all_references, evaluate_isotherm, framework_mass_from_lammps_data, sim_results_to_csv
 from pipeline.adsorbate_registry import infer_adsorbate_properties
 from pipeline.nist_isodb_parser import find_nist_isotherm_candidates, load_nist_isotherm
-from pipeline.registry_generation import generate_adsorbate_registry, generate_crafted_material_registry
+from pipeline.registry_generation import (
+    generate_adsorbate_registry,
+    generate_capability_database,
+    generate_crafted_material_registry,
+    generate_forcefield_registry,
+    generate_reference_registry,
+    write_generated_registries,
+)
 from pipeline.runners import (
     _aggregate_replicates,
     _convergence_report,
@@ -443,6 +451,8 @@ class BenchmarkPipelineTests(unittest.TestCase):
     def test_generated_registries_include_material_and_adsorbate_metadata(self) -> None:
         materials = generate_crafted_material_registry()
         adsorbates = generate_adsorbate_registry()
+        forcefields = generate_forcefield_registry()
+        references = generate_reference_registry()
 
         self.assertIn("IRMOF-1", materials)
         self.assertEqual(materials["IRMOF-1"]["geometry"]["pore_volume_cm3_g"], 0.845545)
@@ -452,6 +462,44 @@ class BenchmarkPipelineTests(unittest.TestCase):
         self.assertIn("CH4", adsorbates)
         self.assertIn("RASPA2_ExampleMoleculeForceField", adsorbates["CH4"])
         self.assertGreater(adsorbates["CH4"]["RASPA2_ExampleMoleculeForceField"]["access_diameter_A"], 3.7)
+        self.assertIn("UFF", forcefields)
+        self.assertIn("CO2", forcefields["UFF"]["adsorbates"])
+        self.assertTrue(references["isotherm"])
+        self.assertTrue(any(reference["material_id"] == "IRMOF-1" for reference in references["isotherm"]))
+
+    def test_capability_database_and_registry_writer_include_resource_sections(self) -> None:
+        database = generate_capability_database()
+
+        self.assertEqual(database["schema_version"], 1)
+        self.assertIn("materials", database)
+        self.assertIn("adsorbates", database)
+        self.assertIn("molecule_definitions", database)
+        self.assertIn("forcefields", database)
+        self.assertIn("references", database)
+        self.assertGreater(database["summary"]["material_count"], 0)
+        self.assertGreater(database["summary"]["adsorbate_count"], 0)
+        self.assertGreater(database["summary"]["molecule_definition_count"], 0)
+        self.assertGreater(database["summary"]["forcefield_count"], 0)
+        self.assertGreater(database["summary"]["isotherm_reference_count"], 0)
+        self.assertIn("PENTANE", database["molecule_definitions"])
+        self.assertFalse(database["molecule_definitions"]["PENTANE"][0]["usable_by_current_lammps_pipeline"])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            paths = write_generated_registries(output_dir=tmpdir)
+
+            self.assertTrue(Path(paths["capability_database"]).exists())
+            self.assertTrue(Path(paths["molecule_definition_registry"]).exists())
+            self.assertTrue(Path(paths["forcefield_registry"]).exists())
+            self.assertTrue(Path(paths["reference_registry"]).exists())
+
+    def test_forcefield_resolver_accepts_additional_raspa2_molecules(self) -> None:
+        forcefield = ForcefieldResolver().resolve(
+            {"framework": "UFF", "adsorbate": "auto", "cross_interactions": "auto"},
+            ["PENTANE"],
+        )
+
+        self.assertTrue(forcefield["adsorbates"]["PENTANE"].endswith("pentane.def"))
+        self.assertEqual(forcefield["adsorbate_sources"]["PENTANE"], "raspa2_example_molecule_forcefield")
 
     def test_run_confirmation_rejects_not_implemented_module_before_prepare(self) -> None:
         config = benchmark.normalize_config(
@@ -589,6 +637,39 @@ class BenchmarkPipelineTests(unittest.TestCase):
             )
 
             self.assertFalse(output_dir.exists())
+
+    def test_cli_overrides_kspace_settings_in_dry_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = benchmark.load_benchmark_data("benchmark.json")
+            config["output"]["directory"] = str(Path(tmpdir) / "planned_output")
+            config_path = Path(tmpdir) / "benchmark.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "benchmark.py",
+                    str(config_path),
+                    "--dry-run",
+                    "--kspace-style",
+                    "ewald",
+                    "--kspace-accuracy",
+                    "1e-6",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            run_plan = json.loads(result.stdout)
+
+        self.assertEqual(run_plan["simulation"]["kspace_style"], "ewald")
+        self.assertEqual(float(run_plan["simulation"]["kspace_accuracy"]), 1e-6)
+
+    def test_normalize_config_rejects_invalid_kspace_settings(self) -> None:
+        with self.assertRaisesRegex(ValueError, "simulation.kspace_style"):
+            benchmark.normalize_config({"material": {"name": "MOF-5"}, "simulation": {"kspace_style": "ppm"}})
+        with self.assertRaisesRegex(ValueError, "simulation.kspace_accuracy"):
+            benchmark.normalize_config({"material": {"name": "MOF-5"}, "simulation": {"kspace_accuracy": 0}})
 
     def test_missing_adsorbate_definition_has_clear_error(self) -> None:
         config = benchmark.normalize_config(
@@ -1603,6 +1684,8 @@ Atoms # full
                 "1.0e+05,90.0,1.0\n",
                 encoding="utf-8",
             )
+            gas_density = 100000.0 / (8.31446261815324 * 300.0)
+            excess_loading = 100.0 - gas_density * 0.001
             nist_path.write_text(
                 json.dumps(
                     {
@@ -1612,11 +1695,12 @@ Atoms # full
                         "adsorptionUnits": "mmol/g",
                         "pressureUnits": "bar",
                         "temperature": 298,
+                        "category": "excess adsorption",
                         "isotherm_data": [
                             {
                                 "pressure": 1.0,
-                                "species_data": [{"adsorption": 110.0, "composition": 1}],
-                                "total_adsorption": 110.0,
+                                "species_data": [{"adsorption": excess_loading, "composition": 1}],
+                                "total_adsorption": excess_loading,
                             }
                         ],
                     }
@@ -1675,19 +1759,92 @@ Atoms # full
                 encoding="utf-8",
             )
 
-            result = evaluate_all_references(run_dir)
+            result = evaluate_all_references(
+                run_dir,
+                evaluation_config={
+                    "report_excess": True,
+                    "pore_volume_cm3_g": 1.0,
+                    "gas_density_backend": "ideal",
+                    "temperature_K": 300.0,
+                },
+            )
             combined_csv = Path(result["combined_csv"])
+            basis_csv = Path(result["basis_comparison_csv"])
+            basis_report = Path(result["basis_comparison_report"])
+            basis_absolute_plot = Path(result["basis_absolute_plot"])
+            basis_excess_plot = Path(result["basis_excess_plot"])
             candidates_json = Path(result["reference_candidates"])
             combined_csv_exists = combined_csv.exists()
+            basis_csv_exists = basis_csv.exists()
+            basis_report_exists = basis_report.exists()
+            basis_absolute_plot_exists = basis_absolute_plot.exists()
+            basis_excess_plot_exists = basis_excess_plot.exists()
             candidates_json_exists = candidates_json.exists()
             combined_text = combined_csv.read_text(encoding="utf-8")
+            basis_text = basis_csv.read_text(encoding="utf-8")
+            with basis_csv.open("r", encoding="utf-8") as handle:
+                basis_rows = list(csv.DictReader(handle))
 
         self.assertEqual(result["reference_count"], 2)
         self.assertTrue(combined_csv_exists)
+        self.assertTrue(basis_csv_exists)
+        self.assertTrue(basis_report_exists)
+        self.assertTrue(basis_absolute_plot_exists)
+        self.assertTrue(basis_excess_plot_exists)
         self.assertTrue(candidates_json_exists)
         self.assertIn("simulation_mol_per_kg", combined_text)
         self.assertIn("crafted_crafted_reference_mol_per_kg", combined_text)
         self.assertIn("nist_isodb_10_test_nist_reference_mol_per_kg", combined_text)
+        self.assertIn("selected_simulation_mol_per_kg", basis_text)
+        self.assertEqual(result["basis_comparison_row_count"], 2)
+        crafted_row = next(row for row in basis_rows if row["reference_source"] == "crafted")
+        nist_row = next(row for row in basis_rows if row["reference_source"] == "nist_isodb")
+        self.assertEqual(crafted_row["basis_interpretation"], "matched_absolute_reference")
+        self.assertEqual(nist_row["reference_basis"], "excess")
+        self.assertEqual(nist_row["reference_compared_against"], "excess")
+        self.assertEqual(nist_row["basis_interpretation"], "matched_excess_reference")
+        self.assertAlmostEqual(float(nist_row["comparison_error_mol_per_kg"]), 0.0)
+
+    def test_kspace_sensitivity_compares_completed_evaluations(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            runs = []
+            for label, accuracy, loading in [
+                ("pppm_1e-4", 1e-4, 10.0),
+                ("pppm_1e-5", 1e-5, 10.5),
+            ]:
+                run = root / label
+                run.mkdir()
+                (run / "evaluated_isotherm.csv").write_text(
+                    "pressure_bar,loading_absolute_mol_per_kg,loading_excess_mol_per_kg\n"
+                    f"1.0,{loading},{loading - 0.1}\n",
+                    encoding="utf-8",
+                )
+                (run / "prepare_summary.json").write_text(
+                    json.dumps(
+                        {
+                            "result": {
+                                "parameters": {
+                                    "kspace_style": "pppm",
+                                    "kspace_accuracy": accuracy,
+                                }
+                            }
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                runs.append((label, run))
+
+            result = compare_kspace_runs(runs, root / "comparison")
+            csv_path = Path(result["csv"])
+            csv_exists = csv_path.exists()
+            with csv_path.open("r", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+
+        self.assertEqual(result["row_count"], 2)
+        self.assertTrue(csv_exists)
+        changed = next(row for row in rows if row["run_label"] == "pppm_1e-5")
+        self.assertAlmostEqual(float(changed["absolute_delta_percent"]), 5.0)
 
 if __name__ == "__main__":
     unittest.main()

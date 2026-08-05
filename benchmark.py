@@ -17,6 +17,7 @@ from pipeline.materialization import materialize_benchmark
 from pipeline.nist_isodb_parser import find_nist_isotherm_candidates, load_nist_isotherm
 from pipeline.planning import build_run_plan, resolve_benchmark, select_module
 from pipeline.prepare import prepare, prepare_benchmark, timestamp_run_id
+from pipeline.registry_generation import write_generated_registries
 from pipeline.runners import run_benchmark, run_isotherm
 
 
@@ -30,6 +31,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evaluate", action="store_true", help="Evaluate an existing run directory without running LAMMPS.")
     parser.add_argument("--evaluate-all", action="store_true", help="Evaluate an existing run against all references.")
     parser.add_argument("--run-id", help="Write outputs to outputs/<module>/runs/<run-id>.")
+    parser.add_argument("--kspace-style", choices=["pppm", "ewald"], help="Override simulation.kspace_style.")
+    parser.add_argument("--kspace-accuracy", type=float, help="Override simulation.kspace_accuracy.")
+    parser.add_argument(
+        "--registry-output-dir",
+        default="data/generated",
+        help="Directory for continuously generated capability registries.",
+    )
+    parser.add_argument(
+        "--skip-registry-update",
+        action="store_true",
+        help="Do not refresh generated capability registries before planning.",
+    )
     parser.add_argument("--new-run", action="store_true", help="Write outputs to a timestamped run directory.")
     parser.add_argument("--no-overwrite", action="store_true", help="Fail if the target working directory already exists.")
     parser.add_argument("--resume", action="store_true", help="Reuse completed pressure-point results in an existing run directory.")
@@ -46,10 +59,16 @@ def main(argv: list[str] | None = None) -> int:
         config.setdefault("output", {})["run_id"] = timestamp_run_id()
     if args.run_id:
         config.setdefault("output", {})["run_id"] = args.run_id
+    if args.kspace_style:
+        config.setdefault("simulation", {})["kspace_style"] = args.kspace_style
+    if args.kspace_accuracy is not None:
+        config.setdefault("simulation", {})["kspace_accuracy"] = args.kspace_accuracy
     if args.no_overwrite:
         config.setdefault("output", {})["overwrite"] = False
     if args.resume:
         config.setdefault("output", {})["resume"] = True
+    if not args.skip_registry_update:
+        write_generated_registries(args.registry_output_dir)
     run_plan = build_run_plan(config)
     if args.dry_run:
         print(json.dumps(run_plan, indent=2))

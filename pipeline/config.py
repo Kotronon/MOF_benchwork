@@ -112,8 +112,12 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     simulation.setdefault("atom_style", "full")
     simulation.setdefault("pair_style", "lj/cut/coul/long")
     simulation.setdefault("cutoff_A", 12.0)
-    simulation.setdefault("kspace_style", "pppm")
+    simulation["kspace_style"] = str(simulation.get("kspace_style", "pppm")).strip().casefold()
+    if simulation["kspace_style"] not in {"pppm", "ewald"}:
+        raise ValueError("'simulation.kspace_style' must be 'pppm' or 'ewald'.")
     simulation.setdefault("kspace_accuracy", 1e-5)
+    if float(simulation["kspace_accuracy"]) <= 0:
+        raise ValueError("'simulation.kspace_accuracy' must be positive.")
     simulation.setdefault("unit_cells", simulation.get("supercell", "auto"))
     simulation["cell_representation"] = str(
         simulation.get("cell_representation", "source")
