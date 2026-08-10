@@ -80,6 +80,7 @@
     "units": "real",
     "atom_style": "full",
     "pair_style": "lj/cut/coul/long",
+    "pair_modify_shift": true,
     "cutoff_A": 12.8,
     "kspace_style": "pppm",
     "kspace_accuracy": 1e-6,

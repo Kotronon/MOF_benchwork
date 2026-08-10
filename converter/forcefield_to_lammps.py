@@ -61,6 +61,7 @@ class LammpsForcefield:
     pair_coefficients: tuple[PairCoefficient, ...]
     pair_style: str
     kspace_style: str
+    pair_modify_lines: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -185,14 +186,17 @@ def build_lammps_forcefield(
     parameters: ForcefieldParameters,
     pair_style: str = "lj/cut/coul/long 12.8",
     kspace_style: str = "pppm 1.0e-4",
+    pair_modify_shift: bool = False,
 ) -> LammpsForcefield:
     atom_types = build_atom_type_assignments(framework_symbols, adsorbate_atom_types, parameters)
     pair_coefficients = build_pair_coefficients(atom_types, parameters)
+    pair_modify_lines = ("pair_modify shift yes",) if pair_modify_shift else ()
     return LammpsForcefield(
         atom_types=atom_types,
         pair_coefficients=pair_coefficients,
         pair_style=pair_style,
         kspace_style=kspace_style,
+        pair_modify_lines=pair_modify_lines,
     )
 
 
@@ -201,10 +205,9 @@ def render_lammps_forcefield_include(forcefield: LammpsForcefield) -> str:
     lines = [
         "# LAMMPS forcefield include generated from CRAFTED parameters",
         f"pair_style {forcefield.pair_style}",
-        f"kspace_style {forcefield.kspace_style}",
-        "",
-        "# Atom type map",
     ]
+    lines.extend(forcefield.pair_modify_lines)
+    lines.extend([f"kspace_style {forcefield.kspace_style}", "", "# Atom type map"])
     for atom_type in forcefield.atom_types:
         lines.append(f"# {atom_type.type_id}: {atom_type.label} -> {atom_type.lj_type} ({atom_type.source})")
 

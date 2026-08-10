@@ -149,6 +149,7 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
             "restart_every_steps": restart_every_steps,
             "forcefield": run_plan["resources"]["forcefield"]["framework"],
             "pair_style": run_plan["simulation"].get("pair_style", "lj/cut/coul/long"),
+            "pair_modify_shift": bool(run_plan["simulation"].get("pair_modify_shift", False)),
             "kspace_style": run_plan["simulation"].get("kspace_style", "pppm"),
             "kspace_accuracy": run_plan["simulation"].get("kspace_accuracy", 1e-5),
             "production_steps": production_steps,

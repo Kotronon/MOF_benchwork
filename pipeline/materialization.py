@@ -76,6 +76,7 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
             f"{prepare_plan['parameters'].get('kspace_style', 'pppm')} "
             f"{float(prepare_plan['parameters'].get('kspace_accuracy', 1e-5)):g}"
         ),
+        pair_modify_shift=bool(prepare_plan["parameters"].get("pair_modify_shift", False)),
     )
     framework_atom_type_ids = [
         atom_type.type_id

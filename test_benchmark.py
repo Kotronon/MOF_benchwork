@@ -707,6 +707,19 @@ class BenchmarkPipelineTests(unittest.TestCase):
         self.assertEqual(run_plan["simulation"]["kspace_style"], "ewald")
         self.assertEqual(float(run_plan["simulation"]["kspace_accuracy"]), 1e-6)
 
+    def test_normalize_config_accepts_pair_modify_shift(self) -> None:
+        config = benchmark.normalize_config(
+            {"material": {"name": "MOF-5"}, "simulation": {"pair_modify_shift": True}}
+        )
+
+        self.assertTrue(config["simulation"]["pair_modify_shift"])
+
+    def test_normalize_config_rejects_invalid_pair_modify_shift(self) -> None:
+        with self.assertRaisesRegex(TypeError, "simulation.pair_modify_shift"):
+            benchmark.normalize_config(
+                {"material": {"name": "MOF-5"}, "simulation": {"pair_modify_shift": "yes"}}
+            )
+
     def test_normalize_config_rejects_invalid_kspace_settings(self) -> None:
         with self.assertRaisesRegex(ValueError, "simulation.kspace_style"):
             benchmark.normalize_config({"material": {"name": "MOF-5"}, "simulation": {"kspace_style": "ppm"}})
@@ -941,10 +954,31 @@ class BenchmarkPipelineTests(unittest.TestCase):
         )
 
         self.assertIn("pair_style lj/cut/coul/long 12.8", include_text)
+        self.assertNotIn("pair_modify shift yes", include_text)
         self.assertIn("kspace_style pppm 1.0e-4", include_text)
         self.assertIn("pair_coeff 1 5", include_text)
         self.assertAlmostEqual(zn_o_co2.sigma_A, (2.462 + 3.05) / 2.0)
         self.assertAlmostEqual(zn_o_co2.epsilon_kcal_mol, (62.35 * 79.0) ** 0.5 * 0.0019872041)
+
+    def test_lammps_forcefield_include_can_enable_shifted_lj(self) -> None:
+        run_plan = benchmark.build_run_plan(benchmark.load_benchmark_data("benchmark.json"))
+        parameters = load_forcefield_parameters(run_plan["resources"]["forcefield"])
+        forcefield = build_lammps_forcefield(
+            framework_symbols=["Zn", "H", "C", "O"],
+            adsorbate_atom_types=["O_co2", "C_co2"],
+            parameters=parameters,
+            pair_modify_shift=True,
+        )
+
+        include_text = render_lammps_forcefield_include(forcefield)
+
+        self.assertIn("pair_style lj/cut/coul/long 12.8", include_text)
+        self.assertIn("pair_modify shift yes", include_text)
+        self.assertIn("kspace_style pppm 1.0e-4", include_text)
+        self.assertLess(
+            include_text.index("pair_modify shift yes"),
+            include_text.index("kspace_style pppm 1.0e-4"),
+        )
 
     def test_write_lammps_forcefield_include_writes_expected_file(self) -> None:
         run_plan = benchmark.build_run_plan(benchmark.load_benchmark_data("benchmark.json"))

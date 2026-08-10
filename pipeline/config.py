@@ -111,6 +111,10 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     simulation.setdefault("units", "real")
     simulation.setdefault("atom_style", "full")
     simulation.setdefault("pair_style", "lj/cut/coul/long")
+    pair_modify_shift = simulation.get("pair_modify_shift", False)
+    if not isinstance(pair_modify_shift, bool):
+        raise TypeError("'simulation.pair_modify_shift' must be a boolean.")
+    simulation["pair_modify_shift"] = pair_modify_shift
     simulation.setdefault("cutoff_A", 12.0)
     simulation["kspace_style"] = str(simulation.get("kspace_style", "pppm")).strip().casefold()
     if simulation["kspace_style"] not in {"pppm", "ewald"}:
