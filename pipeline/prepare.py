@@ -14,8 +14,8 @@ from pipeline.utils import pressure_token
 def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
     """Build a central side-effect-free preparation plan."""
     module_id = run_plan.get("module", {}).get("id")
-    if module_id != "A":
-        raise ValueError(f"Prepare currently supports module 'A' only, got {module_id!r}.")
+    if module_id not in {"A", "C"}:
+        raise ValueError(f"Prepare currently supports module 'A' and 'C' only, got {module_id!r}.")
 
     production_steps = int(run_plan["simulation"].get("cycles", 10000))
     equilibration_steps = int(run_plan["simulation"].get("initialization_cycles", 0))

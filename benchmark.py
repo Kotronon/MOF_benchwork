@@ -19,6 +19,7 @@ from pipeline.planning import build_run_plan, resolve_benchmark, select_module
 from pipeline.prepare import prepare, prepare_benchmark, timestamp_run_id
 from pipeline.registry_generation import write_generated_registries
 from pipeline.runners import run_benchmark, run_isotherm
+from pipeline.variants import build_variant_plans, run_variant_benchmark
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -33,6 +34,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run-id", help="Write outputs to outputs/<module>/runs/<run-id>.")
     parser.add_argument("--kspace-style", choices=["pppm", "ewald"], help="Override simulation.kspace_style.")
     parser.add_argument("--kspace-accuracy", type=float, help="Override simulation.kspace_accuracy.")
+    parser.add_argument(
+        "--run-variants",
+        "--run-variant",
+        dest="run_variants",
+        action="store_true",
+        help="Run benchmark variants instead of the base plan.",
+    )
     parser.add_argument(
         "--registry-output-dir",
         default="data/generated",
@@ -71,7 +79,16 @@ def main(argv: list[str] | None = None) -> int:
         write_generated_registries(args.registry_output_dir)
     run_plan = build_run_plan(config)
     if args.dry_run:
-        print(json.dumps(run_plan, indent=2))
+        if args.run_variants:
+            variant_plans = build_variant_plans(config)
+            result = {
+                "status": "planned",
+                "variant_count": len(variant_plans),
+                "variants": variant_plans,
+            }
+        else:
+            result = run_plan
+        print(json.dumps(result, indent=2))
         return 0
     if args.prepare:
         prepare_plan = prepare_benchmark(run_plan)
@@ -107,6 +124,11 @@ def main(argv: list[str] | None = None) -> int:
             references=run_plan["resources"]["references"],
             evaluation_config=run_plan.get("evaluation"),
         )
+        print(json.dumps(result, indent=2))
+        return 0
+    if args.run_variants:
+        _confirm_supported_capability(run_plan, allow_unsupported=args.allow_unsupported)
+        result = run_variant_benchmark(config, jobs=args.jobs)
         print(json.dumps(result, indent=2))
         return 0
     print(json.dumps(run_plan, indent=2))

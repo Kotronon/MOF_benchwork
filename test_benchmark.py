@@ -34,6 +34,7 @@ from converter.forcefield_to_lammps import (
 from converter.molecule_to_lammps_template import build_molecule_template, parse_crafted_molecule_def
 
 from parsers.lammps_log_parser import summarize_adsorption, get_log, log_to_json, parse_lammps_log
+from pipeline.comparision import compare_variant_results, get_directory
 from pipeline.evaluate import evaluate_all_references, evaluate_isotherm, framework_mass_from_lammps_data, sim_results_to_csv
 from pipeline.adsorbate_registry import infer_adsorbate_properties
 from pipeline.nist_isodb_parser import find_nist_isotherm_candidates, load_nist_isotherm
@@ -53,6 +54,7 @@ from pipeline.runners import (
     _latest_restart_file,
     _restart_step,
 )
+from pipeline.variants import build_variant_configs
 from resolvers.forcefield_resolver import ForcefieldResolver
 from resolvers.material_resolver import MaterialResolver
 
@@ -257,6 +259,80 @@ class BenchmarkPipelineTests(unittest.TestCase):
         self.assertTrue(all("/restarts/" in script["restart"] for script in scripts))
         self.assertTrue(all(script["restart"].endswith(".restart.*") for script in scripts))
         self.assertEqual(prepare_plan["parameters"]["restart_every_steps"], 50000)
+
+    def test_build_variant_configs_applies_pppm_overrides(self) -> None:
+        config = benchmark.load_benchmark_data("benchmark_mof5_co2_pppm_variants_smoke_test.json")
+
+        variant_configs = build_variant_configs(config)
+
+        self.assertEqual(len(variant_configs), 3)
+        self.assertEqual({variant["benchmark"]["module"] for variant in variant_configs}, {"C"})
+        self.assertEqual(
+            [variant["benchmark"]["variant"]["name"] for variant in variant_configs],
+            ["UFF-pppm_1e-4", "UFF-pppm_1e-5", "UFF-pppm_1e-6"],
+        )
+        self.assertEqual(
+            [float(variant["simulation"]["kspace_accuracy"]) for variant in variant_configs],
+            [1e-4, 1e-5, 1e-6],
+        )
+        self.assertEqual(
+            [variant["benchmark"]["variant"]["overrides"]["kspace_accuracy"] for variant in variant_configs],
+            [1e-4, 1e-5, 1e-6],
+        )
+        self.assertTrue(
+            all(
+                variant["output"]["directory"].endswith(
+                    f"runs/smoke_MOF5_CO2_pppm_variants/{variant['benchmark']['variant']['name']}"
+                )
+                for variant in variant_configs
+            )
+        )
+
+    def test_compare_variant_results_reads_isotherm_summaries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = {
+                "material": {"name": "MOF-5"},
+                "benchmark": {"task": "potential_benchmark"},
+                "output": {
+                    "directory": str(Path(tmpdir) / "module_C"),
+                    "run_id": "variant_smoke",
+                },
+            }
+            variant_root = get_directory(config)
+            for name, loading in [("pppm_1e-4", 1.0), ("pppm_1e-5", 1.2)]:
+                variant_dir = variant_root / name
+                variant_dir.mkdir(parents=True)
+                benchmark.save_benchmark_data(
+                    variant_dir / "isotherm_summary.json",
+                    {
+                        "status": "completed",
+                        "results": [
+                            {
+                                "pressure_bar": 1.0,
+                                "replicate_count": 1,
+                                "seeds": [12345],
+                                "converged": True,
+                                "mean_wall_time_seconds": 2.0,
+                                "total_wall_time_seconds": 2.0,
+                                "summary": {
+                                    "mean_adsorbates": loading,
+                                    "standard_error_adsorbates": None,
+                                },
+                            }
+                        ],
+                    },
+                )
+
+            output_path = variant_root / "variant_comparison.json"
+            comparison = compare_variant_results(config, output_path)
+
+            self.assertEqual(comparison["variant_count"], 2)
+            self.assertEqual(comparison["point_count"], 2)
+            self.assertTrue(output_path.exists())
+            self.assertEqual(
+                [(row["variant"], row["mean_adsorbates"]) for row in comparison["rows"]],
+                [("pppm_1e-4", 1.0), ("pppm_1e-5", 1.2)],
+            )
 
     def test_prepare_can_disable_dump_files(self) -> None:
         config = benchmark.load_benchmark_data("benchmark.json")

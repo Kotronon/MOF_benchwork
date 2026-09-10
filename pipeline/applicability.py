@@ -49,7 +49,8 @@ def _infer_applicability(
     warnings: list[str] = []
     reasons: list[str] = []
 
-    if module_id != "A":
+    uses_module_a_execution = module_id == "A" or _is_module_c_gcmc_variant_benchmark(config)
+    if not uses_module_a_execution:
         return {
             "status": "unsupported",
             "current_module_capability": "not_implemented",
@@ -71,8 +72,9 @@ def _infer_applicability(
         }
 
     material_id = resolved["material"]["material_id"]
-    module_rules = _module_rules(rules, module_id)
-    material_rule = _material_rule(rules, module_id, material_id)
+    rule_module_id = "A" if uses_module_a_execution else module_id
+    module_rules = _module_rules(rules, rule_module_id)
+    material_rule = _material_rule(rules, rule_module_id, material_id)
 
     requirements = module_rules.get("required", {})
     if not isinstance(requirements, dict):
@@ -261,15 +263,40 @@ def _infer_applicability(
 
     return {
         "status": "supported",
-        "current_module_capability": "validated_scope",
+        "current_module_capability": (
+            "module_a_compatible_variant_benchmark"
+            if module_id == "C"
+            else "validated_scope"
+        ),
         "can_attempt_simulation": True,
         "requires_user_confirmation": False,
-        "recommended_module": "A",
+        "recommended_module": module_id,
         "checks": checks,
         "geometry": geometry,
         "adsorbate_properties": adsorbate_properties,
-        "reason": "The selected case is within the current Module A implementation scope.",
+        "reason": (
+            "The selected Module C V1 case can be executed through the current "
+            "rigid GCMC pipeline."
+            if module_id == "C"
+            else "The selected case is within the current Module A implementation scope."
+        ),
     }
+
+
+def _is_module_c_gcmc_variant_benchmark(config: dict[str, Any]) -> bool:
+    benchmark = config.get("benchmark", {})
+    simulation = config.get("simulation", {})
+    task = str(benchmark.get("task", "")).strip().casefold().replace("-", "_")
+    method = str(simulation.get("method", "")).strip().casefold()
+    framework = str(simulation.get("framework", "")).strip().casefold()
+    variants = benchmark.get("variants", [])
+    return (
+        task == "potential_benchmark"
+        and method == "gcmc"
+        and framework == "rigid"
+        and isinstance(variants, list)
+        and len(variants) > 0
+    )
 
 
 def _module_rules(rules: dict[str, Any], module_id: str) -> dict[str, Any]:
