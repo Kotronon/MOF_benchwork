@@ -27,16 +27,17 @@ def get_variant_result_jsons(
 
     variants = []
     for variant_dir in sorted(path for path in working_dir.iterdir() if path.is_dir()):
-        summary_path = variant_dir / "isotherm_summary.json"
-        convergence_path = variant_dir / "convergence_report.json"
-        evaluation_path = variant_dir / "evaluation_report.json"
+        result_dir = variant_dir / "work" if (variant_dir / "work").is_dir() else variant_dir
+        summary_path = result_dir / "isotherm_summary.json"
+        convergence_path = result_dir / "convergence_report.json"
+        evaluation_path = result_dir / "evaluation_report.json"
 
         if not summary_path.exists():
             continue
 
         variant_result = {
             "variant": variant_dir.name,
-            "working_directory": str(variant_dir),
+            "working_directory": str(result_dir),
             "isotherm_summary_path": str(summary_path),
             "isotherm_summary": load_benchmark_data(summary_path),
         }

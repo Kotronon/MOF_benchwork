@@ -182,8 +182,8 @@ def convert_cif_to_lammps_data(
             raise ValueError(f"Extra atom type {label!r} duplicates an existing framework atom type.")
         type_map[label] = len(type_map) + 1
         masses[label] = float(mass)
-    box = _lammps_triclinic_box(structure.cell_vectors)
-    positions = _lammps_positions(structure.scaled_positions, box)
+    box = lammps_triclinic_box(structure.cell_vectors)
+    positions = lammps_positions(structure.scaled_positions, box)
 
     lines = [
         f"LAMMPS data file generated from {Path(cif_path)}",
@@ -332,7 +332,7 @@ def _unique(values: Any) -> list[str]:
     return result
 
 
-def _lammps_triclinic_box(cell_vectors: tuple[tuple[float, float, float], ...]) -> dict[str, float]:
+def lammps_triclinic_box(cell_vectors: tuple[tuple[float, float, float], ...]) -> dict[str, float]:
     a, b, c = cell_vectors
     lx = _norm(a)
     ax = _scale(a, 1.0 / lx)
@@ -350,7 +350,7 @@ def _lammps_triclinic_box(cell_vectors: tuple[tuple[float, float, float], ...]) 
     return {"lx": lx, "ly": ly, "lz": lz, "xy": xy, "xz": xz, "yz": yz}
 
 
-def _lammps_positions(
+def lammps_positions(
     scaled_positions: tuple[tuple[float, float, float], ...],
     box: dict[str, float],
 ) -> tuple[tuple[float, float, float], ...]:
