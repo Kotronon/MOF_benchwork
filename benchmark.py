@@ -20,7 +20,7 @@ from pipeline.prepare import prepare, prepare_benchmark, timestamp_run_id
 from pipeline.registry_generation import write_generated_registries
 from pipeline.runners import run_benchmark, run_isotherm
 from pipeline.variants import build_variant_plans, run_variant_benchmark
-
+from modules.module_c_mlips.workflow import run_potential_benchmark
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Plan a MOF benchmark run from benchmark.json.")
@@ -34,6 +34,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run-id", help="Write outputs to outputs/<module>/runs/<run-id>.")
     parser.add_argument("--kspace-style", choices=["pppm", "ewald"], help="Override simulation.kspace_style.")
     parser.add_argument("--kspace-accuracy", type=float, help="Override simulation.kspace_accuracy.")
+    parser.add_argument(
+        "--potentials",
+        "--run-potentials",
+        dest="run_potentials",
+        action="store_true",
+        help="Run the Module C potential comparison.",
+    )
     parser.add_argument(
         "--run-variants",
         "--run-variant",
@@ -130,6 +137,35 @@ def main(argv: list[str] | None = None) -> int:
         _confirm_supported_capability(run_plan, allow_unsupported=args.allow_unsupported)
         result = run_variant_benchmark(config, jobs=args.jobs)
         print(json.dumps(result, indent=2))
+        return 0
+    if args.run_potentials:
+        _confirm_supported_capability(
+            run_plan,
+            allow_unsupported=args.allow_unsupported,
+        )
+        if run_plan["module"]["id"] != "C":
+            raise ValueError(
+                "--potentials requires benchmark.task='potential_benchmark'."
+            )
+        result = run_potential_benchmark(run_plan)
+        print(
+            json.dumps(
+                {
+                    "status": result["status"],
+                    "working_directory": result["working_directory"],
+                    "output_path": result["output_path"],
+                    "baseline_backend": result["baseline_backend"],
+                    "backends": result["backends"],
+                    "configuration_count": result["configuration_count"],
+                    "runtime_seconds": result["runtime_seconds"],
+                    "shared_framework_cache": result[
+                        "shared_framework_cache"
+                    ],
+                    "analysis": result["analysis"],
+                },
+                indent=2,
+            )
+        )
         return 0
     print(json.dumps(run_plan, indent=2))
     return 0
