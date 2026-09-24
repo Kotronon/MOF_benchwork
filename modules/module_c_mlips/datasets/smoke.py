@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import numpy as np
 
-from converter.cif_to_lammps_data import parse_cif_atom_site_charges
+from converter.cif_to_lammps_data import load_framework_structure
 from converter.forcefield_to_lammps import (
     VIRTUAL_SITE_MASS_AMU,
     parse_pseudo_atoms,
@@ -21,6 +21,10 @@ def build_smoke_configurations(
     *,
     material: str = "IRMOF-1",
     adsorbate: str = "CO2",
+    cell_representation: str = "source",
+    unit_cells: list[int] | tuple[int, int, int] = (1, 1, 1),
+    cutoff_A: float | None = None,
+    minimum_image_policy: str = "ignore",
 ) -> list[InteractionConfiguration]:
     """Build three deterministic configurations for pipeline validation.
 
@@ -29,7 +33,6 @@ def build_smoke_configurations(
     """
     try:
         from ase import Atoms
-        from ase.io import read
     except ImportError as exc:
         raise ImportError(
             "ASE is required to build Module C smoke configurations."
@@ -42,8 +45,19 @@ def build_smoke_configurations(
         if pseudo_atoms_path is not None
         else molecule_def.parent / "pseudo_atoms.def"
     )
-    framework = read(str(cif))
-    framework.set_pbc(True)
+    framework_structure = load_framework_structure(
+        cif,
+        cell_representation=cell_representation,
+        unit_cells=unit_cells,
+        cutoff_A=cutoff_A,
+        minimum_image_policy=minimum_image_policy,
+    )
+    framework = Atoms(
+        symbols=framework_structure.symbols,
+        positions=framework_structure.positions,
+        cell=framework_structure.cell_vectors,
+        pbc=True,
+    )
     
     framework_types = framework.get_chemical_symbols()
     framework.new_array(
@@ -51,13 +65,7 @@ def build_smoke_configurations(
         np.asarray(framework_types, dtype="U32"),
     )
 
-    charge_records = parse_cif_atom_site_charges(cif)
-    if len(framework) != len(charge_records):
-        raise ValueError(
-            "ASE atom count and CIF charge count differ: "
-            f"{len(framework)} != {len(charge_records)}."
-        )
-    framework.set_initial_charges([record.charge for record in charge_records])
+    framework.set_initial_charges(framework_structure.charges)
 
     molecule = parse_crafted_molecule_def(molecule_def)
     molecule_atoms = Atoms(
@@ -104,9 +112,9 @@ def build_smoke_configurations(
             framework.cell.cartesian_positions((0.5, 0.5, 0.5)),
         ),
         (
-            "quarter_cell",
+            "eighth_cell",
             "unclassified",
-            framework.cell.cartesian_positions((0.25, 0.25, 0.25)),
+            framework.cell.cartesian_positions((0.125, 0.125, 0.125)),
         ),
         (
             "overlap_probe",

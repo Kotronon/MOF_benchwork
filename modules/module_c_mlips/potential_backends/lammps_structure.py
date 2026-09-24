@@ -100,8 +100,10 @@ def build_lammps_structure(
 def write_lammps_data(
     structure: dict[str, Any],
     output_path: str | Path,
+    *,
+    type_masses: dict[str, float] | None = None,
 ) -> Path:
-    """Write a combined framework/adsorbate LAMMPS data file."""
+    """Write a LAMMPS data file, optionally retaining inactive global types."""
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -147,7 +149,16 @@ def write_lammps_data(
         ]
     )
 
-    masses: dict[str, float] = {}
+    masses: dict[str, float] = {
+        atom_type: float(mass)
+        for atom_type, mass in (type_masses or {}).items()
+    }
+    unknown_mass_types = set(masses) - set(type_ids)
+    if unknown_mass_types:
+        raise ValueError(
+            "Masses were supplied for unknown LAMMPS types: "
+            + ", ".join(sorted(unknown_mass_types))
+        )
     for atom in atoms:
         atom_type = atom["forcefield_type"]
         mass = float(atom["mass"])

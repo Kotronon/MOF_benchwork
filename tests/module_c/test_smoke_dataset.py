@@ -22,7 +22,7 @@ class ModuleCSmokeDatasetTests(unittest.TestCase):
             [configuration.configuration_id for configuration in configurations],
             [
                 "IRMOF-1_CO2_cell_center",
-                "IRMOF-1_CO2_quarter_cell",
+                "IRMOF-1_CO2_eighth_cell",
                 "IRMOF-1_CO2_overlap_probe",
             ],
         )
@@ -70,6 +70,19 @@ class ModuleCSmokeDatasetTests(unittest.TestCase):
                 first_configuration.atoms.get_positions().tolist(),
                 second_configuration.atoms.get_positions().tolist(),
             )
+
+    def test_can_build_cutoff_valid_conventional_cell(self) -> None:
+        configurations = build_smoke_configurations(
+            "CRAFTED-2.0.0/CIF_FILES/DDEC/IRMOF-1.cif",
+            "CRAFTED-2.0.0/FORCEFIELDS/UFF/CO2.def",
+            cell_representation="conventional",
+            cutoff_A=12.8,
+            minimum_image_policy="error",
+        )
+
+        self.assertEqual(len(configurations[0].atoms), 427)
+        self.assertEqual(len(configurations[0].framework_indices), 424)
+        self.assertEqual(configurations[0].adsorbate_indices, [424, 425, 426])
 
 
 if __name__ == "__main__":

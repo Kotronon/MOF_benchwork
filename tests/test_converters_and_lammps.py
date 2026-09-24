@@ -171,7 +171,10 @@ class ConvertersAndLammpsTests(unittest.TestCase):
             text = output_path.read_text(encoding="utf-8")
 
         self.assertIn("424 atoms", text)
-        self.assertIn("0.00000000 0.00000000 0.00000000 xy xz yz", text)
+        self.assertIn(
+            "0.0000000000 0.0000000000 0.0000000000 xy xz yz",
+            text,
+        )
 
     @unittest.skipUnless(HAS_ASE, "ASE is required for framework data conversion.")
     def test_framework_converter_writes_triclinic_irmof1_data_file(self) -> None:

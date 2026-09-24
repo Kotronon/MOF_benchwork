@@ -198,10 +198,10 @@ def convert_cif_to_lammps_data(
     lines.extend(
         [
             "",
-            f"0.0 {box['lx']:.8f} xlo xhi",
-            f"0.0 {box['ly']:.8f} ylo yhi",
-            f"0.0 {box['lz']:.8f} zlo zhi",
-            f"{box['xy']:.8f} {box['xz']:.8f} {box['yz']:.8f} xy xz yz",
+            f"0.0 {box['lx']:.10f} xlo xhi",
+            f"0.0 {box['ly']:.10f} ylo yhi",
+            f"0.0 {box['lz']:.10f} zlo zhi",
+            f"{box['xy']:.10f} {box['xz']:.10f} {box['yz']:.10f} xy xz yz",
             "",
             "Masses",
             "",
@@ -217,7 +217,10 @@ def convert_cif_to_lammps_data(
     ):
         x, y, z = position
         molecule_id = 1
-        lines.append(f"{atom_id} {molecule_id} {type_map[symbol]} {charge:.8f} {x:.8f} {y:.8f} {z:.8f}")
+        lines.append(
+            f"{atom_id} {molecule_id} {type_map[symbol]} {charge:.8f} "
+            f"{x:.10f} {y:.10f} {z:.10f}"
+        )
 
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return output

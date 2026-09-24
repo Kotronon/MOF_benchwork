@@ -9,7 +9,8 @@ The tests are grouped by responsibility:
 - `test_runners_and_resume.py`: restart, resume, and replicate aggregation
 - `test_evaluation.py`: log parsing, isotherm tables, and reference evaluation
 - `test_analysis.py`: convergence, reproducibility, cell, and k-space analysis
-- `module_c/`: potential result, smoke dataset, and LAMMPS structure tests
+- `module_c/`: potential results, interaction energies, classical LAMMPS,
+  Module-A parity, smoke dataset, and LAMMPS structure tests
 
 Run the fast Module C tests:
 
@@ -24,6 +25,25 @@ Run one thematic test file:
 conda run --no-capture-output -n MOF_sim \
   python -m unittest -v tests.test_forcefields
 ```
+
+Run only the classical Module-A/Module-C parity checks:
+
+```bash
+conda run --no-capture-output -n MOF_sim \
+  python -m unittest -v tests.module_c.test_classical_parity
+```
+
+The parity file contains fast unit tests plus two real LAMMPS integration
+test groups. The integration tests use identical UFF/DDEC settings (`12.8 A`
+cutoff and PPPM accuracy `1e-4`) and compare potential-energy components and
+atomwise forces for framework-only and fixed MOF+CO2 configurations. The
+positive deterministic positions, the host-guest interaction energy, and a
+sampled frame from an existing Module-A GCMC dump are covered. The intentional
+atom-overlap probe must fail with a non-finite energy. Environment-dependent
+tests are skipped unless ASE, CoolProp, CRAFTED, and the `lmp` executable are
+available; the sampled-frame test is additionally skipped when the local dump
+is absent. These checks validate the shared classical baseline, not equality
+of stochastic GCMC trajectories or adsorption averages.
 
 Run the complete suite, including available LAMMPS integration tests:
 

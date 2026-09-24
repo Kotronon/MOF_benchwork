@@ -293,7 +293,14 @@ class PlanningTests(unittest.TestCase):
             self.assertEqual(result["parameters"]["framework_atom_count"], 424)
             self.assertEqual(result["parameters"]["adsorbate_atoms_per_molecule"], 3)
             self.assertIn("424 atoms", framework_data.read_text(encoding="utf-8"))
-            self.assertIn("extra/special/per/atom 2", run0_input.read_text(encoding="utf-8"))
+            run0_content = run0_input.read_text(encoding="utf-8")
+            self.assertIn("extra/special/per/atom 2", run0_content)
+            self.assertIn("bond_style zero", run0_content)
+            self.assertIn("special_bonds lj/coul 0.0 0.0 0.0", run0_content)
+            self.assertIn(
+                "thermo_style custom step atoms pe evdwl ecoul elong",
+                run0_content,
+            )
             self.assertIn("extra/bond/per/atom 2 extra/special/per/atom 2", gcmc_test_input.read_text(encoding="utf-8"))
             self.assertIn("fix gcmc_co2 adsorbate gcmc", gcmc_test_input.read_text(encoding="utf-8"))
             self.assertIn("restart 50000", gcmc_input.read_text(encoding="utf-8"))

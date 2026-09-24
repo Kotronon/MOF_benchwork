@@ -1,12 +1,14 @@
 """Common interface for potential-energy backends."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from math import isfinite
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ase import Atoms
+    from modules.module_c_mlips.models import InteractionConfiguration
 
 
 @dataclass
@@ -64,5 +66,5 @@ class PotentialBackend(ABC):
         """Return a stable backend identifier."""
 
     @abstractmethod
-    def evaluate(self, atoms: "Atoms") -> PotentialResult:
+    def evaluate(self, configuration: InteractionConfiguration) -> PotentialResult:
         """Calculate total energy and atomic forces for a structure."""

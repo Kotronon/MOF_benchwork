@@ -9,7 +9,11 @@ def render_run0_input(
     molecule_templates: dict[str, str],
     forcefield_path: Path,
     extra_special_per_atom: int,
+    *,
+    has_bonds: bool = False,
+    force_dump: str | Path | None = None,
 ) -> str:
+    """Render a fixed-coordinate check of materialized Module-A inputs."""
     read_data = f"read_data {framework_data_path}"
     if extra_special_per_atom:
         read_data = f"{read_data} extra/special/per/atom {extra_special_per_atom}"
@@ -18,15 +22,29 @@ def render_run0_input(
         f"molecule {component.lower()} {template_path}"
         for component, template_path in molecule_templates.items()
     ]
-    lines = [
-        "units real",
-        "atom_style full",
-        "boundary p p p",
-        read_data,
-        *molecule_lines,
-        f"include {forcefield_path}",
-        "run 0",
-    ]
+    lines = ["units real", "atom_style full", "boundary p p p"]
+    if has_bonds:
+        lines.append("bond_style zero")
+    lines.append(read_data)
+    if has_bonds:
+        lines.append("bond_coeff *")
+    lines.extend(
+        [
+            *molecule_lines,
+            "special_bonds lj/coul 0.0 0.0 0.0",
+            f"include {forcefield_path}",
+            "thermo 1",
+            "thermo_style custom step atoms pe evdwl ecoul elong",
+        ]
+    )
+    if force_dump is not None:
+        lines.extend(
+            [
+                f"dump force_output all custom 1 {force_dump} id type fx fy fz",
+                "dump_modify force_output sort id",
+            ]
+        )
+    lines.append("run 0")
     return "\n".join(lines) + "\n"
 
 

@@ -137,6 +137,7 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
             molecule_templates=molecule_template_paths,
             forcefield_path=forcefield_path,
             extra_special_per_atom=extra_special_per_atom,
+            has_bonds=extra_bond_types > 0,
         ),
         encoding="utf-8",
     )

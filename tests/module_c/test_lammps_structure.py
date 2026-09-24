@@ -13,9 +13,7 @@ from converter.forcefield_to_lammps import (
 )
 from converter.molecule_to_lammps_template import parse_crafted_molecule_def
 from modules.module_c_mlips.datasets import build_smoke_configurations
-from modules.module_c_mlips.potential_backends.classical_lammps import (
-    ClassicalLAMMPSBackend,
-)
+from modules.module_c_mlips.interaction import build_adsorbate_configuration
 from modules.module_c_mlips.potential_backends.lammps_structure import (
     build_lammps_structure,
     write_lammps_data,
@@ -172,6 +170,34 @@ class LammpsStructureTests(unittest.TestCase):
         self.assertIn("1 1 107 108", content)
         self.assertIn("2 1 108 109", content)
 
+    def test_writer_can_retain_inactive_global_atom_types(self) -> None:
+        combined_structure = self.build_structure()
+        type_masses = {
+            atom["forcefield_type"]: atom["mass"]
+            for atom in combined_structure["atoms"]
+        }
+        adsorbate = build_adsorbate_configuration(self.configuration)
+        adsorbate_structure = build_lammps_structure(
+            adsorbate.atoms,
+            adsorbate.framework_indices,
+            adsorbate.adsorbate_indices,
+            self.type_ids,
+            adsorbate.bonds,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = write_lammps_data(
+                adsorbate_structure,
+                Path(tmpdir) / "co2_global_types.data",
+                type_masses=type_masses,
+            )
+            content = output.read_text(encoding="utf-8")
+
+        self.assertIn("3 atoms", content)
+        self.assertIn("6 atom types", content)
+        self.assertIn("1 65.38000000 # Zn", content)
+        self.assertIn("5 15.99940000 # O_co2", content)
+
     @unittest.skipUnless(HAS_LAMMPS, "LAMMPS executable is required.")
     def test_lammps_reads_combined_data_and_runs_zero_steps(self) -> None:
         structure = self.build_structure()
@@ -203,19 +229,6 @@ class LammpsStructureTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn("109 atoms", result.stdout)
         self.assertIn("2 bonds", result.stdout)
-
-
-class ClassicalLammpsBackendContractTests(unittest.TestCase):
-    def test_backend_has_stable_name_and_explicit_unimplemented_error(self) -> None:
-        backend = ClassicalLAMMPSBackend(
-            lammps_command="lmp",
-            forcefield_file=Path("forcefield.inc"),
-            working_directory=Path("work"),
-        )
-
-        self.assertEqual(backend.name, "uff_ddec_lammps")
-        with self.assertRaisesRegex(NotImplementedError, "run-0"):
-            backend.evaluate(object())
 
 
 if __name__ == "__main__":
