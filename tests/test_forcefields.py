@@ -85,7 +85,8 @@ class ForcefieldsTests(unittest.TestCase):
         self.assertAlmostEqual(lj_parameters["Zn_"].sigma_A, 2.462)
         self.assertAlmostEqual(lj_parameters["C_co2"].epsilon_K, 27.0)
         self.assertAlmostEqual(lj_parameters["O_co2"].sigma_A, 3.05)
-        self.assertNotIn("N_com", lj_parameters)
+        self.assertAlmostEqual(lj_parameters["N_com"].epsilon_K, 0.0)
+        self.assertAlmostEqual(lj_parameters["N_com"].sigma_A, 1.0)
 
     def test_parse_raspa_mixing_rules_handles_inline_comments(self) -> None:
         lj_parameters, mixing_rule = parse_mixing_rules(

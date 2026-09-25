@@ -1,0 +1,4 @@
+# Reproducible MLIP-MC core used by Module C.
+# Install a backend extra through benchmark.py --setup-mlip-mc or explicitly,
+# for example: python -m pip install "mlip-mc[mace-torch]==0.1.3"
+mlip-mc==0.1.3

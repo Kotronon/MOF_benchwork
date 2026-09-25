@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-import shutil
 from typing import Any
 
 from analysis.potential_report import create_potential_report
@@ -19,6 +17,12 @@ from modules.module_c_mlips.potential_backends.classical_lammps import (
 )
 from modules.module_c_mlips.potential_backends.mace import MaceBackend
 from modules.module_c_mlips.runner import run_potential_comparison
+from modules.module_c_mlips.workspace import (
+    configure_runtime_cache as _configure_runtime_cache,
+    initialize_workspace as _initialize_workspace,
+    snapshot_sources as _snapshot_sources,
+    working_directory as _working_directory,
+)
 from pipeline.config import save_benchmark_data
 
 
@@ -221,75 +225,6 @@ def _build_backends(
             raise ValueError(f"Unsupported potential backend type {backend_type!r}.")
 
     return backends
-
-
-def _working_directory(run_plan: dict[str, Any]) -> Path:
-    output = run_plan["outputs"]
-    directory = Path(output["directory"])
-    run_id = output.get("run_id")
-    return directory / "runs" / str(run_id) if run_id else directory / "work"
-
-
-def _initialize_workspace(
-    working_directory: Path,
-    run_plan: dict[str, Any],
-) -> None:
-    if working_directory.exists() and not run_plan["outputs"].get("overwrite", True):
-        raise FileExistsError(
-            f"Working directory already exists: {working_directory}. "
-            "Use a new output.run_id or enable output.overwrite."
-        )
-    for directory in (
-        working_directory,
-        working_directory / "source" / "framework",
-        working_directory / "source" / "forcefield",
-        working_directory / "source" / "molecules",
-        working_directory / "configurations",
-        working_directory / "backends",
-        working_directory / "results",
-        working_directory / "reports",
-    ):
-        directory.mkdir(parents=True, exist_ok=True)
-    save_benchmark_data(working_directory / "run_plan.json", run_plan)
-
-
-def _configure_runtime_cache(cache_directory: Path) -> None:
-    """Keep plotting/font caches writable and local to the ignored run tree."""
-    cache_directory.mkdir(parents=True, exist_ok=True)
-    os.environ.setdefault("MPLCONFIGDIR", str(cache_directory / "matplotlib"))
-
-
-def _snapshot_sources(
-    run_plan: dict[str, Any],
-    source_directory: Path,
-) -> dict[str, Any]:
-    forcefield = run_plan["resources"]["forcefield"]
-    framework = _copy_file(
-        Path(run_plan["resources"]["cif_path"]),
-        source_directory / "framework",
-    )
-    forcefield_files = {
-        name: str(_copy_file(Path(path), source_directory / "forcefield"))
-        for name, path in forcefield["files"].items()
-    }
-    molecule_files = {
-        component: str(_copy_file(Path(path), source_directory / "molecules"))
-        for component, path in forcefield["adsorbates"].items()
-    }
-    return {
-        "framework_cif": str(framework),
-        "forcefield_files": forcefield_files,
-        "molecule_definitions": molecule_files,
-    }
-
-
-def _copy_file(source: Path, destination_directory: Path) -> Path:
-    if not source.is_file():
-        raise FileNotFoundError(f"Required source file does not exist: {source}")
-    destination_directory.mkdir(parents=True, exist_ok=True)
-    destination = destination_directory / source.name
-    shutil.copy2(source, destination)
-    return destination
 
 
 def _write_configurations(

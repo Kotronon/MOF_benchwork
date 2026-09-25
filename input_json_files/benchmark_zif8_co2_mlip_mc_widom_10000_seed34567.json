@@ -1,0 +1,73 @@
+{
+  "material": {
+    "name": "ZIF-8",
+    "cif_source": "auto",
+    "charge_scheme": "DDEC",
+    "source": "crafted"
+  },
+  "adsorbates": {
+    "components": ["CO2"],
+    "mixture": null
+  },
+  "conditions": {
+    "temperature_K": 298.15,
+    "pressures_bar": [1.0]
+  },
+  "benchmark": {
+    "task": "potential_benchmark",
+    "metrics": [
+      "average_boltzmann_factor",
+      "henry_coefficient",
+      "isosteric_heat_zero_loading",
+      "block_sem",
+      "runtime_per_step"
+    ],
+    "potential_benchmark": {
+      "workflow": "mlip_mc_widom",
+      "mlip_mc": {
+        "trials": 10000,
+        "block_size": 1000,
+        "convergence_checkpoints": [1000, 5000, 10000],
+        "seed": 34567,
+        "auto_install_dependencies": false,
+        "model": {
+          "backend": "mace-torch",
+          "name": "mace_mp_small",
+          "model": "small",
+          "device": "cpu",
+          "default_dtype": "float64",
+          "dispersion": false
+        }
+      }
+    }
+  },
+  "simulation": {
+    "engine": "MLIP_MC",
+    "method": "WIDOM",
+    "forcefield": {
+      "framework": "UFF",
+      "adsorbate": "auto",
+      "cross_interactions": "auto"
+    },
+    "framework": "rigid",
+    "cell_representation": "source",
+    "minimum_image_policy": "error",
+    "cutoff_A": 6.0,
+    "unit_cells": [1, 1, 1],
+    "seeds": [34567]
+  },
+  "convergence": {
+    "minimum_replicates": 3,
+    "relative_ci95_target": 0.05
+  },
+  "output": {
+    "directory": "outputs/module_C_potential_benchmark",
+    "run_id": "zif8_co2_mlip_mc_widom_10000_seed34567",
+    "overwrite": false,
+    "save_logs": true,
+    "save_dumps": false,
+    "save_restarts": true,
+    "save_plots": true,
+    "save_csv": true
+  }
+}

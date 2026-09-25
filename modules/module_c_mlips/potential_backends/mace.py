@@ -14,6 +14,9 @@ from modules.module_c_mlips.potential_backends.base import (
     PotentialBackend,
     PotentialResult,
 )
+from modules.module_c_mlips.potential_backends.calculators import (
+    build_ase_calculator,
+)
 
 if TYPE_CHECKING:
     from modules.module_c_mlips.models import InteractionConfiguration
@@ -85,20 +88,15 @@ class MaceBackend(PotentialBackend):
         if self.calculator is not None:
             return self.calculator
 
-        try:
-            from mace.calculators import mace_mp
-        except ImportError as exc:
-            raise ImportError(
-                "MACE is required for MaceBackend. Install mace-torch in "
-                "the active environment."
-            ) from exc
-
         started = perf_counter()
-        self.calculator = mace_mp(
-            model=self.model,
-            device=self.device,
-            dispersion=self.dispersion,
-            default_dtype=self.default_dtype,
+        self.calculator = build_ase_calculator(
+            {
+                "backend": "mace-torch",
+                "model": self.model,
+                "device": self.device,
+                "dispersion": self.dispersion,
+                "default_dtype": self.default_dtype,
+            }
         )
         self._model_load_seconds = perf_counter() - started
         return self.calculator

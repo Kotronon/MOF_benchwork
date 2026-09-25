@@ -21,6 +21,9 @@ from pipeline.registry_generation import write_generated_registries
 from pipeline.runners import run_benchmark, run_isotherm
 from pipeline.variants import build_variant_plans, run_variant_benchmark
 from modules.module_c_mlips.workflow import run_potential_benchmark
+from modules.module_c_mlips.dependencies import ensure_mlip_mc_dependencies
+from modules.module_c_mlips.mlip_mc_workflow import run_mlip_mc_benchmark
+from modules.module_c_mlips.potential_backends.calculators import build_ase_calculator
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Plan a MOF benchmark run from benchmark.json.")
@@ -40,6 +43,21 @@ def main(argv: list[str] | None = None) -> int:
         dest="run_potentials",
         action="store_true",
         help="Run the Module C potential comparison.",
+    )
+    parser.add_argument(
+        "--run-mlip-mc",
+        action="store_true",
+        help="Run the configured Module C MLIP-MC Widom or GCMC workflow.",
+    )
+    parser.add_argument(
+        "--setup-mlip-mc",
+        action="store_true",
+        help="Install and verify the configured MLIP-MC backend, then exit.",
+    )
+    parser.add_argument(
+        "--install-missing",
+        action="store_true",
+        help="Install missing pinned MLIP-MC dependencies in the active Python environment.",
     )
     parser.add_argument(
         "--run-variants",
@@ -85,6 +103,26 @@ def main(argv: list[str] | None = None) -> int:
     if not args.skip_registry_update:
         write_generated_registries(args.registry_output_dir)
     run_plan = build_run_plan(config)
+    if args.setup_mlip_mc:
+        backend = _configured_mlip_mc_backend(run_plan)
+        status = ensure_mlip_mc_dependencies(
+            backend,
+            install_missing=True,
+        )
+        model = _configured_mlip_mc_model(run_plan)
+        build_ase_calculator(model)
+        print(
+            json.dumps(
+                {
+                    "status": "ready",
+                    **status.to_dict(),
+                    "model": model.get("name", model.get("model")),
+                    "model_ready": True,
+                },
+                indent=2,
+            )
+        )
+        return 0
     if args.dry_run:
         if args.run_variants:
             variant_plans = build_variant_plans(config)
@@ -147,6 +185,17 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError(
                 "--potentials requires benchmark.task='potential_benchmark'."
             )
+        workflow = str(
+            run_plan["benchmark"].get("potential_benchmark", {}).get(
+                "workflow",
+                "static",
+            )
+        ).strip().casefold()
+        if workflow != "static":
+            raise ValueError(
+                "--potentials runs only the static comparison. Use "
+                "--run-mlip-mc for an MLIP-MC workflow."
+            )
         result = run_potential_benchmark(run_plan)
         print(
             json.dumps(
@@ -166,6 +215,17 @@ def main(argv: list[str] | None = None) -> int:
                 indent=2,
             )
         )
+        return 0
+    if args.run_mlip_mc:
+        _confirm_supported_capability(
+            run_plan,
+            allow_unsupported=args.allow_unsupported,
+        )
+        result = run_mlip_mc_benchmark(
+            run_plan,
+            install_missing=args.install_missing,
+        )
+        print(json.dumps(result, indent=2))
         return 0
     print(json.dumps(run_plan, indent=2))
     return 0
@@ -206,6 +266,19 @@ def _confirm_supported_capability(run_plan: dict, *, allow_unsupported: bool = F
 
     if answer.strip().casefold() not in {"y", "yes"}:
         raise RuntimeError("Simulation cancelled by user.")
+
+
+def _configured_mlip_mc_backend(run_plan: dict) -> str:
+    return str(_configured_mlip_mc_model(run_plan).get("backend", "mace-torch"))
+
+
+def _configured_mlip_mc_model(run_plan: dict) -> dict:
+    settings = run_plan.get("benchmark", {}).get("potential_benchmark", {})
+    mlip_mc = settings.get("mlip_mc", {}) if isinstance(settings, dict) else {}
+    model = mlip_mc.get("model", {}) if isinstance(mlip_mc, dict) else {}
+    if not isinstance(model, dict):
+        raise TypeError("'benchmark.potential_benchmark.mlip_mc.model' must be an object.")
+    return model
 
 
 if __name__ == "__main__":

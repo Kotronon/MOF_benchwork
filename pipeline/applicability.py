@@ -49,7 +49,10 @@ def _infer_applicability(
     warnings: list[str] = []
     reasons: list[str] = []
 
-    if module_id == "C" and _is_static_potential_benchmark(config):
+    if module_id == "C" and _is_potential_benchmark(config):
+        workflow = _potential_workflow(config)
+        if workflow in {"mlip_mc_widom", "mlip_mc_gcmc"}:
+            return _assess_mlip_mc_benchmark(config, workflow)
         return _assess_static_potential_benchmark(config)
 
     uses_module_a_execution = module_id == "A" or _is_module_c_gcmc_variant_benchmark(config)
@@ -286,10 +289,205 @@ def _infer_applicability(
     }
 
 
-def _is_static_potential_benchmark(config: dict[str, Any]) -> bool:
+def _is_potential_benchmark(config: dict[str, Any]) -> bool:
     benchmark = config.get("benchmark", {})
     task = str(benchmark.get("task", "")).strip().casefold().replace("-", "_")
     return task == "potential_benchmark" and "potential_benchmark" in benchmark
+
+
+def _potential_workflow(config: dict[str, Any]) -> str:
+    settings = config.get("benchmark", {}).get("potential_benchmark", {})
+    if not isinstance(settings, dict):
+        return "static"
+    return str(settings.get("workflow", "static")).strip().casefold().replace("-", "_")
+
+
+def _assess_mlip_mc_benchmark(
+    config: dict[str, Any],
+    workflow: str,
+) -> dict[str, Any]:
+    settings = config.get("benchmark", {}).get("potential_benchmark", {})
+    mlip_mc = settings.get("mlip_mc", {}) if isinstance(settings, dict) else {}
+    model = mlip_mc.get("model", {}) if isinstance(mlip_mc, dict) else {}
+    components = config.get("adsorbates", {}).get("components", [])
+    simulation = config.get("simulation", {})
+    framework = str(simulation.get("framework", "rigid")).casefold()
+    engine = str(simulation.get("engine", "")).upper()
+    method = str(simulation.get("method", "")).upper()
+    backend = str(model.get("backend", "")) if isinstance(model, dict) else ""
+    supported_backends = {
+        "mace",
+        "mace-torch",
+        "mace_mp",
+        "mace-mp",
+        "orb",
+        "orb-models",
+        "fairchem",
+        "odac",
+    }
+    expected_method = "WIDOM" if workflow == "mlip_mc_widom" else "GCMC"
+    checks = [
+        {
+            "name": "workflow",
+            "status": "passed",
+            "expected": workflow,
+            "actual": workflow,
+        },
+        {
+            "name": "single_component",
+            "status": "passed" if len(components) == 1 else "failed",
+            "expected": 1,
+            "actual": len(components),
+        },
+        {
+            "name": "rigid_framework",
+            "status": "passed" if framework == "rigid" else "failed",
+            "expected": "rigid",
+            "actual": framework,
+        },
+        {
+            "name": "engine",
+            "status": "passed" if engine == "MLIP_MC" else "failed",
+            "expected": "MLIP_MC",
+            "actual": engine,
+        },
+        {
+            "name": "method",
+            "status": "passed" if method == expected_method else "failed",
+            "expected": expected_method,
+            "actual": method,
+        },
+        {
+            "name": "mlip_backend",
+            "status": (
+                "passed"
+                if backend.strip().casefold().replace("_", "-") in {
+                    value.replace("_", "-") for value in supported_backends
+                }
+                else "failed"
+            ),
+            "expected": "mace-torch, orb-models, or fairchem",
+            "actual": backend,
+        },
+    ]
+    if workflow == "mlip_mc_widom":
+        trials = mlip_mc.get("trials") if isinstance(mlip_mc, dict) else None
+        checks.append(
+            {
+                "name": "widom_trials",
+                "status": (
+                    "passed"
+                    if isinstance(trials, int)
+                    and not isinstance(trials, bool)
+                    and trials > 0
+                    else "failed"
+                ),
+                "expected": "positive integer",
+                "actual": trials,
+            }
+        )
+        block_size = (
+            mlip_mc.get("block_size") if isinstance(mlip_mc, dict) else None
+        )
+        checkpoints = (
+            mlip_mc.get("convergence_checkpoints")
+            if isinstance(mlip_mc, dict)
+            else None
+        )
+        analysis_valid = (
+            (
+                block_size is None
+                or (
+                    isinstance(block_size, int)
+                    and not isinstance(block_size, bool)
+                    and block_size > 0
+                    and isinstance(trials, int)
+                    and block_size <= trials
+                )
+            )
+            and (
+                checkpoints is None
+                or (
+                    isinstance(checkpoints, list)
+                    and bool(checkpoints)
+                    and len(set(checkpoints)) == len(checkpoints)
+                    and all(
+                        isinstance(value, int)
+                        and not isinstance(value, bool)
+                        and value > 0
+                        and isinstance(trials, int)
+                        and value <= trials
+                        for value in checkpoints
+                    )
+                )
+            )
+        )
+        checks.append(
+            {
+                "name": "widom_analysis",
+                "status": "passed" if analysis_valid else "failed",
+                "expected": (
+                    "positive block_size and unique convergence checkpoints "
+                    "within the trial count"
+                ),
+                "actual": {
+                    "block_size": block_size,
+                    "convergence_checkpoints": checkpoints,
+                },
+            }
+        )
+    else:
+        equilibration = (
+            mlip_mc.get("equilibration_steps")
+            if isinstance(mlip_mc, dict)
+            else None
+        )
+        production = (
+            mlip_mc.get("production_steps")
+            if isinstance(mlip_mc, dict)
+            else None
+        )
+        checks.append(
+            {
+                "name": "gcmc_steps",
+                "status": (
+                    "passed"
+                    if isinstance(equilibration, int)
+                    and not isinstance(equilibration, bool)
+                    and equilibration >= 0
+                    and isinstance(production, int)
+                    and not isinstance(production, bool)
+                    and production > 0
+                    else "failed"
+                ),
+                "expected": "non-negative equilibration and positive production",
+                "actual": {
+                    "equilibration_steps": equilibration,
+                    "production_steps": production,
+                },
+            }
+        )
+
+    failed = [check for check in checks if check["status"] == "failed"]
+    if failed:
+        return {
+            "status": "unsupported",
+            "current_module_capability": "invalid_mlip_mc_configuration",
+            "can_attempt_simulation": False,
+            "requires_user_confirmation": False,
+            "recommended_module": "C",
+            "checks": checks,
+            "reason": "The Module C MLIP-MC configuration is invalid.",
+        }
+    return {
+        "status": "supported",
+        "current_module_capability": workflow,
+        "can_attempt_simulation": True,
+        "requires_user_confirmation": False,
+        "recommended_module": "C",
+        "checks": checks,
+        "reason": f"The Module C {workflow} workflow is executable.",
+    }
 
 
 def _assess_static_potential_benchmark(config: dict[str, Any]) -> dict[str, Any]:
