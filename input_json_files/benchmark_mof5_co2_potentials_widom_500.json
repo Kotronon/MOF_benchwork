@@ -1,0 +1,92 @@
+{
+  "material": {
+    "name": "MOF-5",
+    "cif_source": "auto",
+    "charge_scheme": "DDEC",
+    "source": "crafted"
+  },
+  "adsorbates": {
+    "components": [
+      "CO2"
+    ],
+    "mixture": null
+  },
+  "conditions": {
+    "temperature_K": 298.15,
+    "pressures_bar": [
+      1.0
+    ]
+  },
+  "benchmark": {
+    "task": "potential_benchmark",
+    "metrics": [
+      "interaction_energy_difference",
+      "force_mae",
+      "force_rmse",
+      "maximum_force_difference",
+      "runtime_per_configuration"
+    ],
+    "potential_benchmark": {
+      "configuration_set": "widom",
+      "dataset": {
+        "sample_count": 500,
+        "seed": 12345,
+        "minimum_distance_A": 1.5,
+        "maximum_attempts_per_sample": 10000,
+        "random_orientations": true
+      },
+      "baseline_backend": "uff_ddec_lammps",
+      "backends": [
+        {
+          "type": "classical_lammps",
+          "name": "uff_ddec_lammps",
+          "lammps_command": "lmp"
+        },
+        {
+          "type": "mace_mp",
+          "name": "mace_mp_small_float64",
+          "model": "small",
+          "device": "cpu",
+          "default_dtype": "float64",
+          "dispersion": false
+        }
+      ]
+    }
+  },
+  "simulation": {
+    "engine": "LAMMPS",
+    "method": "STATIC",
+    "forcefield": {
+      "framework": "UFF",
+      "adsorbate": "auto",
+      "cross_interactions": "auto"
+    },
+    "framework": "rigid",
+    "cell_representation": "conventional",
+    "minimum_image_policy": "error",
+    "units": "real",
+    "atom_style": "full",
+    "pair_style": "lj/cut/coul/long",
+    "cutoff_A": 12.8,
+    "kspace_style": "pppm",
+    "kspace_accuracy": 0.00001,
+    "unit_cells": [
+      1,
+      1,
+      1
+    ],
+    "seeds": [
+      12345
+    ]
+  },
+  "output": {
+    "directory": "outputs/module_C_potential_benchmark",
+    "run_id": "mof5_co2_uff_mace_widom_500_seed12345",
+    "overwrite": false,
+    "save_logs": true,
+    "save_dumps": false,
+    "save_restarts": false,
+    "save_plots": true,
+    "save_csv": true
+  }
+}

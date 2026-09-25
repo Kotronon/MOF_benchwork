@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ase import Atoms
@@ -22,7 +22,8 @@ class InteractionConfiguration:
     source: str = "generated"
     energy_unit: str = "eV"
     force_unit: str = "eV/angstrom"
-    bonds: list[InteractionBond]  = field(default_factory=list)
+    bonds: list[InteractionBond] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
     
     def __post_init__(self) -> None:
         framework = set(self.framework_indices)

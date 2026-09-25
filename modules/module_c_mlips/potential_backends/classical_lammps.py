@@ -39,6 +39,7 @@ class ClassicalLAMMPSBackend(PotentialBackend):
     lammps_command: str
     pseudo_atoms_file: Path
     mixing_rules_file: Path
+    backend_name: str = "uff_ddec_lammps"
     working_directory: Path | None = None
     keep_working_directory: bool = False
     pair_style: str = "lj/cut/coul/long 12.8"
@@ -46,7 +47,7 @@ class ClassicalLAMMPSBackend(PotentialBackend):
 
     @property
     def name(self) -> str:
-        return "uff_ddec_lammps"
+        return self.backend_name
 
     def evaluate(
         self,

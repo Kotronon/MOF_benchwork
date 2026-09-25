@@ -49,6 +49,9 @@ def _infer_applicability(
     warnings: list[str] = []
     reasons: list[str] = []
 
+    if module_id == "C" and _is_static_potential_benchmark(config):
+        return _assess_static_potential_benchmark(config)
+
     uses_module_a_execution = module_id == "A" or _is_module_c_gcmc_variant_benchmark(config)
     if not uses_module_a_execution:
         return {
@@ -280,6 +283,145 @@ def _infer_applicability(
             if module_id == "C"
             else "The selected case is within the current Module A implementation scope."
         ),
+    }
+
+
+def _is_static_potential_benchmark(config: dict[str, Any]) -> bool:
+    benchmark = config.get("benchmark", {})
+    task = str(benchmark.get("task", "")).strip().casefold().replace("-", "_")
+    return task == "potential_benchmark" and "potential_benchmark" in benchmark
+
+
+def _assess_static_potential_benchmark(config: dict[str, Any]) -> dict[str, Any]:
+    benchmark = config.get("benchmark", {}).get("potential_benchmark", {})
+    components = config.get("adsorbates", {}).get("components", [])
+    framework = str(config.get("simulation", {}).get("framework", "rigid")).casefold()
+    configuration_set = str(
+        benchmark.get("configuration_set", "smoke")
+    ).strip().casefold()
+    dataset = benchmark.get("dataset", {})
+    backends = benchmark.get("backends", [])
+    backend_types = (
+        [str(item.get("type", "")).casefold() for item in backends]
+        if isinstance(backends, list) and all(isinstance(item, dict) for item in backends)
+        else []
+    )
+    backend_names = (
+        [str(item.get("name", "")).strip() for item in backends]
+        if isinstance(backends, list) and all(isinstance(item, dict) for item in backends)
+        else []
+    )
+    baseline = str(benchmark.get("baseline_backend", "")).strip()
+
+    checks = [
+        {
+            "name": "single_component",
+            "status": "passed" if len(components) == 1 else "failed",
+            "expected": 1,
+            "actual": len(components),
+        },
+        {
+            "name": "rigid_framework",
+            "status": "passed" if framework == "rigid" else "failed",
+            "expected": "rigid",
+            "actual": framework,
+        },
+        {
+            "name": "configuration_set",
+            "status": (
+                "passed"
+                if configuration_set in {"smoke", "widom"}
+                else "failed"
+            ),
+            "expected": "smoke or widom",
+            "actual": configuration_set,
+        },
+        {
+            "name": "potential_backends",
+            "status": (
+                "passed"
+                if len(backends) >= 2
+                and set(backend_types) <= {"classical_lammps", "mace_mp"}
+                and len(set(backend_names)) == len(backend_names)
+                and all(backend_names)
+                else "failed"
+            ),
+            "expected": "at least two uniquely named classical_lammps/mace_mp backends",
+            "actual": backend_names,
+        },
+        {
+            "name": "baseline_backend",
+            "status": "passed" if baseline in backend_names else "failed",
+            "expected": "one configured backend name",
+            "actual": baseline,
+        },
+    ]
+    if configuration_set == "widom":
+        sample_count = dataset.get("sample_count") if isinstance(dataset, dict) else None
+        seed = dataset.get("seed") if isinstance(dataset, dict) else None
+        minimum_distance = (
+            dataset.get("minimum_distance_A", 0.0)
+            if isinstance(dataset, dict)
+            else None
+        )
+        random_orientations = (
+            dataset.get("random_orientations", True)
+            if isinstance(dataset, dict)
+            else None
+        )
+        maximum_attempts = (
+            dataset.get("maximum_attempts_per_sample", 10_000)
+            if isinstance(dataset, dict)
+            else None
+        )
+        checks.append(
+            {
+                "name": "widom_dataset",
+                "status": (
+                    "passed"
+                    if isinstance(dataset, dict)
+                    and isinstance(sample_count, int)
+                    and not isinstance(sample_count, bool)
+                    and sample_count > 0
+                    and isinstance(seed, int)
+                    and not isinstance(seed, bool)
+                    and seed > 0
+                    and isinstance(minimum_distance, (int, float))
+                    and not isinstance(minimum_distance, bool)
+                    and minimum_distance >= 0.0
+                    and isinstance(random_orientations, bool)
+                    and isinstance(maximum_attempts, int)
+                    and not isinstance(maximum_attempts, bool)
+                    and maximum_attempts > 0
+                    else "failed"
+                ),
+                "expected": (
+                    "positive sample_count and seed, non-negative "
+                    "minimum_distance_A, positive maximum_attempts_per_sample, "
+                    "boolean random_orientations"
+                ),
+                "actual": dataset,
+            }
+        )
+    failed = [check for check in checks if check["status"] == "failed"]
+    if failed:
+        return {
+            "status": "unsupported",
+            "current_module_capability": "invalid_potential_benchmark_configuration",
+            "can_attempt_simulation": False,
+            "requires_user_confirmation": False,
+            "recommended_module": "C",
+            "checks": checks,
+            "reason": "The static Module C potential benchmark configuration is invalid.",
+        }
+    return {
+        "status": "supported",
+        "current_module_capability": "module_c_static_potential_comparison",
+        "can_attempt_simulation": True,
+        "requires_user_confirmation": False,
+        "recommended_module": "C",
+        "checks": checks,
+        "reason": "The static Module C potential comparison is executable.",
     }
 
 

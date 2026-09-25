@@ -92,13 +92,16 @@ def build_adsorbate_configuration(
 def evaluate_interaction(
     configuration: InteractionConfiguration,
     backend: PotentialBackend,
+    *,
+    framework_result: PotentialResult | None = None,
 ) -> InteractionResult:
     """Evaluate combined and isolated systems and subtract their results."""
     framework_configuration = build_framework_configuration(configuration)
     adsorbate_configuration = build_adsorbate_configuration(configuration)
 
     combined_result = backend.evaluate(configuration)
-    framework_result = backend.evaluate(framework_configuration)
+    if framework_result is None:
+        framework_result = backend.evaluate(framework_configuration)
     adsorbate_result = backend.evaluate(adsorbate_configuration)
 
     _validate_force_count(
@@ -193,6 +196,7 @@ def _build_component_configuration(
         region=configuration.region,
         source=configuration.source,
         bonds=remapped_bonds,
+        metadata=dict(configuration.metadata),
     )
 
 
