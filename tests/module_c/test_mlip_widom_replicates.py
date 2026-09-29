@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import struct
 import tempfile
 import unittest
 
@@ -57,7 +58,9 @@ class WidomReplicateTests(unittest.TestCase):
             "adsorbate": "CO2",
             "temperature_K": 298.15,
             "seed": seed,
-            "attempts": 10000,
+            "attempts": 4,
+            "framework_volume_A3": 1000.0,
+            "framework_mass_amu": 12.0,
             "model": {
                 "backend": "mace-torch",
                 "name": "mace_mp_small",
@@ -69,6 +72,21 @@ class WidomReplicateTests(unittest.TestCase):
                 "henry_coefficient_mmol_g_bar": henry,
                 "isosteric_heat_zero_loading_kj_mol": qst,
             },
+            "uncertainty": {
+                "block_size_attempts": 2,
+            },
+            "convergence": [
+                {
+                    "attempts": 2,
+                    "henry_coefficient_mmol_g_bar": henry,
+                    "isosteric_heat_zero_loading_kj_mol": qst,
+                },
+                {
+                    "attempts": 4,
+                    "henry_coefficient_mmol_g_bar": henry,
+                    "isosteric_heat_zero_loading_kj_mol": qst,
+                },
+            ],
         }
         plan = {
             "convergence": {
@@ -80,6 +98,14 @@ class WidomReplicateTests(unittest.TestCase):
             json.dumps(result), encoding="utf-8"
         )
         (run / "run_plan.json").write_text(json.dumps(plan), encoding="utf-8")
+        log_directory = run / "engine" / "mlip_mc" / "widom"
+        log_directory.mkdir(parents=True)
+        with (log_directory / "log_widom.bin").open("wb") as handle:
+            for trial in (1, 3):
+                handle.write(struct.pack("iddi", trial, 0.0, 0.0, 1))
+                handle.write(struct.pack("i", 6))
+                handle.write(struct.pack("3d", 0.0, 0.0, 0.0))
+                handle.write(struct.pack("9d", *([0.0] * 9)))
 
 
 if __name__ == "__main__":

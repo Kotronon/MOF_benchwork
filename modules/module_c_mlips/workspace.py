@@ -21,11 +21,13 @@ def initialize_workspace(
     directory: Path,
     run_plan: dict[str, Any],
 ) -> None:
-    if directory.exists() and not run_plan["outputs"].get("overwrite", True):
-        raise FileExistsError(
-            f"Working directory already exists: {directory}. "
-            "Use a new output.run_id or enable output.overwrite."
-        )
+    if directory.exists():
+        if not run_plan["outputs"].get("overwrite", True):
+            raise FileExistsError(
+                f"Working directory already exists: {directory}. "
+                "Use a new output.run_id or enable output.overwrite."
+            )
+        shutil.rmtree(directory)
     for child in (
         directory,
         directory / "source" / "framework",

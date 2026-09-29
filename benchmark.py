@@ -77,7 +77,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Do not refresh generated capability registries before planning.",
     )
     parser.add_argument("--new-run", action="store_true", help="Write outputs to a timestamped run directory.")
-    parser.add_argument("--no-overwrite", action="store_true", help="Fail if the target working directory already exists.")
+    overwrite_group = parser.add_mutually_exclusive_group()
+    overwrite_group.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace an existing run directory before starting.",
+    )
+    overwrite_group.add_argument(
+        "--no-overwrite",
+        action="store_true",
+        help="Fail if the target working directory already exists.",
+    )
     parser.add_argument("--resume", action="store_true", help="Reuse completed pressure-point results in an existing run directory.")
     parser.add_argument("--jobs", type=int, default=1, help="Number of pressure-point LAMMPS jobs to run in parallel.")
     parser.add_argument(
@@ -96,7 +106,9 @@ def main(argv: list[str] | None = None) -> int:
         config.setdefault("simulation", {})["kspace_style"] = args.kspace_style
     if args.kspace_accuracy is not None:
         config.setdefault("simulation", {})["kspace_accuracy"] = args.kspace_accuracy
-    if args.no_overwrite:
+    if args.overwrite:
+        config.setdefault("output", {})["overwrite"] = True
+    elif args.no_overwrite:
         config.setdefault("output", {})["overwrite"] = False
     if args.resume:
         config.setdefault("output", {})["resume"] = True

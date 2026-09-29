@@ -16,6 +16,7 @@ import numpy as np
 
 from analysis.mlip_widom import (
     analyze_widom_attempts,
+    read_widom_attempt_trace,
     summarize_widom_samples,
     widom_thermodynamic_metrics,
     write_widom_analysis,
@@ -109,13 +110,12 @@ def run_mlip_mc_widom(
     )
 
     trial_log_path = output / "log_widom.bin"
-    trial_records = _read_widom_trial_log(trial_log_path)
     analysis = None
     analysis_files: dict[str, str] = {}
     trace_status = "unavailable"
-    if trial_records:
-        attempt_energies = _reconstruct_widom_attempts(
-            trial_records,
+    if trial_log_path.is_file():
+        attempt_energies = read_widom_attempt_trace(
+            trial_log_path,
             attempts=attempts,
         )
         trace_status = "ordered_binary_log"
@@ -352,60 +352,6 @@ def _read_gcmc_transition_log(path: Path) -> list[dict[str, float | int]]:
                 }
             )
     return records
-
-
-def _read_widom_trial_log(path: Path) -> list[dict[str, float | int]]:
-    """Read valid Widom insertions and their original trial indices."""
-    if not path.exists():
-        return []
-    header_format = "iddi"
-    header_size = struct.calcsize(header_format)
-    records = []
-    with path.open("rb") as handle:
-        while True:
-            payload = handle.read(header_size)
-            if not payload:
-                break
-            if len(payload) != header_size:
-                raise ValueError(f"Incomplete MLIP-MC Widom log record in {path}.")
-            trial, adsorption_energy, total_energy, atom_count = struct.unpack(
-                header_format,
-                payload,
-            )
-            if atom_count <= 0:
-                raise ValueError(f"Invalid atom count in MLIP-MC Widom log {path}.")
-            skip_bytes = atom_count * 4 + atom_count * 3 * 8 + 9 * 8
-            skipped = handle.read(skip_bytes)
-            if len(skipped) != skip_bytes:
-                raise ValueError(f"Incomplete MLIP-MC Widom structure in {path}.")
-            records.append(
-                {
-                    "trial": int(trial),
-                    "adsorption_energy_ev": float(adsorption_energy),
-                    "total_energy_ev": float(total_energy),
-                    "atom_count": int(atom_count),
-                }
-            )
-    return records
-
-
-def _reconstruct_widom_attempts(
-    records: list[dict[str, float | int]],
-    *,
-    attempts: int,
-) -> list[float | None]:
-    """Restore valid energies and zero-weight overlaps in trial order."""
-    reconstructed: list[float | None] = [None] * attempts
-    for record in records:
-        trial = int(record["trial"])
-        if trial <= 0 or trial > attempts:
-            raise ValueError(
-                f"MLIP-MC Widom trial {trial} is outside 1..{attempts}."
-            )
-        if reconstructed[trial - 1] is not None:
-            raise ValueError(f"Duplicate MLIP-MC Widom trial {trial}.")
-        reconstructed[trial - 1] = float(record["adsorption_energy_ev"])
-    return reconstructed
 
 
 def _reconstruct_gcmc_samples(

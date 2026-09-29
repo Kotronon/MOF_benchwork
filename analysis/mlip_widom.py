@@ -6,6 +6,7 @@ import csv
 from math import exp, isfinite, log, sqrt
 from pathlib import Path
 from statistics import fmean, stdev
+import struct
 from typing import Any
 
 import numpy as np
@@ -261,6 +262,48 @@ def write_widom_analysis(
     return files
 
 
+def read_widom_attempt_trace(
+    path: str | Path,
+    *,
+    attempts: int,
+) -> list[float | None]:
+    """Restore ordered valid energies and overlap rejections from MLIP-MC."""
+    log_path = Path(path)
+    if not log_path.is_file():
+        raise FileNotFoundError(f"Missing MLIP-MC Widom trial log: {log_path}")
+    if attempts <= 0:
+        raise ValueError("attempts must be positive.")
+
+    header_format = "iddi"
+    header_size = struct.calcsize(header_format)
+    reconstructed: list[float | None] = [None] * attempts
+    with log_path.open("rb") as handle:
+        while True:
+            payload = handle.read(header_size)
+            if not payload:
+                break
+            if len(payload) != header_size:
+                raise ValueError(f"Incomplete MLIP-MC Widom log record in {log_path}.")
+            trial, adsorption_energy, _total_energy, atom_count = struct.unpack(
+                header_format,
+                payload,
+            )
+            if atom_count <= 0:
+                raise ValueError(f"Invalid atom count in MLIP-MC Widom log {log_path}.")
+            skip_bytes = atom_count * 4 + atom_count * 3 * 8 + 9 * 8
+            skipped = handle.read(skip_bytes)
+            if len(skipped) != skip_bytes:
+                raise ValueError(f"Incomplete MLIP-MC Widom structure in {log_path}.")
+            if trial <= 0 or trial > attempts:
+                raise ValueError(
+                    f"MLIP-MC Widom trial {trial} is outside 1..{attempts}."
+                )
+            if reconstructed[trial - 1] is not None:
+                raise ValueError(f"Duplicate MLIP-MC Widom trial {trial}.")
+            reconstructed[trial - 1] = float(adsorption_energy)
+    return reconstructed
+
+
 def _metrics_for_attempts(
     attempts: list[float | None],
     *,
@@ -337,12 +380,23 @@ def _block_uncertainty(
             ),
             "contributing_block_count": len(values),
         }
+    block_rows = [
+        {
+            "block_index": index + 1,
+            "start_attempt": index * block_size + 1,
+            "end_attempt": (index + 1) * block_size,
+            "valid_insertions": int(metrics["valid_energy_count"]),
+            **{name: metrics[name] for name in metric_names},
+        }
+        for index, metrics in enumerate(block_metrics)
+    ]
     return {
         "method": "non_overlapping_block_sem",
         "block_size_attempts": block_size,
         "complete_block_count": complete_block_count,
         "discarded_tail_attempts": len(attempts) - complete_block_count * block_size,
         "metrics": metric_uncertainty,
+        "blocks": block_rows,
     }
 
 
