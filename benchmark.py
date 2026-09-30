@@ -21,9 +21,13 @@ from pipeline.registry_generation import write_generated_registries
 from pipeline.runners import run_benchmark, run_isotherm
 from pipeline.variants import build_variant_plans, run_variant_benchmark
 from modules.module_c_mlips.workflow import run_potential_benchmark
-from modules.module_c_mlips.dependencies import ensure_mlip_mc_dependencies
+from modules.module_c_mlips.dependencies import (
+    ensure_mlip_mc_dependencies,
+    ensure_torch_dftd,
+)
 from modules.module_c_mlips.mlip_mc_workflow import run_mlip_mc_benchmark
 from modules.module_c_mlips.model_assets import ensure_model_asset
+from modules.module_c_mlips.datasets import ensure_golddac_dataset
 from modules.module_c_mlips.potential_backends.calculators import build_ase_calculator
 
 def main(argv: list[str] | None = None) -> int:
@@ -54,6 +58,11 @@ def main(argv: list[str] | None = None) -> int:
         "--setup-mlip-mc",
         action="store_true",
         help="Install and verify the configured MLIP-MC backend, then exit.",
+    )
+    parser.add_argument(
+        "--setup-golddac",
+        action="store_true",
+        help="Download and verify GoldDAC plus configured static MACE assets, then exit.",
     )
     parser.add_argument(
         "--install-missing",
@@ -116,6 +125,10 @@ def main(argv: list[str] | None = None) -> int:
     if not args.skip_registry_update:
         write_generated_registries(args.registry_output_dir)
     run_plan = build_run_plan(config)
+    if args.setup_golddac:
+        result = _setup_golddac_benchmark(run_plan)
+        print(json.dumps(result, indent=2))
+        return 0
     if args.setup_mlip_mc:
         backend = _configured_mlip_mc_backend(run_plan)
         status = ensure_mlip_mc_dependencies(
@@ -298,6 +311,60 @@ def _configured_mlip_mc_model(run_plan: dict) -> dict:
     if not isinstance(model, dict):
         raise TypeError("'benchmark.potential_benchmark.mlip_mc.model' must be an object.")
     return model
+
+
+def _setup_golddac_benchmark(run_plan: dict) -> dict:
+    settings = run_plan.get("benchmark", {}).get("potential_benchmark", {})
+    if not isinstance(settings, dict) or str(
+        settings.get("configuration_set", "")
+    ).casefold() != "golddac":
+        raise ValueError(
+            "--setup-golddac requires a Module C configuration with "
+            "configuration_set='golddac'."
+        )
+    dataset = settings.get("dataset", {})
+    if not isinstance(dataset, dict):
+        raise TypeError("'benchmark.potential_benchmark.dataset' must be an object.")
+    dataset_root = dataset.get("path") or dataset.get(
+        "root",
+        "external/datasets/golddac",
+    )
+    dataset_status = ensure_golddac_dataset(
+        dataset_root,
+        download_missing=True,
+    )
+
+    model_assets = []
+    dependency_status = None
+    dispersion_status = None
+    for specification in settings.get("backends", []):
+        if not isinstance(specification, dict):
+            continue
+        backend_type = str(specification.get("type", "")).casefold()
+        if backend_type == "mace_mp":
+            if dependency_status is None:
+                dependency_status = ensure_mlip_mc_dependencies(
+                    "mace-torch",
+                    install_missing=True,
+                ).to_dict()
+            if (
+                bool(specification.get("dispersion", False))
+                and dispersion_status is None
+            ):
+                dispersion_status = ensure_torch_dftd(install_missing=True)
+            if isinstance(specification.get("asset"), dict):
+                model_assets.append(
+                    ensure_model_asset(specification, download_missing=True)
+                )
+            build_ase_calculator(specification)
+
+    return {
+        "status": "ready",
+        "dataset": dataset_status,
+        "dependencies": dependency_status,
+        "dispersion_dependency": dispersion_status,
+        "model_assets": model_assets,
+    }
 
 
 if __name__ == "__main__":

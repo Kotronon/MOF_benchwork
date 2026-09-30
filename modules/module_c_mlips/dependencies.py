@@ -155,6 +155,45 @@ def ensure_mlip_mc_dependencies(
     return refreshed
 
 
+def ensure_torch_dftd(*, install_missing: bool = False) -> dict[str, Any]:
+    """Ensure the D3 calculator used by dispersion-enabled MACE runs exists."""
+    module = "torch_dftd"
+    specification = "torch-dftd"
+    available = _module_available(module)
+    if available:
+        return {
+            "module": module,
+            "available": True,
+            "install_specification": specification,
+            "python_executable": sys.executable,
+        }
+    command = [sys.executable, "-m", "pip", "install", specification]
+    if not install_missing:
+        raise ImportError(
+            "D3 dispersion requires torch-dftd. Install it in the active "
+            "environment with:\n" + " ".join(command)
+        )
+    completed = subprocess.run(command, capture_output=True, text=True)
+    if completed.returncode != 0:
+        details = (completed.stderr or completed.stdout).strip()
+        raise RuntimeError(
+            "Automatic torch-dftd installation failed using the active "
+            f"interpreter {sys.executable}.\n{details}"
+        )
+    importlib.invalidate_caches()
+    if not _module_available(module):
+        raise RuntimeError(
+            "pip completed, but torch_dftd is still unavailable in the "
+            f"active interpreter {sys.executable}."
+        )
+    return {
+        "module": module,
+        "available": True,
+        "install_specification": specification,
+        "python_executable": sys.executable,
+    }
+
+
 def _install_specification(backend: str, *, include_backend: bool) -> str:
     if backend == "nequip" and include_backend:
         return (

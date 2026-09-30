@@ -4,12 +4,15 @@ from .lammps_dump import (
     load_lammps_dump_configuration,
     parse_lammps_forcefield_type_map,
 )
+from .golddac import ensure_golddac_dataset, load_golddac_configurations
 from .smoke import build_smoke_configurations
 from .widom import build_widom_configurations
 
 __all__ = [
     "build_smoke_configurations",
     "build_widom_configurations",
+    "ensure_golddac_dataset",
+    "load_golddac_configurations",
     "load_lammps_dump_configuration",
     "parse_lammps_forcefield_type_map",
 ]

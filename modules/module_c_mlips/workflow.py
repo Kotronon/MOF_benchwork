@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +10,10 @@ from analysis.potential_report import create_potential_report
 from modules.module_c_mlips.datasets import (
     build_smoke_configurations,
     build_widom_configurations,
+    ensure_golddac_dataset,
+    load_golddac_configurations,
 )
+from modules.module_c_mlips.model_assets import ensure_model_asset
 from modules.module_c_mlips.models import InteractionConfiguration
 from modules.module_c_mlips.potential_backends.base import PotentialBackend
 from modules.module_c_mlips.potential_backends.classical_lammps import (
@@ -20,6 +24,7 @@ from modules.module_c_mlips.potential_backends.nequip import NequipBackend
 from modules.module_c_mlips.runner import run_potential_comparison
 from modules.module_c_mlips.workspace import (
     configure_runtime_cache as _configure_runtime_cache,
+    copy_file as _copy_file,
     initialize_workspace as _initialize_workspace,
     snapshot_sources as _snapshot_sources,
     working_directory as _working_directory,
@@ -71,6 +76,12 @@ def run_potential_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
         component,
         forcefield,
     )
+    dataset_provenance = _snapshot_dataset_provenance(
+        settings,
+        working_directory / "source" / "dataset",
+    )
+    if dataset_provenance is not None:
+        source_files["dataset_manifest"] = dataset_provenance["snapshot_path"]
     excluded_regions = set(
         settings.get("exclude_regions", ["technical_repulsive_probe"])
     )
@@ -94,12 +105,16 @@ def run_potential_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
     baseline_backend = str(
         settings.get("baseline_backend", backends[0].name)
     )
+    reference_baseline = baseline_backend not in {
+        backend.name for backend in backends
+    }
     output_path = working_directory / "results" / "potential_comparison.json"
 
     report = run_potential_comparison(
         configurations,
         backends,
         baseline_backend=baseline_backend,
+        reference_baseline=reference_baseline,
         output_path=output_path,
     )
     report.update(
@@ -107,6 +122,12 @@ def run_potential_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
             "working_directory": str(working_directory),
             "source_files": source_files,
             "configuration_manifest": configuration_manifest,
+            "dataset_provenance": dataset_provenance,
+            "benchmark_protocol": (
+                "golddac_dft_reference"
+                if reference_baseline
+                else "backend_parity"
+            ),
         }
     )
     report["analysis"] = create_potential_report(
@@ -114,6 +135,7 @@ def run_potential_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
         working_directory / "reports",
         save_csv=bool(run_plan["outputs"].get("save_csv", True)),
         save_plots=bool(run_plan["outputs"].get("save_plots", True)),
+        acceptance_thresholds=settings.get("acceptance_thresholds"),
     )
     save_benchmark_data(output_path, report)
     return report
@@ -160,9 +182,29 @@ def _build_configurations(
             random_orientations=dataset.get("random_orientations", True),
             **common_arguments,
         )
+    if configuration_set == "golddac":
+        dataset = settings.get("dataset", {})
+        if not isinstance(dataset, dict):
+            raise TypeError("'benchmark.potential_benchmark.dataset' must be an object.")
+        root = dataset.get("path") or dataset.get(
+            "root",
+            "external/datasets/golddac",
+        )
+        dataset_path = Path(root).expanduser()
+        if dataset_path.suffix.casefold() != ".xyz":
+            ensure_golddac_dataset(dataset_path, download_missing=False)
+        return load_golddac_configurations(
+            dataset_path,
+            split=str(dataset.get("split", "test")),
+            adsorbates=dataset.get("adsorbates", [component]),
+            materials=dataset.get("materials"),
+            regions=dataset.get("regions"),
+            max_configurations=dataset.get("max_configurations"),
+            seed=int(dataset.get("seed", 12345)),
+        )
     raise ValueError(
         "Unsupported Module C configuration_set "
-        f"{configuration_set!r}; expected 'smoke' or 'widom'."
+        f"{configuration_set!r}; expected 'smoke', 'widom', or 'golddac'."
     )
 
 
@@ -171,8 +213,8 @@ def _build_backends(
     run_plan: dict[str, Any],
     backend_directory: Path,
 ) -> list[PotentialBackend]:
-    if not isinstance(backend_specs, list) or len(backend_specs) < 2:
-        raise ValueError("At least two potential backend definitions are required.")
+    if not isinstance(backend_specs, list) or not backend_specs:
+        raise ValueError("At least one potential backend definition is required.")
 
     forcefield = run_plan["resources"]["forcefield"]
     backends: list[PotentialBackend] = []
@@ -211,6 +253,8 @@ def _build_backends(
                 )
             )
         elif backend_type == "mace_mp":
+            if isinstance(specification.get("asset"), dict):
+                ensure_model_asset(specification, download_missing=False)
             backends.append(
                 MaceBackend(
                     backend_name=backend_name,
@@ -305,3 +349,31 @@ def _safe_name(value: str) -> str:
         for character in value
     ).strip("._")
     return name or "configuration"
+
+
+def _snapshot_dataset_provenance(
+    settings: dict[str, Any],
+    destination: Path,
+) -> dict[str, Any] | None:
+    if str(settings.get("configuration_set", "")).casefold() != "golddac":
+        return None
+    dataset = settings.get("dataset", {})
+    if not isinstance(dataset, dict):
+        return None
+    root = Path(
+        dataset.get("path")
+        or dataset.get("root", "external/datasets/golddac")
+    ).expanduser()
+    if root.suffix.casefold() == ".xyz":
+        return {
+            "dataset": "GoldDAC",
+            "version": "v3",
+            "doi": "10.6084/m9.figshare.27978474.v3",
+            "test_path": str(root),
+            "snapshot_path": None,
+        }
+    manifest_path = root / "dataset_manifest.json"
+    with manifest_path.open("r", encoding="utf-8") as handle:
+        provenance = json.load(handle)
+    snapshot = _copy_file(manifest_path, destination)
+    return {**provenance, "snapshot_path": str(snapshot)}

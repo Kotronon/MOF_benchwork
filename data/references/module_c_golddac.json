@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "benchmark": "GoldDAC host-guest interaction validation",
+  "reference_hierarchy": [
+    "held-out GoldDAC DFT interaction energies and combined-system forces",
+    "adsorption-specific MACE-DAC-1 candidate",
+    "universal MACE-MP baseline",
+    "downstream Widom and experimental adsorption references"
+  ],
+  "dataset": {
+    "name": "GoldDAC",
+    "version": "v3",
+    "doi": "10.6084/m9.figshare.27978474.v3",
+    "license": "CC BY 4.0",
+    "archive_url": "https://ndownloader.figshare.com/files/51021315",
+    "archive_md5": "695824c1088bb0b3b9a7018bac1165a1",
+    "benchmark_split": "test",
+    "test_configuration_count": 312,
+    "test_mof_count": 26,
+    "adsorbates": ["CO2", "H2O"],
+    "interaction_regions": ["repulsive", "equilibrium", "weak_attraction"],
+    "training_splits_are_reference_forbidden": ["train", "val"]
+  },
+  "protocol": {
+    "interaction_energy": "E_total - E_MOF - E_gas",
+    "force_target": "DFT forces on the combined MOF-guest system",
+    "dispersion": "D3 enabled for the configured MACE candidates",
+    "primary_metrics": [
+      "interaction_energy_mae_ev",
+      "interaction_energy_rmse_ev",
+      "combined_force_mae_ev_per_angstrom",
+      "combined_force_rmse_ev_per_angstrom"
+    ]
+  },
+  "models": [
+    {
+      "name": "MACE-MP-0a medium + D3",
+      "role": "universal baseline",
+      "model_release": "mace_mp_0",
+      "model_file": "2023-12-03-mace-128-L1_epoch-199.model",
+      "model_sha256": "01bfe22100139f424713cf921144e5509cbe353d67aa9fa1be9c6e1e0ed35845"
+    },
+    {
+      "name": "MACE-DAC-1 + D3",
+      "role": "adsorption-specific candidate",
+      "paper_doi": "10.1016/j.matt.2025.102203",
+      "repository": "https://github.com/hspark1212/DAC-SIM",
+      "repository_commit": "f48c6a02066f1ed853ed7dab3908a624355c1455",
+      "model_sha256": "6c31634523ce89f843f8286ebcf841d9a18ab3f2cb505bd52ca1e3e189c34791"
+    }
+  ],
+  "benchmark_reference": {
+    "title": "MOFSimBench: evaluating universal machine learning interatomic potentials in metal-organic framework molecular modeling",
+    "doi": "10.1038/s41524-025-01872-3",
+    "repository": "https://github.com/AI4ChemS/mofsim-bench"
+  }
+}

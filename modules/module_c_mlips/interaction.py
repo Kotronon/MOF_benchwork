@@ -24,8 +24,14 @@ class InteractionResult:
     combined: PotentialResult
     framework: PotentialResult
     adsorbate: PotentialResult
+    force_comparison_mode: str = "interaction"
 
     def __post_init__(self) -> None:
+        if self.force_comparison_mode not in {"interaction", "combined_total"}:
+            raise ValueError(
+                "force_comparison_mode must be 'interaction' or "
+                "'combined_total'."
+            )
         if not isfinite(self.interaction_energy_ev):
             raise ValueError("interaction_energy_ev must be finite.")
         if len(self.interaction_forces_ev_per_angstrom) != len(
@@ -52,6 +58,13 @@ class InteractionResult:
             + self.adsorbate.runtime_seconds
         )
 
+    @property
+    def comparison_forces_ev_per_angstrom(self) -> list[list[float]]:
+        """Return the force quantity required by the benchmark protocol."""
+        if self.force_comparison_mode == "combined_total":
+            return self.combined.forces_ev_per_angstrom
+        return self.interaction_forces_ev_per_angstrom
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "configuration_id": self.configuration_id,
@@ -59,6 +72,10 @@ class InteractionResult:
             "interaction_energy_ev": self.interaction_energy_ev,
             "interaction_forces_ev_per_angstrom": (
                 self.interaction_forces_ev_per_angstrom
+            ),
+            "force_comparison_mode": self.force_comparison_mode,
+            "comparison_forces_ev_per_angstrom": (
+                self.comparison_forces_ev_per_angstrom
             ),
             "runtime_seconds": self.runtime_seconds,
             "combined": self.combined.to_dict(),
@@ -94,6 +111,7 @@ def evaluate_interaction(
     backend: PotentialBackend,
     *,
     framework_result: PotentialResult | None = None,
+    force_comparison_mode: str = "interaction",
 ) -> InteractionResult:
     """Evaluate combined and isolated systems and subtract their results."""
     framework_configuration = build_framework_configuration(configuration)
@@ -150,6 +168,66 @@ def evaluate_interaction(
         combined=combined_result,
         framework=framework_result,
         adsorbate=adsorbate_result,
+        force_comparison_mode=force_comparison_mode,
+    )
+
+
+def build_reference_interaction_result(
+    configuration: InteractionConfiguration,
+    *,
+    backend_name: str,
+) -> InteractionResult:
+    """Build an immutable benchmark baseline from stored reference values."""
+    energy = configuration.reference_interaction_energy_ev
+    forces = configuration.reference_forces_ev_per_angstrom
+    if energy is None or forces is None:
+        raise ValueError(
+            f"Configuration {configuration.configuration_id!r} does not "
+            "contain reference energy and force values."
+        )
+
+    metadata = configuration.metadata
+    total_energy = float(metadata.get("reference_total_energy_ev", energy))
+    framework_energy = float(metadata.get("reference_framework_energy_ev", 0.0))
+    adsorbate_energy = float(metadata.get("reference_adsorbate_energy_ev", 0.0))
+    zero_framework_forces = [
+        [0.0, 0.0, 0.0] for _ in configuration.framework_indices
+    ]
+    zero_adsorbate_forces = [
+        [0.0, 0.0, 0.0] for _ in configuration.adsorbate_indices
+    ]
+    reference_metadata = {
+        "source": configuration.source,
+        "independent_reference": True,
+        "configuration_id": configuration.configuration_id,
+    }
+
+    return InteractionResult(
+        configuration_id=configuration.configuration_id,
+        backend=backend_name,
+        interaction_energy_ev=float(energy),
+        interaction_forces_ev_per_angstrom=[force.copy() for force in forces],
+        combined=PotentialResult(
+            energy_ev=total_energy,
+            forces_ev_per_angstrom=[force.copy() for force in forces],
+            runtime_seconds=0.0,
+            metadata=reference_metadata,
+        ),
+        framework=PotentialResult(
+            energy_ev=framework_energy,
+            forces_ev_per_angstrom=zero_framework_forces,
+            runtime_seconds=0.0,
+            metadata=reference_metadata,
+        ),
+        adsorbate=PotentialResult(
+            energy_ev=adsorbate_energy,
+            forces_ev_per_angstrom=zero_adsorbate_forces,
+            runtime_seconds=0.0,
+            metadata=reference_metadata,
+        ),
+        force_comparison_mode=str(
+            metadata.get("reference_force_mode", "interaction")
+        ),
     )
 
 

@@ -46,8 +46,25 @@ def ensure_model_asset(
     if not download_missing:
         raise FileNotFoundError(
             f"Model file does not exist: {model_path}. Run the benchmark with "
-            "--setup-mlip-mc or --run-mlip-mc --install-missing to download "
-            "the configured model asset."
+            "--setup-mlip-mc, --setup-golddac, or the corresponding "
+            "--install-missing workflow to download the configured model asset."
+        )
+
+    direct_url = str(asset.get("url", "")).strip()
+    if direct_url:
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path = model_path.with_suffix(model_path.suffix + ".part")
+        try:
+            _download(direct_url, temporary_path)
+            temporary_path.replace(model_path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
+        return _finalize_model_asset(
+            model_path,
+            expected_sha256=expected_sha256,
+            source_url=direct_url,
+            archive_member=model_path.name,
+            transfer_mode="direct_download",
         )
 
     archive_url = str(asset.get("archive_url", "")).strip()

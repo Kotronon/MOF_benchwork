@@ -6,6 +6,7 @@ https://github.com/acesuit/mace
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from importlib import metadata as package_metadata
 from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
@@ -80,6 +81,8 @@ class MaceBackend(PotentialBackend):
                 "dispersion": self.dispersion,
                 "atom_count": len(atoms),
                 "model_load_seconds": self._model_load_seconds,
+                "mace_torch_version": _package_version("mace-torch"),
+                "torch_version": _package_version("torch"),
             },
         )
 
@@ -100,3 +103,10 @@ class MaceBackend(PotentialBackend):
         )
         self._model_load_seconds = perf_counter() - started
         return self.calculator
+
+
+def _package_version(distribution: str) -> str | None:
+    try:
+        return package_metadata.version(distribution)
+    except package_metadata.PackageNotFoundError:
+        return None

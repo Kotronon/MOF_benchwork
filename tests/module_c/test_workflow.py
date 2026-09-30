@@ -22,6 +22,9 @@ CONFIG_PATH = (
 WIDOM_CONFIG_PATH = (
     "input_json_files/benchmark_mof5_co2_potentials_widom_pilot.json"
 )
+GOLDDAC_CONFIG_PATH = (
+    "input_json_files/benchmark_golddac_co2_mace_models_smoke.json"
+)
 
 
 class PotentialWorkflowTests(unittest.TestCase):
@@ -50,6 +53,16 @@ class PotentialWorkflowTests(unittest.TestCase):
         checks = {check["name"]: check for check in applicability["checks"]}
         self.assertEqual(checks["configuration_set"]["actual"], "widom")
         self.assertEqual(checks["widom_dataset"]["status"], "passed")
+
+    def test_golddac_config_uses_independent_dft_baseline(self) -> None:
+        run_plan = build_run_plan(load_benchmark_data(GOLDDAC_CONFIG_PATH))
+
+        applicability = run_plan["benchmark"]["applicability"]
+        settings = run_plan["benchmark"]["potential_benchmark"]
+        checks = {check["name"]: check for check in applicability["checks"]}
+        self.assertEqual(applicability["status"], "supported")
+        self.assertEqual(settings["baseline_backend"], "dft_golddac")
+        self.assertEqual(checks["golddac_dataset"]["status"], "passed")
 
     def test_backend_factory_builds_named_classical_and_mace_backends(self) -> None:
         run_plan = build_run_plan(load_benchmark_data(CONFIG_PATH))

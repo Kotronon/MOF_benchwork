@@ -2,3 +2,5 @@
 # Install a backend extra through benchmark.py --setup-mlip-mc or explicitly,
 # for example: python -m pip install "mlip-mc[mace-torch]==0.1.3"
 mlip-mc==0.1.3
+# Required by dispersion-enabled MACE-MP/MACE-DAC comparisons.
+torch-dftd

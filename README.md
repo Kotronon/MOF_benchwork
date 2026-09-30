@@ -8,6 +8,49 @@ conda activate MOF_sim
 
 ## Module C with MLIP-MC
 
+### GoldDAC DFT validation gate
+
+Before running long Widom or GCMC calculations, validate the potential on the
+held-out GoldDAC test set used by MOFSimBench. The integrated task compares
+MACE-MP and MACE-DAC-1 against DFT interaction energies and combined-system
+forces. It never uses the GoldDAC train or validation splits as benchmark
+references.
+
+On a network-enabled cluster login node, install the active-environment
+dependencies and download the checksummed GoldDAC v3 data and MACE-DAC-1
+checkpoint:
+
+```bash
+conda activate MOF_sim
+bash scripts/run_module_c_golddac_benchmark.sh setup
+```
+
+Then run the balanced six-configuration gate and inspect its automatically
+generated JSON, CSV, and plot:
+
+```bash
+bash scripts/run_module_c_golddac_benchmark.sh smoke
+```
+
+Only after the smoke result is technically sound should the complete CO2
+test subset be evaluated:
+
+```bash
+bash scripts/run_module_c_golddac_benchmark.sh production
+```
+
+Results are written below
+`outputs/module_C_potential_benchmark/runs/golddac_co2_*`. The aggregate JSON
+reports MAE/RMSE globally, by potential-energy region, and by MOF. GoldDAC v3
+is downloaded from [DAC-SIM](https://doi.org/10.6084/m9.figshare.27978474.v3),
+and the protocol follows
+[MOFSimBench](https://doi.org/10.1038/s41524-025-01872-3). The model checkpoint
+is pinned to a DAC-SIM Git commit and verified by SHA-256.
+
+This static DFT test diagnoses potential quality. Passing it does not by
+itself validate Henry coefficients, adsorption heats, or isotherms; those
+remain separate downstream sampling tests.
+
 The MLIP-MC integration uses the active Python environment. It does not create
 or switch to another environment. The selected backend is read explicitly from
 the benchmark JSON, so installing multiple supported calculators does not

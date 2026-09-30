@@ -46,6 +46,30 @@ class PotentialReportTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0]["minimum_host_guest_distance_A"], "1.8")
 
+    def test_labels_independent_reference_and_applies_configured_gate(self) -> None:
+        report = {
+            "baseline_source": "configuration_reference",
+            "configurations": [self.configuration("sample", 1.0, 1.1, 2.0)],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifacts = create_potential_report(
+                report,
+                tmpdir,
+                save_csv=False,
+                save_plots=False,
+                acceptance_thresholds={
+                    "energy_mae_ev": 0.2,
+                    "mean_force_mae_ev_per_angstrom": 0.3,
+                },
+            )
+
+        summary = artifacts["summary"]
+        self.assertEqual(summary["baseline_source"], "configuration_reference")
+        self.assertIn("independent stored DFT", summary["interpretation"])
+        self.assertTrue(
+            summary["validation_gate"]["candidates"]["candidate"]["passed"]
+        )
+
     @staticmethod
     def configuration(
         configuration_id: str,

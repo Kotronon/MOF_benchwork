@@ -17,6 +17,7 @@ def create_potential_report(
     *,
     save_csv: bool = True,
     save_plots: bool = True,
+    acceptance_thresholds: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Write aggregate metrics, a flat table, and diagnostic plots."""
     data = _load_report(report)
@@ -26,7 +27,11 @@ def create_potential_report(
 
     output = Path(output_directory)
     output.mkdir(parents=True, exist_ok=True)
-    summary = _aggregate_rows(rows)
+    summary = _aggregate_rows(
+        rows,
+        baseline_source=str(data.get("baseline_source", "backend")),
+        acceptance_thresholds=acceptance_thresholds,
+    )
     summary_path = output / "potential_metrics.json"
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
 
@@ -65,6 +70,8 @@ def _comparison_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
             rows.append(
                 {
                     "configuration_id": configuration["configuration_id"],
+                    "material": configuration.get("material"),
+                    "adsorbate": configuration.get("adsorbate"),
                     "region": configuration.get("region"),
                     "minimum_host_guest_distance_A": distance,
                     "minimum_distance_filter_A": metadata.get(
@@ -88,6 +95,10 @@ def _comparison_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
                     "force_mae_ev_per_angstrom": comparison[
                         "force_mae_ev_per_angstrom"
                     ],
+                    "force_comparison_mode": comparison.get(
+                        "force_comparison_mode",
+                        "interaction",
+                    ),
                     "force_rmse_ev_per_angstrom": comparison[
                         "force_rmse_ev_per_angstrom"
                     ],
@@ -108,7 +119,12 @@ def _comparison_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
-def _aggregate_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _aggregate_rows(
+    rows: list[dict[str, Any]],
+    *,
+    baseline_source: str,
+    acceptance_thresholds: dict[str, float] | None,
+) -> dict[str, Any]:
     by_candidate: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         by_candidate.setdefault(row["candidate_backend"], []).append(row)
@@ -118,11 +134,18 @@ def _aggregate_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         regions: dict[str, list[dict[str, Any]]] = {}
         for row in candidate_rows:
             regions.setdefault(str(row.get("region") or "unclassified"), []).append(row)
+        materials: dict[str, list[dict[str, Any]]] = {}
+        for row in candidate_rows:
+            materials.setdefault(str(row.get("material") or "unknown"), []).append(row)
         candidates[candidate] = {
             **_metric_summary(candidate_rows),
             "by_region": {
                 region: _metric_summary(region_rows)
                 for region, region_rows in sorted(regions.items())
+            },
+            "by_material": {
+                material: _metric_summary(material_rows)
+                for material, material_rows in sorted(materials.items())
             },
         }
     filters = sorted(
@@ -137,9 +160,11 @@ def _aggregate_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         for row in rows
         if row["thermodynamically_unbiased"] is not None
     }
-    return {
+    summary = {
         "schema_version": 1,
         "baseline_backend": rows[0]["baseline_backend"],
+        "baseline_source": baseline_source,
+        "force_comparison_mode": rows[0]["force_comparison_mode"],
         "candidate_count": len(candidates),
         "row_count": len(rows),
         "sampling": {
@@ -150,9 +175,55 @@ def _aggregate_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         },
         "candidates": candidates,
         "interpretation": (
-            "Differences quantify agreement with the configured baseline; "
+            "Errors quantify accuracy against an independent stored DFT reference."
+            if baseline_source == "configuration_reference"
+            else "Differences quantify agreement with the configured baseline; "
             "they do not establish accuracy without an independent reference."
         ),
+    }
+    if acceptance_thresholds:
+        summary["validation_gate"] = _validation_gate(
+            candidates,
+            acceptance_thresholds,
+        )
+    return summary
+
+
+def _validation_gate(
+    candidates: dict[str, dict[str, Any]],
+    thresholds: dict[str, float],
+) -> dict[str, Any]:
+    supported = {
+        "energy_mae_ev",
+        "mean_force_mae_ev_per_angstrom",
+    }
+    unknown = set(thresholds) - supported
+    if unknown:
+        raise ValueError(
+            "Unsupported potential acceptance thresholds: "
+            + ", ".join(sorted(unknown))
+        )
+    normalized = {key: float(value) for key, value in thresholds.items()}
+    if any(value <= 0.0 for value in normalized.values()):
+        raise ValueError("Potential acceptance thresholds must be positive.")
+    decisions = {}
+    for candidate, metrics in candidates.items():
+        checks = {
+            key: {
+                "value": metrics[key],
+                "maximum": maximum,
+                "passed": metrics[key] <= maximum,
+            }
+            for key, maximum in normalized.items()
+        }
+        decisions[candidate] = {
+            "passed": all(check["passed"] for check in checks.values()),
+            "checks": checks,
+        }
+    return {
+        "thresholds": normalized,
+        "threshold_provenance": "user_configured_project_criterion",
+        "candidates": decisions,
     }
 
 
@@ -247,9 +318,35 @@ def _write_plots(rows: list[dict[str, Any]], output_path: Path) -> None:
                 color=colors(index),
             )
     axes[0, 1].axhline(0.0, color="black", linestyle="--", linewidth=1)
-    axes[0, 1].set(xlabel="Minimum host-guest distance (A)", ylabel="Candidate - baseline energy (eV)", title="Energy error by separation")
     if axes[0, 1].collections:
+        axes[0, 1].set(xlabel="Minimum host-guest distance (A)", ylabel="Candidate - baseline energy (eV)", title="Energy error by separation")
         axes[0, 1].legend(frameon=False)
+    else:
+        region_labels = sorted(
+            {str(row.get("region") or "unclassified") for row in rows}
+        )
+        grouped_labels = []
+        grouped_values = []
+        for candidate in candidates:
+            for region in region_labels:
+                values = [
+                    row["energy_difference_ev"]
+                    for row in rows
+                    if row["candidate_backend"] == candidate
+                    and str(row.get("region") or "unclassified") == region
+                ]
+                if values:
+                    grouped_labels.append(f"{candidate}\n{region}")
+                    grouped_values.append(values)
+        axes[0, 1].boxplot(
+            grouped_values,
+            tick_labels=grouped_labels,
+            showmeans=True,
+        )
+        axes[0, 1].set(
+            ylabel="Candidate - baseline energy (eV)",
+            title="Energy error by GoldDAC region",
+        )
 
     force_data = [
         [row["force_mae_ev_per_angstrom"] for row in rows if row["candidate_backend"] == candidate]

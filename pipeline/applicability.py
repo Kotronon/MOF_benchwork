@@ -615,6 +615,13 @@ def _assess_static_potential_benchmark(config: dict[str, Any]) -> dict[str, Any]
         else []
     )
     baseline = str(benchmark.get("baseline_backend", "")).strip()
+    is_golddac = configuration_set == "golddac"
+    minimum_backend_count = 1 if is_golddac else 2
+    baseline_valid = (
+        baseline not in backend_names and baseline == "dft_golddac"
+        if is_golddac
+        else baseline in backend_names
+    )
 
     checks = [
         {
@@ -633,29 +640,35 @@ def _assess_static_potential_benchmark(config: dict[str, Any]) -> dict[str, Any]
             "name": "configuration_set",
             "status": (
                 "passed"
-                if configuration_set in {"smoke", "widom"}
+                if configuration_set in {"smoke", "widom", "golddac"}
                 else "failed"
             ),
-            "expected": "smoke or widom",
+            "expected": "smoke, widom, or golddac",
             "actual": configuration_set,
         },
         {
             "name": "potential_backends",
             "status": (
                 "passed"
-                if len(backends) >= 2
-                and set(backend_types) <= {"classical_lammps", "mace_mp"}
+                if len(backends) >= minimum_backend_count
+                and set(backend_types) <= {"classical_lammps", "mace_mp", "nequip"}
                 and len(set(backend_names)) == len(backend_names)
                 and all(backend_names)
                 else "failed"
             ),
-            "expected": "at least two uniquely named classical_lammps/mace_mp backends",
+            "expected": (
+                f"at least {minimum_backend_count} uniquely named supported backend(s)"
+            ),
             "actual": backend_names,
         },
         {
             "name": "baseline_backend",
-            "status": "passed" if baseline in backend_names else "failed",
-            "expected": "one configured backend name",
+            "status": "passed" if baseline_valid else "failed",
+            "expected": (
+                "dft_golddac independent reference"
+                if is_golddac
+                else "one configured backend name"
+            ),
             "actual": baseline,
         },
     ]
@@ -702,6 +715,37 @@ def _assess_static_potential_benchmark(config: dict[str, Any]) -> dict[str, Any]
                     "positive sample_count and seed, non-negative "
                     "minimum_distance_A, positive maximum_attempts_per_sample, "
                     "boolean random_orientations"
+                ),
+                "actual": dataset,
+            }
+        )
+    if is_golddac:
+        split = dataset.get("split") if isinstance(dataset, dict) else None
+        maximum = (
+            dataset.get("max_configurations")
+            if isinstance(dataset, dict)
+            else None
+        )
+        checks.append(
+            {
+                "name": "golddac_dataset",
+                "status": (
+                    "passed"
+                    if isinstance(dataset, dict)
+                    and str(split or "test").casefold() == "test"
+                    and (
+                        maximum is None
+                        or (
+                            isinstance(maximum, int)
+                            and not isinstance(maximum, bool)
+                            and maximum > 0
+                        )
+                    )
+                    else "failed"
+                ),
+                "expected": (
+                    "held-out test split and optional positive "
+                    "max_configurations"
                 ),
                 "actual": dataset,
             }

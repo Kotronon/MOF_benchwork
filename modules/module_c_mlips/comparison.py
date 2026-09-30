@@ -48,12 +48,17 @@ def _validate_results(results: list[InteractionResult]) -> None:
         raise ValueError("Each compared backend must have a unique name.")
 
     force_counts = {
-        len(result.interaction_forces_ev_per_angstrom)
+        len(result.comparison_forces_ev_per_angstrom)
         for result in results
     }
     if len(force_counts) != 1:
         raise ValueError(
             "All interaction results must contain the same number of forces."
+        )
+    force_modes = {result.force_comparison_mode for result in results}
+    if len(force_modes) != 1:
+        raise ValueError(
+            "All interaction results must use the same force comparison mode."
         )
 
 
@@ -86,8 +91,8 @@ def _compare_candidate(
             )
         ]
         for baseline_force, candidate_force in zip(
-            baseline.interaction_forces_ev_per_angstrom,
-            candidate.interaction_forces_ev_per_angstrom,
+            baseline.comparison_forces_ev_per_angstrom,
+            candidate.comparison_forces_ev_per_angstrom,
             strict=True,
         )
     ]
@@ -125,6 +130,7 @@ def _compare_candidate(
 
     return {
         "candidate_backend": candidate.backend,
+        "force_comparison_mode": baseline.force_comparison_mode,
         "energy_difference_ev": energy_difference,
         "absolute_energy_difference_ev": abs(energy_difference),
         "force_mae_ev_per_angstrom": force_mae,

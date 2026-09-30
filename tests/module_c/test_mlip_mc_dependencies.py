@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from modules.module_c_mlips.dependencies import (
     DependencyStatus,
     ensure_mlip_mc_dependencies,
+    ensure_torch_dftd,
     inspect_mlip_mc_dependencies,
     normalize_mlip_backend,
 )
@@ -62,6 +63,23 @@ class MlipMcDependencyTests(unittest.TestCase):
 
         self.assertEqual(status.backend_required_version, "0.6.2")
         self.assertIn("nequip==0.6.2", status.install_specification)
+
+    def test_d3_dependency_installs_in_active_environment(self) -> None:
+        completed = Mock(returncode=0, stdout="", stderr="")
+        with patch(
+            "modules.module_c_mlips.dependencies._module_available",
+            side_effect=[False, True],
+        ), patch(
+            "modules.module_c_mlips.dependencies.subprocess.run",
+            return_value=completed,
+        ) as run:
+            status = ensure_torch_dftd(install_missing=True)
+
+        self.assertTrue(status["available"])
+        self.assertEqual(
+            run.call_args.args[0],
+            [sys.executable, "-m", "pip", "install", "torch-dftd"],
+        )
 
 
 def _status(

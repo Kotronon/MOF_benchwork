@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hashlib import md5
+from hashlib import md5, sha256
 from pathlib import Path
 import tempfile
 import unittest
@@ -11,6 +11,25 @@ from modules.module_c_mlips.model_assets import ensure_model_asset
 
 
 class ModelAssetTests(unittest.TestCase):
+    def test_downloads_direct_model_with_sha256_verification(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            source = root / "source.model"
+            source.write_bytes(b"direct-model")
+            target = root / "models" / "target.model"
+
+            result = ensure_model_asset(
+                {
+                    "model": str(target),
+                    "sha256": sha256(b"direct-model").hexdigest(),
+                    "asset": {"url": source.as_uri()},
+                },
+                download_missing=True,
+            )
+
+            self.assertEqual(target.read_bytes(), b"direct-model")
+            self.assertEqual(result["transfer_mode"], "direct_download")
+
     def test_extracts_remote_member_with_byte_ranges(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
