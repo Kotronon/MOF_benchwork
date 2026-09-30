@@ -7,9 +7,24 @@ cd "${PROJECT_ROOT}"
 
 PYTHON_BIN="${PYTHON_BIN:-python}"
 MODE="${1:-all}"
+PROFILE="${2:-models}"
 CONFIG_DIR="${PROJECT_ROOT}/input_json_files"
-SMOKE_CONFIG="${CONFIG_DIR}/benchmark_golddac_co2_mace_models_smoke.json"
-PRODUCTION_CONFIG="${CONFIG_DIR}/benchmark_golddac_co2_mace_models_production.json"
+
+case "${PROFILE}" in
+  models)
+    SMOKE_CONFIG="${CONFIG_DIR}/benchmark_golddac_co2_mace_models_smoke.json"
+    PRODUCTION_CONFIG="${CONFIG_DIR}/benchmark_golddac_co2_mace_models_production.json"
+    ;;
+  dispersion)
+    SMOKE_CONFIG="${CONFIG_DIR}/benchmark_golddac_co2_dispersion_ablation_smoke.json"
+    PRODUCTION_CONFIG="${CONFIG_DIR}/benchmark_golddac_co2_dispersion_ablation_production.json"
+    ;;
+  *)
+    printf 'Unknown profile: %s\n' "${PROFILE}" >&2
+    printf 'Profiles: models, dispersion\n' >&2
+    exit 2
+    ;;
+esac
 
 run_setup() {
   "${PYTHON_BIN}" benchmark.py "${SMOKE_CONFIG}" \
@@ -45,7 +60,7 @@ case "${MODE}" in
     run_production
     ;;
   *)
-    printf 'Usage: %s {setup|smoke|production|all}\n' "$0" >&2
+    printf 'Usage: %s {setup|smoke|production|all} [models|dispersion]\n' "$0" >&2
     exit 2
     ;;
 esac

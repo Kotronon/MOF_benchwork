@@ -25,6 +25,9 @@ WIDOM_CONFIG_PATH = (
 GOLDDAC_CONFIG_PATH = (
     "input_json_files/benchmark_golddac_co2_mace_models_smoke.json"
 )
+GOLDDAC_DISPERSION_CONFIG_PATH = (
+    "input_json_files/benchmark_golddac_co2_dispersion_ablation_smoke.json"
+)
 
 
 class PotentialWorkflowTests(unittest.TestCase):
@@ -63,6 +66,33 @@ class PotentialWorkflowTests(unittest.TestCase):
         self.assertEqual(applicability["status"], "supported")
         self.assertEqual(settings["baseline_backend"], "dft_golddac")
         self.assertEqual(checks["golddac_dataset"]["status"], "passed")
+
+    def test_golddac_dispersion_ablation_defines_complete_model_matrix(self) -> None:
+        run_plan = build_run_plan(
+            load_benchmark_data(GOLDDAC_DISPERSION_CONFIG_PATH)
+        )
+
+        settings = run_plan["benchmark"]["potential_benchmark"]
+        backends = settings["backends"]
+        self.assertEqual(
+            [backend["name"] for backend in backends],
+            [
+                "mace_mp_0a_medium",
+                "mace_mp_0a_medium_d3",
+                "mace_dac_1",
+                "mace_dac_1_d3",
+            ],
+        )
+        self.assertEqual(
+            [backend["dispersion"] for backend in backends],
+            [False, True, False, True],
+        )
+        self.assertEqual(settings["dataset"]["split"], "test")
+        self.assertEqual(settings["dataset"]["max_configurations"], 6)
+        self.assertEqual(
+            run_plan["benchmark"]["applicability"]["status"],
+            "supported",
+        )
 
     def test_backend_factory_builds_named_classical_and_mace_backends(self) -> None:
         run_plan = build_run_plan(load_benchmark_data(CONFIG_PATH))

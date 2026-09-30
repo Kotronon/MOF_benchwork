@@ -1,0 +1,113 @@
+{
+  "material": {
+    "name": "ZIF-8",
+    "cif_source": "auto",
+    "charge_scheme": "DDEC",
+    "source": "crafted"
+  },
+  "adsorbates": {
+    "components": ["CO2"],
+    "mixture": null
+  },
+  "conditions": {
+    "temperature_K": 298.15,
+    "pressures_bar": [1.0]
+  },
+  "benchmark": {
+    "task": "potential_benchmark",
+    "metrics": [
+      "dft_interaction_energy_mae",
+      "dft_interaction_energy_bias",
+      "dft_total_force_mae",
+      "error_by_interaction_region",
+      "error_by_material",
+      "runtime_per_configuration"
+    ],
+    "potential_benchmark": {
+      "workflow": "static",
+      "configuration_set": "golddac",
+      "baseline_backend": "dft_golddac",
+      "dataset": {
+        "root": "external/datasets/golddac",
+        "split": "test",
+        "adsorbates": ["CO2"],
+        "seed": 12345
+      },
+      "backends": [
+        {
+          "type": "mace_mp",
+          "name": "mace_mp_0a_medium",
+          "model": "external/models/mace-mp-0a-medium.model",
+          "device": "cuda",
+          "default_dtype": "float32",
+          "dispersion": false,
+          "sha256": "01bfe22100139f424713cf921144e5509cbe353d67aa9fa1be9c6e1e0ed35845",
+          "asset": {
+            "url": "https://github.com/ACEsuit/mace-mp/releases/download/mace_mp_0/2023-12-03-mace-128-L1_epoch-199.model"
+          }
+        },
+        {
+          "type": "mace_mp",
+          "name": "mace_mp_0a_medium_d3",
+          "model": "external/models/mace-mp-0a-medium.model",
+          "device": "cuda",
+          "default_dtype": "float32",
+          "dispersion": true,
+          "sha256": "01bfe22100139f424713cf921144e5509cbe353d67aa9fa1be9c6e1e0ed35845",
+          "asset": {
+            "url": "https://github.com/ACEsuit/mace-mp/releases/download/mace_mp_0/2023-12-03-mace-128-L1_epoch-199.model"
+          }
+        },
+        {
+          "type": "mace_mp",
+          "name": "mace_dac_1",
+          "model": "external/models/mace-dac-1.model",
+          "device": "cuda",
+          "default_dtype": "float32",
+          "dispersion": false,
+          "sha256": "6c31634523ce89f843f8286ebcf841d9a18ab3f2cb505bd52ca1e3e189c34791",
+          "asset": {
+            "url": "https://raw.githubusercontent.com/hspark1212/DAC-SIM/f48c6a02066f1ed853ed7dab3908a624355c1455/dac_sim/models/mace-dac-1.model"
+          }
+        },
+        {
+          "type": "mace_mp",
+          "name": "mace_dac_1_d3",
+          "model": "external/models/mace-dac-1.model",
+          "device": "cuda",
+          "default_dtype": "float32",
+          "dispersion": true,
+          "sha256": "6c31634523ce89f843f8286ebcf841d9a18ab3f2cb505bd52ca1e3e189c34791",
+          "asset": {
+            "url": "https://raw.githubusercontent.com/hspark1212/DAC-SIM/f48c6a02066f1ed853ed7dab3908a624355c1455/dac_sim/models/mace-dac-1.model"
+          }
+        }
+      ]
+    }
+  },
+  "simulation": {
+    "engine": "ASE",
+    "method": "STATIC",
+    "forcefield": {
+      "framework": "UFF",
+      "adsorbate": "auto",
+      "cross_interactions": "auto"
+    },
+    "framework": "rigid",
+    "cell_representation": "source",
+    "minimum_image_policy": "error",
+    "cutoff_A": 6.0,
+    "unit_cells": [1, 1, 1],
+    "seeds": [12345]
+  },
+  "output": {
+    "directory": "outputs/module_C_potential_benchmark",
+    "run_id": "golddac_co2_dispersion_ablation_production_001",
+    "overwrite": false,
+    "save_logs": true,
+    "save_dumps": false,
+    "save_restarts": false,
+    "save_plots": true,
+    "save_csv": true
+  }
+}

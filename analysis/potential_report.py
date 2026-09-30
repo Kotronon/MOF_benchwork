@@ -181,12 +181,85 @@ def _aggregate_rows(
             "they do not establish accuracy without an independent reference."
         ),
     }
+    dispersion_ablation = _dispersion_ablation_summary(rows)
+    if dispersion_ablation:
+        summary["dispersion_ablation"] = dispersion_ablation
     if acceptance_thresholds:
         summary["validation_gate"] = _validation_gate(
             candidates,
             acceptance_thresholds,
         )
     return summary
+
+
+def _dispersion_ablation_summary(
+    rows: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Compare conventionally named ``model``/``model_d3`` result pairs."""
+    by_candidate: dict[str, dict[str, dict[str, Any]]] = {}
+    for row in rows:
+        by_candidate.setdefault(row["candidate_backend"], {})[
+            row["configuration_id"]
+        ] = row
+
+    summaries = {}
+    for d3_name in sorted(name for name in by_candidate if name.endswith("_d3")):
+        base_name = d3_name.removesuffix("_d3")
+        if base_name not in by_candidate:
+            continue
+        configuration_ids = sorted(
+            set(by_candidate[base_name]) & set(by_candidate[d3_name])
+        )
+        if not configuration_ids:
+            continue
+        paired = [
+            (
+                by_candidate[base_name][configuration_id],
+                by_candidate[d3_name][configuration_id],
+            )
+            for configuration_id in configuration_ids
+        ]
+        summaries[base_name] = {
+            "without_dispersion_backend": base_name,
+            "with_dispersion_backend": d3_name,
+            "configuration_count": len(paired),
+            "mean_d3_interaction_energy_contribution_ev": mean(
+                with_d3["candidate_interaction_energy_ev"]
+                - without_d3["candidate_interaction_energy_ev"]
+                for without_d3, with_d3 in paired
+            ),
+            "energy_mae_without_d3_ev": mean(
+                without_d3["absolute_energy_difference_ev"]
+                for without_d3, _ in paired
+            ),
+            "energy_mae_with_d3_ev": mean(
+                with_d3["absolute_energy_difference_ev"]
+                for _, with_d3 in paired
+            ),
+            "mean_absolute_energy_error_change_ev": mean(
+                with_d3["absolute_energy_difference_ev"]
+                - without_d3["absolute_energy_difference_ev"]
+                for without_d3, with_d3 in paired
+            ),
+            "force_mae_without_d3_ev_per_angstrom": mean(
+                without_d3["force_mae_ev_per_angstrom"]
+                for without_d3, _ in paired
+            ),
+            "force_mae_with_d3_ev_per_angstrom": mean(
+                with_d3["force_mae_ev_per_angstrom"]
+                for _, with_d3 in paired
+            ),
+            "mean_force_mae_change_ev_per_angstrom": mean(
+                with_d3["force_mae_ev_per_angstrom"]
+                - without_d3["force_mae_ev_per_angstrom"]
+                for without_d3, with_d3 in paired
+            ),
+            "interpretation": (
+                "Negative error changes mean that adding D3 improved agreement "
+                "with the DFT reference; positive changes mean it worsened agreement."
+            ),
+        }
+    return summaries
 
 
 def _validation_gate(
@@ -239,6 +312,8 @@ def _metric_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     ]
     return {
         "configuration_count": len(rows),
+        "mean_energy_difference_ev": mean(energy_differences),
+        "median_energy_difference_ev": median(energy_differences),
         "energy_mae_ev": mean(absolute_energy_differences),
         "median_absolute_energy_difference_ev": median(
             absolute_energy_differences

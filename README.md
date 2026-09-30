@@ -39,6 +39,23 @@ test subset be evaluated:
 bash scripts/run_module_c_golddac_benchmark.sh production
 ```
 
+To isolate the effect of the external D3 correction, run the four-way
+ablation matrix (MACE-MP and MACE-DAC, each with and without D3) on identical
+configurations. The second script argument selects this profile while the
+original one-argument commands remain unchanged:
+
+```bash
+bash scripts/run_module_c_golddac_benchmark.sh setup dispersion
+bash scripts/run_module_c_golddac_benchmark.sh smoke dispersion
+bash scripts/run_module_c_golddac_benchmark.sh production dispersion
+```
+
+The smoke profile uses six region-balanced test configurations. The production
+profile evaluates all 156 CO2 configurations from the held-out GoldDAC test
+split. Its aggregate report includes signed mean and median energy differences
+in addition to MAE/RMSE, so systematic overbinding or underestimated repulsion
+is not hidden by absolute errors.
+
 Results are written below
 `outputs/module_C_potential_benchmark/runs/golddac_co2_*`. The aggregate JSON
 reports MAE/RMSE globally, by potential-energy region, and by MOF. GoldDAC v3

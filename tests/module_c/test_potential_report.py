@@ -36,6 +36,8 @@ class PotentialReportTests(unittest.TestCase):
 
         candidate = summary["candidates"]["candidate"]
         self.assertEqual(summary["row_count"], 2)
+        self.assertAlmostEqual(candidate["mean_energy_difference_ev"], 0.375)
+        self.assertAlmostEqual(candidate["median_energy_difference_ev"], 0.375)
         self.assertAlmostEqual(candidate["energy_mae_ev"], 0.375)
         self.assertAlmostEqual(
             candidate["median_absolute_energy_difference_ev"],
@@ -68,6 +70,48 @@ class PotentialReportTests(unittest.TestCase):
         self.assertIn("independent stored DFT", summary["interpretation"])
         self.assertTrue(
             summary["validation_gate"]["candidates"]["candidate"]["passed"]
+        )
+
+    def test_reports_paired_d3_ablation(self) -> None:
+        configuration = self.configuration("sample", 1.0, 1.2, 2.0)
+        configuration["results"]["model"] = configuration["results"].pop(
+            "candidate"
+        )
+        configuration["results"]["model_d3"] = {
+            "interaction_energy_ev": 1.05,
+        }
+        configuration["comparisons"] = [
+            {
+                **configuration["comparisons"][0],
+                "candidate_backend": "model",
+                "energy_difference_ev": 0.2,
+                "absolute_energy_difference_ev": 0.2,
+            },
+            {
+                **configuration["comparisons"][0],
+                "candidate_backend": "model_d3",
+                "energy_difference_ev": 0.05,
+                "absolute_energy_difference_ev": 0.05,
+                "force_mae_ev_per_angstrom": 0.1,
+            },
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            summary = create_potential_report(
+                {"configurations": [configuration]},
+                tmpdir,
+                save_csv=False,
+                save_plots=False,
+            )["summary"]
+
+        ablation = summary["dispersion_ablation"]["model"]
+        self.assertAlmostEqual(
+            ablation["mean_d3_interaction_energy_contribution_ev"],
+            -0.15,
+        )
+        self.assertAlmostEqual(
+            ablation["mean_absolute_energy_error_change_ev"],
+            -0.15,
         )
 
     @staticmethod
