@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from modules.module_c_mlips.dependencies import (
     DependencyStatus,
     ensure_mlip_mc_dependencies,
+    inspect_mlip_mc_dependencies,
     normalize_mlip_backend,
 )
 
@@ -16,6 +17,7 @@ class MlipMcDependencyTests(unittest.TestCase):
         self.assertEqual(normalize_mlip_backend("mace_mp"), "mace-torch")
         self.assertEqual(normalize_mlip_backend("ORB"), "orb-models")
         self.assertEqual(normalize_mlip_backend("ODAC"), "fairchem")
+        self.assertEqual(normalize_mlip_backend("NequIP-Legacy"), "nequip")
 
     def test_missing_dependency_does_not_install_without_opt_in(self) -> None:
         missing = _status(ready=False)
@@ -47,6 +49,19 @@ class MlipMcDependencyTests(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertEqual(command[:4], [sys.executable, "-m", "pip", "install"])
         self.assertEqual(command[-1], "mlip-mc==0.1.3")
+
+    def test_nequip_install_is_pinned_to_legacy_loader_release(self) -> None:
+        with patch(
+            "modules.module_c_mlips.dependencies._distribution_version",
+            return_value=None,
+        ), patch(
+            "modules.module_c_mlips.dependencies._module_available",
+            return_value=False,
+        ):
+            status = inspect_mlip_mc_dependencies("nequip")
+
+        self.assertEqual(status.backend_required_version, "0.6.2")
+        self.assertIn("nequip==0.6.2", status.install_specification)
 
 
 def _status(

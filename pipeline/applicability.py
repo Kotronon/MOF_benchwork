@@ -315,6 +315,12 @@ def _assess_mlip_mc_benchmark(
     engine = str(simulation.get("engine", "")).upper()
     method = str(simulation.get("method", "")).upper()
     backend = str(model.get("backend", "")) if isinstance(model, dict) else ""
+    normalized_backend = backend.strip().casefold().replace("_", "-")
+    energy_mode = (
+        str(model.get("energy_mode", "total_energy")).strip().casefold()
+        if isinstance(model, dict)
+        else ""
+    )
     supported_backends = {
         "mace",
         "mace-torch",
@@ -324,6 +330,8 @@ def _assess_mlip_mc_benchmark(
         "orb-models",
         "fairchem",
         "odac",
+        "nequip",
+        "nequip-legacy",
     }
     expected_method = "WIDOM" if workflow == "mlip_mc_widom" else "GCMC"
     checks = [
@@ -361,13 +369,39 @@ def _assess_mlip_mc_benchmark(
             "name": "mlip_backend",
             "status": (
                 "passed"
-                if backend.strip().casefold().replace("_", "-") in {
+                if normalized_backend in {
                     value.replace("_", "-") for value in supported_backends
                 }
                 else "failed"
             ),
-            "expected": "mace-torch, orb-models, or fairchem",
+            "expected": "mace-torch, orb-models, fairchem, or nequip",
             "actual": backend,
+        },
+        {
+            "name": "energy_mode",
+            "status": (
+                "passed"
+                if energy_mode in {"total_energy", "interaction_direct"}
+                else "failed"
+            ),
+            "expected": "total_energy or interaction_direct",
+            "actual": energy_mode,
+        },
+        {
+            "name": "nequip_dispersion",
+            "status": (
+                "failed"
+                if normalized_backend in {"nequip", "nequip-legacy"}
+                and isinstance(model, dict)
+                and bool(model.get("dispersion", False))
+                else "passed"
+            ),
+            "expected": "false for the fine-tuned NequIP reference",
+            "actual": (
+                bool(model.get("dispersion", False))
+                if isinstance(model, dict)
+                else None
+            ),
         },
     ]
     if workflow == "mlip_mc_widom":

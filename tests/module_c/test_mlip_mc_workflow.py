@@ -8,6 +8,9 @@ from pipeline.planning import build_run_plan
 
 WIDOM_CONFIG = "input_json_files/benchmark_zif8_co2_mlip_mc_widom_smoke.json"
 GCMC_CONFIG = "input_json_files/benchmark_zif8_co2_mlip_mc_gcmc_smoke.json"
+NEQUIP_CONFIG = (
+    "input_json_files/benchmark_zif8_co2_nequip_finetuned_widom_smoke.json"
+)
 
 
 class MlipMcWorkflowPlanningTests(unittest.TestCase):
@@ -49,6 +52,35 @@ class MlipMcWorkflowPlanningTests(unittest.TestCase):
         self.assertEqual(applicability["status"], "supported")
         checks = {item["name"]: item for item in applicability["checks"]}
         self.assertEqual(checks["gcmc_steps"]["status"], "passed")
+
+    def test_nequip_reference_config_is_supported_without_loading_model(self) -> None:
+        plan = build_run_plan(load_benchmark_data(NEQUIP_CONFIG))
+
+        model = plan["benchmark"]["potential_benchmark"]["mlip_mc"]["model"]
+        self.assertEqual(model["backend"], "nequip")
+        self.assertEqual(model["loader"], "legacy")
+        self.assertEqual(model["energy_mode"], "interaction_direct")
+        self.assertFalse(model["dispersion"])
+        self.assertEqual(plan["conditions"]["temperature_K"], 273.0)
+        checks = {
+            item["name"]: item
+            for item in plan["benchmark"]["applicability"]["checks"]
+        }
+        self.assertEqual(checks["mlip_backend"]["status"], "passed")
+        self.assertEqual(checks["energy_mode"]["status"], "passed")
+        self.assertEqual(checks["nequip_dispersion"]["status"], "passed")
+
+    def test_nequip_reference_rejects_double_counted_dispersion(self) -> None:
+        config = load_benchmark_data(NEQUIP_CONFIG)
+        model = config["benchmark"]["potential_benchmark"]["mlip_mc"]["model"]
+        model["dispersion"] = True
+
+        plan = build_run_plan(config)
+
+        applicability = plan["benchmark"]["applicability"]
+        self.assertEqual(applicability["status"], "unsupported")
+        checks = {item["name"]: item for item in applicability["checks"]}
+        self.assertEqual(checks["nequip_dispersion"]["status"], "failed")
 
 
 if __name__ == "__main__":

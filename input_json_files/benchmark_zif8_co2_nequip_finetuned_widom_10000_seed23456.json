@@ -1,0 +1,52 @@
+{
+  "material": {"name": "ZIF-8", "cif_source": "auto", "charge_scheme": "DDEC", "source": "crafted"},
+  "adsorbates": {"components": ["CO2"], "mixture": null},
+  "conditions": {"temperature_K": 273.0, "pressures_bar": [1.0]},
+  "benchmark": {
+    "task": "potential_benchmark",
+    "metrics": ["average_boltzmann_factor", "henry_coefficient", "isosteric_heat_zero_loading", "block_sem", "runtime_per_step"],
+    "potential_benchmark": {
+      "workflow": "mlip_mc_widom",
+      "mlip_mc": {
+        "trials": 10000,
+        "block_size": 1000,
+        "convergence_checkpoints": [1000, 5000, 10000],
+        "seed": 23456,
+        "auto_install_dependencies": false,
+        "model": {
+          "backend": "nequip",
+          "name": "goeminne_zif8_n1000",
+          "model": "external/models/goeminne_zif8/model_ZIF8_N=1000.pth",
+          "sha256": "5d56139a216baa9cce098bc6c563ad43242034ee440e799ce2aab1573c0fad12",
+          "loader": "legacy",
+          "device": "cuda",
+          "species_to_type_name": {"H": "H", "C": "C", "N": "N", "O": "O", "Zn": "Zn"},
+          "energy_units_to_eV": 1.0,
+          "length_units_to_A": 1.0,
+          "energy_mode": "interaction_direct",
+          "asset": {
+            "archive_url": "https://zenodo.org/api/records/8349599/files/data.zip/content",
+            "archive_filename": "goeminne_data.zip",
+            "archive_md5": "7a90205d1335375697678cf23e4257f0",
+            "member_basename": "model_ZIF8_N=1000.pth",
+            "keep_archive": false
+          },
+          "dispersion": false
+        }
+      }
+    }
+  },
+  "simulation": {
+    "engine": "MLIP_MC", "method": "WIDOM",
+    "forcefield": {"framework": "UFF", "adsorbate": "auto", "cross_interactions": "auto"},
+    "framework": "rigid", "cell_representation": "source", "minimum_image_policy": "error",
+    "cutoff_A": 6.0, "unit_cells": [1, 1, 1], "seeds": [23456]
+  },
+  "convergence": {"minimum_replicates": 3, "relative_ci95_target": 0.05},
+  "output": {
+    "directory": "outputs/module_C_potential_benchmark",
+    "run_id": "zif8_co2_nequip_finetuned_widom_10000_seed23456",
+    "overwrite": false, "save_logs": true, "save_dumps": false,
+    "save_restarts": true, "save_plots": true, "save_csv": true
+  }
+}

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import importlib
 from importlib import metadata, util
+import shlex
 import subprocess
 import sys
 from typing import Any
@@ -12,11 +13,13 @@ from typing import Any
 
 MLIP_MC_VERSION = "0.1.3"
 MLIP_MC_DISTRIBUTION = "mlip-mc"
+LEGACY_NEQUIP_VERSION = "0.6.2"
 
 _BACKEND_MODULES = {
     "mace-torch": "mace",
     "orb-models": "orb_models",
     "fairchem": "fairchem.core",
+    "nequip": "nequip",
 }
 
 
@@ -33,6 +36,8 @@ class DependencyStatus:
     backend_available: bool
     ready: bool
     install_specification: str
+    backend_required_version: str | None = None
+    backend_installed_version: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -50,6 +55,8 @@ def normalize_mlip_backend(value: str) -> str:
         "orb-models": "orb-models",
         "fairchem": "fairchem",
         "odac": "fairchem",
+        "nequip": "nequip",
+        "nequip-legacy": "nequip",
     }
     try:
         return aliases[normalized]
@@ -64,9 +71,23 @@ def inspect_mlip_mc_dependencies(backend: str) -> DependencyStatus:
     """Inspect MLIP-MC and its selected model backend without importing them."""
     canonical_backend = normalize_mlip_backend(backend)
     backend_module = _BACKEND_MODULES[canonical_backend]
+    backend_distribution = (
+        "nequip" if canonical_backend == "nequip" else None
+    )
+    backend_required_version = (
+        LEGACY_NEQUIP_VERSION if canonical_backend == "nequip" else None
+    )
+    backend_installed_version = (
+        _distribution_version(backend_distribution)
+        if backend_distribution
+        else None
+    )
     installed_version = _distribution_version(MLIP_MC_DISTRIBUTION)
     mlip_available = _module_available("mlip_mc")
-    backend_available = _module_available(backend_module)
+    backend_available = _module_available(backend_module) and (
+        backend_required_version is None
+        or backend_installed_version == backend_required_version
+    )
     correct_version = installed_version == MLIP_MC_VERSION
     install_specification = _install_specification(
         canonical_backend,
@@ -82,6 +103,8 @@ def inspect_mlip_mc_dependencies(backend: str) -> DependencyStatus:
         backend_available=backend_available,
         ready=mlip_available and backend_available and correct_version,
         install_specification=install_specification,
+        backend_required_version=backend_required_version,
+        backend_installed_version=backend_installed_version,
     )
 
 
@@ -105,7 +128,7 @@ def ensure_mlip_mc_dependencies(
         "-m",
         "pip",
         "install",
-        status.install_specification,
+        *shlex.split(status.install_specification),
     ]
     if not install_missing:
         raise ImportError(
@@ -133,6 +156,11 @@ def ensure_mlip_mc_dependencies(
 
 
 def _install_specification(backend: str, *, include_backend: bool) -> str:
+    if backend == "nequip" and include_backend:
+        return (
+            f"{MLIP_MC_DISTRIBUTION}=={MLIP_MC_VERSION} "
+            f"nequip=={LEGACY_NEQUIP_VERSION}"
+        )
     if include_backend:
         return f"{MLIP_MC_DISTRIBUTION}[{backend}]=={MLIP_MC_VERSION}"
     return f"{MLIP_MC_DISTRIBUTION}=={MLIP_MC_VERSION}"
@@ -166,9 +194,16 @@ def _missing_dependency_message(
             f"version {MLIP_MC_VERSION!r} is required"
         )
     if not status.backend_available:
-        problems.append(
-            f"backend module {status.backend_module!r} is not installed"
-        )
+        if status.backend_required_version and status.backend_installed_version:
+            problems.append(
+                f"backend {status.backend_module!r} version "
+                f"{status.backend_installed_version!r} is installed; version "
+                f"{status.backend_required_version!r} is required"
+            )
+        else:
+            problems.append(
+                f"backend module {status.backend_module!r} is not installed"
+            )
     return (
         "MLIP-MC dependencies are not ready: "
         + "; ".join(problems)

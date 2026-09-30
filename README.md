@@ -129,3 +129,88 @@ The curated reference format is intentionally small and provenance-aware:
 
 The numeric values above only demonstrate the schema and must be replaced by
 values obtained at the same temperature and with a documented protocol.
+
+### D3 energy diagnostics
+
+When matching no-D3 and D3 runs use the same seeds, diagnose the potential
+change configuration by configuration from their binary Widom traces:
+
+```bash
+python -m analysis.mlip_widom_energy_diagnostics \
+  --baseline-run outputs/module_C_potential_benchmark/runs/zif8_co2_mlip_mc_widom_10000_seed12345 \
+  --baseline-run outputs/module_C_potential_benchmark/runs/zif8_co2_mlip_mc_widom_10000_seed23456 \
+  --dispersion-run outputs/module_C_potential_benchmark/runs/zif8_co2_mlip_mc_widom_10000_with_dispersion_seed12345 \
+  --dispersion-run outputs/module_C_potential_benchmark/runs/zif8_co2_mlip_mc_widom_10000_with_dispersion_seed23456 \
+  --output-dir outputs/module_C_potential_benchmark/widom_zif8_co2_d3_energy_diagnostics
+```
+
+The diagnostic validates that paired records contain identical atom positions,
+then reports the D3 interaction-energy contribution, its distance dependence,
+effective sample size, and concentration of Boltzmann weight. It also exports
+the highest-weight configurations as an extended XYZ trajectory for inspection
+in OVITO. This comparison uses energies already present in the completed runs
+and therefore does not require another MACE calculation.
+
+### Fine-tuned NequIP reference
+
+The Goeminne ZIF-8 model is treated as an interaction-energy model, not a
+general total-energy model. Its configurations therefore set
+`energy_mode: interaction_direct`: isolated framework and CO2 baseline calls
+return zero, while combined host-guest structures are evaluated by NequIP.
+This matches the reference workflow and avoids subtracting unrelated baseline
+energies a second time. No additional D3 correction is applied to this model.
+
+The reproducibility archive is about 1 GB, but setup uses HTTP byte ranges to
+read its ZIP directory and transfer only the roughly 1 MB
+`model_ZIF8_N=1000.pth` member. The member CRC is verified and the resulting
+SHA-256 is recorded below the ignored `external/` directory. If byte ranges are
+unavailable, setup falls back to the complete archive and verifies its MD5.
+It also installs the pinned legacy NequIP loader in the active environment:
+
+```bash
+bash scripts/run_zif8_nequip_reference.sh setup
+```
+
+Run the gates in order on the GPU cluster. The smoke run checks model loading;
+the 10,000-trial pilot checks sign, magnitude, sampling stability, and restart
+files. Only then start the paper-length protocol (273 K, 100,000 insertions per
+seed):
+
+```bash
+bash scripts/run_zif8_nequip_reference.sh smoke
+bash scripts/run_zif8_nequip_reference.sh pilot
+bash scripts/run_zif8_nequip_reference.sh paper
+```
+
+Three seeds are included for an uncertainty estimate; the cited MLIP-MC paper
+uses 100,000 Widom insertion attempts for its reported protocol. Aggregate the
+paper runs after synchronization:
+
+```bash
+python -m analysis.mlip_widom_replicates \
+  outputs/module_C_potential_benchmark/runs/zif8_co2_nequip_finetuned_widom_100000_seed12345 \
+  outputs/module_C_potential_benchmark/runs/zif8_co2_nequip_finetuned_widom_100000_seed23456 \
+  outputs/module_C_potential_benchmark/runs/zif8_co2_nequip_finetuned_widom_100000_seed34567 \
+  --output-dir outputs/module_C_potential_benchmark/widom_zif8_co2_nequip_reference
+```
+
+For a cheaper failure-mode check, compare the fine-tuned model against the
+stored MACE no-D3/D3 energies only on the exported high-weight structures:
+
+```bash
+python -m analysis.mlip_reference_configuration_benchmark \
+  --structures outputs/module_C_potential_benchmark/widom_zif8_co2_d3_energy_diagnostics/widom_d3_top_weight_configurations.extxyz \
+  --model external/models/goeminne_zif8/model_ZIF8_N=1000.pth \
+  --framework-atoms 276 \
+  --temperature-k 273 \
+  --device cuda \
+  --loader legacy \
+  --species-map identity \
+  --supercell 2 2 2 \
+  --supercell-count 5 \
+  --output-dir outputs/module_C_potential_benchmark/widom_zif8_co2_reference_configuration_check
+```
+
+The supercell check detects a finite-cell or periodic-neighbourhood artefact.
+The exported structures are deliberately selected from the dominant D3 tail,
+so their MAE diagnoses that failure mode but is not an unbiased test-set MAE.

@@ -16,6 +16,7 @@ from modules.module_c_mlips.potential_backends.classical_lammps import (
     ClassicalLAMMPSBackend,
 )
 from modules.module_c_mlips.potential_backends.mace import MaceBackend
+from modules.module_c_mlips.potential_backends.nequip import NequipBackend
 from modules.module_c_mlips.runner import run_potential_comparison
 from modules.module_c_mlips.workspace import (
     configure_runtime_cache as _configure_runtime_cache,
@@ -219,6 +220,30 @@ def _build_backends(
                         specification.get("default_dtype", "float32")
                     ),
                     dispersion=bool(specification.get("dispersion", False)),
+                )
+            )
+        elif backend_type == "nequip":
+            model = specification.get("model")
+            if not model:
+                raise ValueError("NequIP backend requires a model path.")
+            backends.append(
+                NequipBackend(
+                    backend_name=backend_name,
+                    model=str(model),
+                    device=str(specification.get("device", "cpu")),
+                    loader=str(specification.get("loader", "auto")),
+                    species_to_type_name=specification.get(
+                        "species_to_type_name"
+                    ),
+                    energy_units_to_eV=float(
+                        specification.get("energy_units_to_eV", 1.0)
+                    ),
+                    length_units_to_A=float(
+                        specification.get("length_units_to_A", 1.0)
+                    ),
+                    energy_mode=str(
+                        specification.get("energy_mode", "total_energy")
+                    ),
                 )
             )
         else:

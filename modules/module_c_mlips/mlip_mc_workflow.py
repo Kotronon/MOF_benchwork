@@ -9,8 +9,10 @@ from typing import Any
 from engines.mlip_mc_runner import run_mlip_mc_gcmc, run_mlip_mc_widom
 from modules.module_c_mlips.datasets.common import load_host_guest_system
 from modules.module_c_mlips.dependencies import ensure_mlip_mc_dependencies
+from modules.module_c_mlips.model_assets import ensure_model_asset
 from modules.module_c_mlips.potential_backends.calculators import (
     build_ase_calculator,
+    build_interaction_direct_calculator,
 )
 from modules.module_c_mlips.workspace import (
     configure_runtime_cache,
@@ -55,12 +57,21 @@ def run_mlip_mc_benchmark(
     if not isinstance(model, dict):
         raise TypeError("'benchmark.potential_benchmark.mlip_mc.model' must be an object.")
     backend = str(model.get("backend", "mace-torch"))
+    install_assets = (
+        install_missing
+        or bool(settings.get("auto_install_dependencies", False))
+    )
     dependency_status = ensure_mlip_mc_dependencies(
         backend,
-        install_missing=(
-            install_missing
-            or bool(settings.get("auto_install_dependencies", False))
-        ),
+        install_missing=install_assets,
+    )
+    model_asset = (
+        ensure_model_asset(model, download_missing=install_assets)
+        if backend.strip().casefold().replace("_", "-") in {
+            "nequip",
+            "nequip-legacy",
+        }
+        else None
     )
 
     directory = working_directory(run_plan)
@@ -88,6 +99,18 @@ def run_mlip_mc_benchmark(
     model_manifest_path = directory / "source" / "model_manifest.json"
     save_benchmark_data(model_manifest_path, model_manifest)
     calculator = build_ase_calculator(model)
+    energy_mode = str(model.get("energy_mode", "total_energy")).strip().casefold()
+    if energy_mode == "interaction_direct":
+        calculator = build_interaction_direct_calculator(
+            calculator,
+            framework_atom_count=len(framework),
+            adsorbate_atom_count=len(adsorbate),
+        )
+    elif energy_mode != "total_energy":
+        raise ValueError(
+            "MLIP model energy_mode must be 'total_energy' or "
+            "'interaction_direct'."
+        )
 
     temperature_K = float(run_plan["conditions"]["temperature_K"])
     seeds = run_plan["simulation"].get("seeds", [12345])
@@ -152,10 +175,12 @@ def run_mlip_mc_benchmark(
             "material": run_plan["material"]["material_id"],
             "adsorbate": component,
             "model": model_manifest,
+            "model_asset": model_asset,
             "dependency_status": dependency_status.to_dict(),
             "source_files": source_files,
             "input_files": input_files,
             "removed_virtual_adsorbate_sites": removed_virtual_sites,
+            "energy_mode": energy_mode,
             "model_manifest_path": str(model_manifest_path),
         }
     )

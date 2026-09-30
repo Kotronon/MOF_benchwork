@@ -23,6 +23,7 @@ from pipeline.variants import build_variant_plans, run_variant_benchmark
 from modules.module_c_mlips.workflow import run_potential_benchmark
 from modules.module_c_mlips.dependencies import ensure_mlip_mc_dependencies
 from modules.module_c_mlips.mlip_mc_workflow import run_mlip_mc_benchmark
+from modules.module_c_mlips.model_assets import ensure_model_asset
 from modules.module_c_mlips.potential_backends.calculators import build_ase_calculator
 
 def main(argv: list[str] | None = None) -> int:
@@ -122,6 +123,11 @@ def main(argv: list[str] | None = None) -> int:
             install_missing=True,
         )
         model = _configured_mlip_mc_model(run_plan)
+        model_asset = (
+            ensure_model_asset(model, download_missing=True)
+            if status.backend == "nequip"
+            else None
+        )
         build_ase_calculator(model)
         print(
             json.dumps(
@@ -130,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
                     **status.to_dict(),
                     "model": model.get("name", model.get("model")),
                     "model_ready": True,
+                    "model_asset": model_asset,
                 },
                 indent=2,
             )
