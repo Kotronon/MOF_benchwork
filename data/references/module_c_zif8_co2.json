@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "system": {
+    "material": "ZIF-8",
+    "adsorbate": "CO2",
+    "framework_model": "rigid"
+  },
+  "reference_hierarchy": [
+    "DFT-derived interaction energies or an adsorption-specific fine-tuned MLIP",
+    "experimental Henry coefficients and zero-loading adsorption heats at matching conditions",
+    "classical force-field simulation baselines"
+  ],
+  "sources": [
+    {
+      "source_id": "goeminne_2023_nequip",
+      "reference_class": "dft_finetuned",
+      "title": "DFT-Quality Adsorption Simulations in Metal-Organic Frameworks Enabled by Machine Learning Potentials",
+      "doi": "10.1021/acs.jctc.3c00495",
+      "dataset_doi": "10.5281/zenodo.7904959",
+      "model": "model_ZIF8_N=1000.pth",
+      "role": "Primary DFT-derived interaction-potential reference for ZIF-8/CO2",
+      "notes": "The model uses distinct guest labels: CO2 carbon is Co and CO2 oxygen is Os. These labels are model types, not physical elements."
+    },
+    {
+      "source_id": "edwards_2026_mlip_mc",
+      "reference_class": "model_benchmark",
+      "title": "MLIP-MC: A Framework for Adsorption Simulations using Machine-Learned Interatomic Potentials",
+      "doi": "10.48550/arXiv.2602.13725",
+      "role": "Protocol and qualitative cross-check for universal MLIPs",
+      "notes": "Reports systematic underbinding for MACE-MP-0a and overbinding for later MACE-MP variants; the preprint is not an experimental reference."
+    },
+    {
+      "source_id": "hwang_2022_experiment",
+      "reference_class": "experiment",
+      "title": "H2, N2, CO2, and CH4 Unary Adsorption Isotherm Measurements at Low and High Pressures on Zeolitic Imidazolate Framework ZIF-8",
+      "doi": "10.1021/acs.jced.1c00900",
+      "temperature_K": 298.15,
+      "metrics": {
+        "henry_coefficient_mmol_g_bar": {
+          "value": 0.71,
+          "uncertainty": 0.037,
+          "reported_as": "7.10 (0.37) mol kg^-1 MPa^-1"
+        }
+      },
+      "role": "Experimental low-pressure validation"
+    },
+    {
+      "source_id": "klomkliang_2025_experiment_gcmc",
+      "reference_class": "experiment_and_classical_simulation",
+      "title": "Experimental and molecular simulation study of CO2 adsorption in ZIF-8: Atomic heat contributions and mechanism",
+      "doi": "10.1016/j.jiec.2024.11.004",
+      "temperature_range_K": [273.0, 298.0],
+      "metrics": {
+        "isosteric_heat_zero_loading_kj_mol": {
+          "value": 16.0,
+          "value_type": "approximate text-reported value"
+        }
+      },
+      "role": "External plausibility range for low-loading adsorption heat",
+      "notes": "The approximately 16 kJ mol^-1 value is not treated as an exact single-temperature ground truth."
+    },
+    {
+      "source_id": "crafted_2023",
+      "reference_class": "classical_simulation",
+      "title": "CRAFTED: An exploratory database of simulated adsorption isotherms of metal-organic frameworks",
+      "doi": "10.1038/s41597-023-02116-z",
+      "dataset_doi": "10.5281/zenodo.8190237",
+      "role": "UFF/DREIDING and charge-scheme sensitivity baseline",
+      "notes": "CRAFTED is a simulation baseline and is not ground truth."
+    },
+    {
+      "source_id": "kaur_2025_mace_finetuning",
+      "reference_class": "methodology",
+      "title": "Data-efficient fine-tuning of foundational models for first-principles quality sublimation enthalpies",
+      "doi": "10.1039/D4FD00107A",
+      "role": "Methodological basis for a later adsorption-specific MACE fine-tuning stage",
+      "notes": "Demonstrates data-efficient MACE-MP-0 fine-tuning for molecular crystals, but does not provide ZIF-8/CO2 adsorption reference values."
+    }
+  ]
+}

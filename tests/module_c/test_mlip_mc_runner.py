@@ -17,6 +17,7 @@ from analysis.mlip_widom import (
     analyze_widom_attempts,
 )
 from engines.mlip_mc_runner import (
+    _vdw_radii_for,
     run_mlip_mc_gcmc,
     run_mlip_mc_widom,
     summarize_widom_samples,
@@ -133,6 +134,23 @@ class MlipMcRunnerTests(unittest.TestCase):
                 Path(result["analysis_files"]["convergence_plot"]).is_file()
             )
             self.assertTrue(Path(result["output_path"]).is_file())
+
+    def test_model_aliases_use_physical_overlap_radii(self) -> None:
+        from ase.data import atomic_numbers, vdw_radii
+
+        aliased_adsorbate = Atoms(
+            "OsCoOs",
+            positions=[[0, 0, 1.16], [0, 0, 0], [0, 0, -1.16]],
+        )
+
+        radii = _vdw_radii_for(
+            self.framework,
+            aliased_adsorbate,
+            radius_aliases={"Co": "C", "Os": "O"},
+        )
+
+        self.assertEqual(radii[atomic_numbers["Co"]], vdw_radii[atomic_numbers["C"]])
+        self.assertEqual(radii[atomic_numbers["Os"]], vdw_radii[atomic_numbers["O"]])
 
     def test_gcmc_runner_summarizes_only_production_samples(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

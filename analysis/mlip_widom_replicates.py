@@ -109,17 +109,23 @@ def aggregate_widom_replicates(
     plot_path = output / "widom_replicate_summary.png"
     block_csv_path = output / "widom_pooled_blocks.csv"
     block_plot_path = output / "widom_pooled_block_summary.png"
+    curated_reference_path = output / "widom_curated_reference.json"
     save_benchmark_data(json_path, report)
     _write_csv(report["runs"], csv_path)
     _write_plot(report, plot_path)
     _write_block_csv(pooled["blocks"], block_csv_path)
     _write_pooled_plot(report, block_plot_path)
+    save_benchmark_data(
+        curated_reference_path,
+        _curated_reference_from_report(report),
+    )
     report["outputs"] = {
         "json": str(json_path),
         "csv": str(csv_path),
         "plot": str(plot_path),
         "pooled_blocks_csv": str(block_csv_path),
         "pooled_blocks_plot": str(block_plot_path),
+        "curated_reference": str(curated_reference_path),
     }
     if compare_references:
         from analysis.mlip_widom_reference import (
@@ -140,6 +146,43 @@ def aggregate_widom_replicates(
         }
     save_benchmark_data(json_path, report)
     return report
+
+
+def _curated_reference_from_report(report: dict[str, Any]) -> dict[str, Any]:
+    """Export a pooled result in the reference comparison input schema."""
+    model = report.get("model", {})
+    model_name = str(model.get("name") or model.get("model") or "MLIP")
+    reference_class = (
+        "dft_finetuned"
+        if model_name.casefold().startswith("goeminne_")
+        else "mlip_simulation"
+    )
+    metrics = {
+        name: {
+            "value": values["estimate"],
+            "uncertainty": values["ci95_half_width"],
+        }
+        for name, values in report["pooled_block_analysis"]["metrics"].items()
+        if name in METRICS
+    }
+    return {
+        "schema_version": 1,
+        "reference_id": f"{model_name}_{report['temperature_K']:g}K",
+        "label": model_name.replace("_", " "),
+        "reference_class": reference_class,
+        "material": report["material"],
+        "adsorbate": report["adsorbate"],
+        "temperature_K": report["temperature_K"],
+        "metrics": metrics,
+        "provenance": {
+            "model": model,
+            "seeds": report["seeds"],
+            "attempts_per_replicate": report["attempts_per_replicate"],
+            "replicate_count": report["replicate_count"],
+            "converged": report["converged"],
+            "source_runs": [row["run_directory"] for row in report["runs"]],
+        },
+    }
 
 
 def _load_run(run_directory: Path) -> dict[str, Any]:

@@ -121,7 +121,7 @@ The curated reference format is intentionally small and provenance-aware:
     }
   },
   "provenance": {
-    "doi": "10.5281/zenodo.7782867",
+    "doi": "10.5281/zenodo.7904959",
     "model": "model_ZIF8_N=1000.pth"
   }
 }
@@ -159,6 +159,12 @@ general total-energy model. Its configurations therefore set
 return zero, while combined host-guest structures are evaluated by NequIP.
 This matches the reference workflow and avoids subtracting unrelated baseline
 energies a second time. No additional D3 correction is applied to this model.
+The published checkpoint also distinguishes framework atoms from guest atoms
+through model labels: physical CO2 is stored as O-C-O but evaluated as
+Os-Co-Os. These are type labels, not chemical substitutions. The workflow
+preserves the physical masses, uses physical O/C van der Waals exclusion
+radii, and rejects a run unless the 276-atom ZIF-8 cell, cell dimensions, and
+guest labels satisfy the configured model input contract.
 
 The reproducibility archive is about 1 GB, but setup uses HTTP byte ranges to
 read its ZIP directory and transfer only the roughly 1 MB
@@ -188,9 +194,9 @@ paper runs after synchronization:
 
 ```bash
 python -m analysis.mlip_widom_replicates \
-  outputs/module_C_potential_benchmark/runs/zif8_co2_nequip_finetuned_widom_100000_seed12345 \
-  outputs/module_C_potential_benchmark/runs/zif8_co2_nequip_finetuned_widom_100000_seed23456 \
-  outputs/module_C_potential_benchmark/runs/zif8_co2_nequip_finetuned_widom_100000_seed34567 \
+  outputs/module_C_potential_benchmark/runs/zif8_co2_nequip_finetuned_widom_100000_typed_v1_seed12345 \
+  outputs/module_C_potential_benchmark/runs/zif8_co2_nequip_finetuned_widom_100000_typed_v1_seed23456 \
+  outputs/module_C_potential_benchmark/runs/zif8_co2_nequip_finetuned_widom_100000_typed_v1_seed34567 \
   --output-dir outputs/module_C_potential_benchmark/widom_zif8_co2_nequip_reference
 ```
 
@@ -214,3 +220,35 @@ python -m analysis.mlip_reference_configuration_benchmark \
 The supercell check detects a finite-cell or periodic-neighbourhood artefact.
 The exported structures are deliberately selected from the dominant D3 tail,
 so their MAE diagnoses that failure mode but is not an unbiased test-set MAE.
+
+### Cluster-ready ZIF-8 benchmark
+
+The complete corrected validation matrix can be started from the repository
+root. Setup downloads and verifies the Goeminne checkpoint in the active
+environment; smoke checks the model-specific atom typing; production executes
+the nine independent 100,000-insertion runs sequentially on one GPU:
+
+```bash
+conda activate MOF_sim
+bash scripts/run_module_c_zif8_benchmark.sh setup
+bash scripts/run_module_c_zif8_benchmark.sh smoke
+bash scripts/run_module_c_zif8_benchmark.sh production
+```
+
+After synchronizing the run directories back to the local repository, create
+all replicate, convergence, and layered reference comparisons with:
+
+```bash
+bash scripts/analyze_module_c_zif8_benchmark.sh
+```
+
+The matrix contains three matched-seed runs for fine-tuned NequIP and
+MACE-MP-0a at 273 K, plus three fine-tuned NequIP runs at 298.15 K for the
+experimental low-pressure comparison. The source hierarchy and DOI provenance
+are stored in `data/references/module_c_zif8_co2.json`.
+
+The fine-tuning study by Kaur et al. supports the later method of starting from
+MACE-MP-0 and adapting it with a small, high-quality data set. It does not
+provide ZIF-8/CO2 adsorption labels. An adsorption-specific MACE model must
+therefore be trained on framework-guest interaction energies and validated on
+held-out configurations before it can replace the Goeminne reference model.

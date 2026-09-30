@@ -9,7 +9,12 @@ from typing import Any
 from engines.mlip_mc_runner import run_mlip_mc_gcmc, run_mlip_mc_widom
 from modules.module_c_mlips.datasets.common import load_host_guest_system
 from modules.module_c_mlips.dependencies import ensure_mlip_mc_dependencies
+from modules.module_c_mlips.input_contract import validate_model_input_contract
 from modules.module_c_mlips.model_assets import ensure_model_asset
+from modules.module_c_mlips.species_aliases import (
+    apply_adsorbate_species_aliases,
+    validate_model_species_mapping,
+)
 from modules.module_c_mlips.potential_backends.calculators import (
     build_ase_calculator,
     build_interaction_direct_calculator,
@@ -90,6 +95,19 @@ def run_mlip_mc_benchmark(
         minimum_image_policy=run_plan["simulation"]["minimum_image_policy"],
     )
     adsorbate, removed_virtual_sites = _physical_adsorbate_atoms(adsorbate)
+    adsorbate, species_alias_manifest = apply_adsorbate_species_aliases(
+        adsorbate,
+        model.get("adsorbate_species_aliases"),
+    )
+    validate_model_species_mapping(
+        framework.get_chemical_symbols() + adsorbate.get_chemical_symbols(),
+        model.get("species_to_type_name"),
+    )
+    input_contract = validate_model_input_contract(
+        framework,
+        adsorbate,
+        model.get("input_contract"),
+    )
     input_files = _write_engine_inputs(
         framework,
         adsorbate,
@@ -129,6 +147,7 @@ def run_mlip_mc_benchmark(
             output_directory=engine_directory / "widom",
             block_size=int(settings.get("block_size", max(1, trials // 10))),
             convergence_checkpoints=settings.get("convergence_checkpoints"),
+            vdw_radius_aliases=model.get("vdw_radius_aliases"),
             write_analysis_csv=bool(run_plan["outputs"].get("save_csv", True)),
             write_analysis_plot=bool(run_plan["outputs"].get("save_plots", True)),
         )
@@ -166,6 +185,7 @@ def run_mlip_mc_benchmark(
             allow_ideal_gas_fallback=bool(
                 settings.get("allow_ideal_gas_fallback", False)
             ),
+            vdw_radius_aliases=model.get("vdw_radius_aliases"),
         )
 
     result.update(
@@ -180,6 +200,8 @@ def run_mlip_mc_benchmark(
             "source_files": source_files,
             "input_files": input_files,
             "removed_virtual_adsorbate_sites": removed_virtual_sites,
+            "adsorbate_species_aliases": species_alias_manifest,
+            "input_contract": input_contract,
             "energy_mode": energy_mode,
             "model_manifest_path": str(model_manifest_path),
         }

@@ -321,6 +321,51 @@ def _assess_mlip_mc_benchmark(
         if isinstance(model, dict)
         else ""
     )
+    model_name = str(model.get("name", "")).strip().casefold()
+    aliases = (
+        model.get("adsorbate_species_aliases", {})
+        if isinstance(model, dict)
+        else {}
+    )
+    radius_aliases = (
+        model.get("vdw_radius_aliases", {})
+        if isinstance(model, dict)
+        else {}
+    )
+    species_mapping = (
+        model.get("species_to_type_name", {})
+        if isinstance(model, dict)
+        else {}
+    )
+    input_contract = (
+        model.get("input_contract", {})
+        if isinstance(model, dict)
+        else {}
+    )
+    is_goeminne_zif8 = model_name.startswith("goeminne_zif8")
+    goeminne_aliases_valid = (
+        not is_goeminne_zif8
+        or aliases == {"C": "Co", "O": "Os"}
+    )
+    goeminne_radii_valid = (
+        not is_goeminne_zif8
+        or radius_aliases == {"Co": "C", "Os": "O"}
+    )
+    goeminne_mapping_valid = (
+        not is_goeminne_zif8
+        or isinstance(species_mapping, dict)
+        and {"H", "C", "N", "Zn", "Co", "Os"}.issubset(species_mapping)
+    )
+    goeminne_contract_valid = (
+        not is_goeminne_zif8
+        or isinstance(input_contract, dict)
+        and input_contract.get("framework_atom_count") == 276
+        and input_contract.get("adsorbate_physical_symbols") == ["O", "C", "O"]
+        and input_contract.get("adsorbate_model_symbols") == ["Os", "Co", "Os"]
+        and isinstance(input_contract.get("cell_lengths_A"), list)
+        and len(input_contract["cell_lengths_A"]) == 3
+        and input_contract.get("cell_angles_deg") == [90.0, 90.0, 90.0]
+    )
     supported_backends = {
         "mace",
         "mace-torch",
@@ -402,6 +447,32 @@ def _assess_mlip_mc_benchmark(
                 if isinstance(model, dict)
                 else None
             ),
+        },
+        {
+            "name": "goeminne_adsorbate_species",
+            "status": "passed" if goeminne_aliases_valid else "failed",
+            "expected": {"C": "Co", "O": "Os"},
+            "actual": aliases,
+        },
+        {
+            "name": "goeminne_vdw_radii",
+            "status": "passed" if goeminne_radii_valid else "failed",
+            "expected": {"Co": "C", "Os": "O"},
+            "actual": radius_aliases,
+        },
+        {
+            "name": "goeminne_species_mapping",
+            "status": "passed" if goeminne_mapping_valid else "failed",
+            "expected": "H, C, N, Zn, Co, and Os",
+            "actual": species_mapping,
+        },
+        {
+            "name": "goeminne_input_contract",
+            "status": "passed" if goeminne_contract_valid else "failed",
+            "expected": (
+                "276-atom cubic ZIF-8 cell and O-C-O guest represented as Os-Co-Os"
+            ),
+            "actual": input_contract,
         },
     ]
     if workflow == "mlip_mc_widom":

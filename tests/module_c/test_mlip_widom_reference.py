@@ -179,7 +179,7 @@ class WidomReferenceComparisonTests(unittest.TestCase):
                             }
                         },
                         "provenance": {
-                            "doi": "10.5281/zenodo.7782867"
+                            "doi": "10.5281/zenodo.7904959"
                         },
                     }
                 ),

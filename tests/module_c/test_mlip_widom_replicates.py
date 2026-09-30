@@ -36,6 +36,18 @@ class WidomReplicateTests(unittest.TestCase):
             )
             for path in report["outputs"].values():
                 self.assertTrue(Path(path).is_file())
+            curated = json.loads(
+                Path(report["outputs"]["curated_reference"]).read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(curated["reference_class"], "mlip_simulation")
+            self.assertAlmostEqual(
+                curated["metrics"]["henry_coefficient_mmol_g_bar"]["value"],
+                report["pooled_block_analysis"]["metrics"][
+                    "henry_coefficient_mmol_g_bar"
+                ]["estimate"],
+            )
 
     def test_duplicate_seed_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
