@@ -87,6 +87,8 @@ class NequipCalculatorFactoryTests(unittest.TestCase):
                 properties=("energy",),
                 system_changes=all_changes,
             ) -> None:
+                if atoms.calc is not None:
+                    raise NotImplementedError("Foreign calculator on model input")
                 super().calculate(atoms, properties, system_changes)
                 self.results = {
                     "energy": -0.25,
@@ -101,11 +103,13 @@ class NequipCalculatorFactoryTests(unittest.TestCase):
         framework = Atoms("Zn2", positions=[[0, 0, 0], [1, 0, 0]])
         adsorbate = Atoms("CO2", positions=[[0, 0, 0], [1, 0, 0], [-1, 0, 0]])
         combined = framework + adsorbate
+        combined.calc = adapter
 
         self.assertEqual(adapter.get_potential_energy(framework), 0.0)
         self.assertEqual(adapter.get_potential_energy(adsorbate), 0.0)
         self.assertAlmostEqual(adapter.get_potential_energy(combined), -0.25)
         self.assertTrue(np.allclose(adapter.get_forces(combined), 1.0))
+        self.assertIs(combined.calc, adapter)
 
 
 if __name__ == "__main__":

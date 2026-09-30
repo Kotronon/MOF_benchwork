@@ -48,7 +48,7 @@
           "model": "small",
           "device": "cpu",
           "default_dtype": "float64",
-          "dispersion": false
+          "dispersion": true
         }
       ]
     }

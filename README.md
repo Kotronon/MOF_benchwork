@@ -220,7 +220,10 @@ It also installs the pinned legacy NequIP loader in the active environment:
 bash scripts/run_zif8_nequip_reference.sh setup
 ```
 
-Run the gates in order on the GPU cluster. The smoke run checks model loading;
+The supplied configurations use CPU for local execution. On a GPU cluster,
+set the model `device` to `cuda` in the configurations before running. The
+legacy model mapping includes all seven exported types (H, C, N, O, Co, Zn, Os).
+Run the gates in order. The smoke run checks model loading;
 the 10,000-trial pilot checks sign, magnitude, sampling stability, and restart
 files. Only then start the paper-length protocol (273 K, 100,000 insertions per
 seed):

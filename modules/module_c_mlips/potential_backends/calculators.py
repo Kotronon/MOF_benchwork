@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -76,8 +77,10 @@ def build_interaction_direct_calculator(
                     "Interaction-direct calculator received an unexpected "
                     f"atom count: {atom_count}."
                 )
-            energy = float(calculator.get_potential_energy(atoms))
-            forces = np.asarray(calculator.get_forces(atoms), dtype=float)
+            # Legacy NequIP rejects atoms carrying an unrelated calculator.
+            model_atoms = atoms.copy()
+            energy = float(calculator.get_potential_energy(model_atoms))
+            forces = np.asarray(calculator.get_forces(model_atoms), dtype=float)
             self.results = {"energy": energy, "forces": forces}
 
     return InteractionDirectCalculator()
@@ -187,7 +190,13 @@ def _build_nequip_calculator(specification: dict[str, Any]) -> Any:
     for candidate in attempts:
         try:
             if candidate == "legacy":
-                module = importlib.import_module("nequip.ase")
+                import torch
+
+                # Legacy e3nn constants contain slices. Keep weights-only loading
+                # enabled and scope this allowlist to the dependency import.
+                safe_globals = getattr(torch.serialization, "safe_globals", None)
+                with safe_globals([slice]) if safe_globals else nullcontext():
+                    module = importlib.import_module("nequip.ase")
                 calculator_class = module.NequIPCalculator
                 arguments = {
                     "model_path": str(model_path),
