@@ -36,6 +36,7 @@ def run_mlip_mc_widom(
     output_directory: str | Path,
     block_size: int | None = None,
     convergence_checkpoints: list[int] | None = None,
+    vdw_radius_aliases: dict[str, str] | None = None,
     write_analysis_csv: bool = True,
     write_analysis_plot: bool = True,
     engine_class: Any | None = None,
@@ -53,7 +54,11 @@ def run_mlip_mc_widom(
     output.mkdir(parents=True, exist_ok=True)
     log_path = output / "mlip_mc_widom.log"
     _seed_random_generators(seed)
-    vdw_radii = _vdw_radii_for(framework, adsorbate)
+    vdw_radii = _vdw_radii_for(
+        framework,
+        adsorbate,
+        radius_aliases=vdw_radius_aliases,
+    )
     widom_class = engine_class or _load_widom_class()
 
     started = perf_counter()
@@ -186,6 +191,7 @@ def run_mlip_mc_gcmc(
     trajectory_interval: int = 100,
     overwrite_checkpoints: bool = False,
     allow_ideal_gas_fallback: bool = False,
+    vdw_radius_aliases: dict[str, str] | None = None,
     engine_class: Any | None = None,
     eos_factory: Callable[[str], Any] | None = None,
 ) -> dict[str, Any]:
@@ -208,7 +214,11 @@ def run_mlip_mc_gcmc(
     output.mkdir(parents=True, exist_ok=True)
     gcmc_class = engine_class or _load_gcmc_class()
     eos_builder = eos_factory or _load_preos_factory()
-    vdw_radii = _vdw_radii_for(framework, adsorbate)
+    vdw_radii = _vdw_radii_for(
+        framework,
+        adsorbate,
+        radius_aliases=vdw_radius_aliases,
+    )
     total_steps = int(equilibration_steps) + int(production_steps)
     point_results = []
     started = perf_counter()
@@ -411,12 +421,38 @@ def _validate_seed(seed: int) -> None:
         raise ValueError("MLIP-MC seed must be a positive integer.")
 
 
-def _vdw_radii_for(framework: Any, adsorbate: Any) -> np.ndarray:
+def _vdw_radii_for(
+    framework: Any,
+    adsorbate: Any,
+    *,
+    radius_aliases: dict[str, str] | None = None,
+) -> np.ndarray:
     try:
-        from ase.data import vdw_radii
+        from ase.data import atomic_numbers as ase_atomic_numbers, vdw_radii
     except ImportError as exc:
         raise ImportError("ASE is required for MLIP-MC van der Waals radii.") from exc
     radii = np.asarray(vdw_radii, dtype=float).copy()
+    if radius_aliases is not None:
+        if not isinstance(radius_aliases, dict):
+            raise TypeError("vdW radius aliases must be an object.")
+        for model_symbol, physical_symbol in radius_aliases.items():
+            if model_symbol not in ase_atomic_numbers:
+                raise ValueError(
+                    f"Unknown model symbol in vdW radius aliases: {model_symbol!r}."
+                )
+            if physical_symbol not in ase_atomic_numbers:
+                raise ValueError(
+                    "Unknown physical symbol in vdW radius aliases: "
+                    f"{physical_symbol!r}."
+                )
+            model_number = ase_atomic_numbers[model_symbol]
+            physical_number = ase_atomic_numbers[physical_symbol]
+            physical_radius = float(radii[physical_number])
+            if not isfinite(physical_radius):
+                raise ValueError(
+                    f"ASE has no finite van der Waals radius for {physical_symbol}."
+                )
+            radii[model_number] = physical_radius
     atomic_numbers = set(framework.get_atomic_numbers()) | set(
         adsorbate.get_atomic_numbers()
     )

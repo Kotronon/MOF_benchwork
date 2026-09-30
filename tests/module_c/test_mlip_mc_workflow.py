@@ -60,6 +60,14 @@ class MlipMcWorkflowPlanningTests(unittest.TestCase):
         self.assertEqual(model["backend"], "nequip")
         self.assertEqual(model["loader"], "legacy")
         self.assertEqual(model["energy_mode"], "interaction_direct")
+        self.assertEqual(
+            model["adsorbate_species_aliases"],
+            {"C": "Co", "O": "Os"},
+        )
+        self.assertEqual(
+            model["vdw_radius_aliases"],
+            {"Co": "C", "Os": "O"},
+        )
         self.assertFalse(model["dispersion"])
         self.assertEqual(plan["conditions"]["temperature_K"], 273.0)
         checks = {
@@ -69,6 +77,16 @@ class MlipMcWorkflowPlanningTests(unittest.TestCase):
         self.assertEqual(checks["mlip_backend"]["status"], "passed")
         self.assertEqual(checks["energy_mode"]["status"], "passed")
         self.assertEqual(checks["nequip_dispersion"]["status"], "passed")
+        self.assertEqual(
+            checks["goeminne_adsorbate_species"]["status"],
+            "passed",
+        )
+        self.assertEqual(checks["goeminne_vdw_radii"]["status"], "passed")
+        self.assertEqual(
+            checks["goeminne_species_mapping"]["status"],
+            "passed",
+        )
+        self.assertEqual(checks["goeminne_input_contract"]["status"], "passed")
 
     def test_nequip_reference_rejects_double_counted_dispersion(self) -> None:
         config = load_benchmark_data(NEQUIP_CONFIG)
@@ -81,6 +99,35 @@ class MlipMcWorkflowPlanningTests(unittest.TestCase):
         self.assertEqual(applicability["status"], "unsupported")
         checks = {item["name"]: item for item in applicability["checks"]}
         self.assertEqual(checks["nequip_dispersion"]["status"], "failed")
+
+    def test_goeminne_reference_rejects_missing_guest_aliases(self) -> None:
+        config = load_benchmark_data(NEQUIP_CONFIG)
+        model = config["benchmark"]["potential_benchmark"]["mlip_mc"]["model"]
+        model.pop("adsorbate_species_aliases")
+
+        plan = build_run_plan(config)
+
+        checks = {
+            item["name"]: item
+            for item in plan["benchmark"]["applicability"]["checks"]
+        }
+        self.assertEqual(
+            checks["goeminne_adsorbate_species"]["status"],
+            "failed",
+        )
+
+    def test_goeminne_reference_rejects_missing_input_contract(self) -> None:
+        config = load_benchmark_data(NEQUIP_CONFIG)
+        model = config["benchmark"]["potential_benchmark"]["mlip_mc"]["model"]
+        model.pop("input_contract")
+
+        plan = build_run_plan(config)
+
+        checks = {
+            item["name"]: item
+            for item in plan["benchmark"]["applicability"]["checks"]
+        }
+        self.assertEqual(checks["goeminne_input_contract"]["status"], "failed")
 
 
 if __name__ == "__main__":

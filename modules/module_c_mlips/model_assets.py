@@ -51,8 +51,11 @@ def ensure_model_asset(
         )
 
     archive_url = str(asset.get("archive_url", "")).strip()
-    member_basename = str(asset.get("member_basename", model_path.name)).strip()
-    if not archive_url or not member_basename:
+    member_name = str(
+        asset.get("member_path")
+        or asset.get("member_basename", model_path.name)
+    ).strip()
+    if not archive_url or not member_name:
         raise ValueError(
             "A downloadable model asset requires archive_url and "
             "member_basename."
@@ -63,7 +66,7 @@ def ensure_model_asset(
     if archive_url.startswith(("https://", "http://")):
         ranged_member = _extract_remote_zip_member(
             archive_url,
-            member_basename,
+            member_name,
             temporary_path,
         )
     if ranged_member is not None:
@@ -91,7 +94,7 @@ def ensure_model_asset(
                 f"Archive checksum mismatch for {archive_path}: expected "
                 f"{expected_md5}, found {actual_md5}."
             )
-    member = _find_archive_member(archive_path, member_basename)
+    member = _find_archive_member(archive_path, member_name)
     try:
         with ZipFile(archive_path) as archive, archive.open(member) as source:
             with temporary_path.open("wb") as target:
@@ -138,7 +141,7 @@ def _finalize_model_asset(
 
 def _extract_remote_zip_member(
     url: str,
-    member_basename: str,
+    member_name: str,
     target: Path,
 ) -> str | None:
     """Extract one member using ZIP metadata and HTTP byte ranges."""
@@ -166,14 +169,14 @@ def _extract_remote_zip_member(
     )
     if central is None:
         return None
-    matches = _parse_central_directory(central, member_basename)
+    matches = _parse_central_directory(central, member_name)
     if not matches:
         raise FileNotFoundError(
-            f"Model {member_basename!r} was not found in remote archive {url}."
+            f"Model {member_name!r} was not found in remote archive {url}."
         )
     if len(matches) > 1:
         raise ValueError(
-            f"Model basename {member_basename!r} is ambiguous in {url}: "
+            f"Model name {member_name!r} is ambiguous in {url}: "
             + ", ".join(item["name"] for item in matches)
         )
     member = matches[0]
@@ -222,7 +225,7 @@ def _extract_remote_zip_member(
 
 def _parse_central_directory(
     data: bytes,
-    member_basename: str,
+    member_name: str,
 ) -> list[dict[str, Any]]:
     matches = []
     offset = 0
@@ -237,7 +240,13 @@ def _parse_central_directory(
         name_end = name_start + name_length
         encoding = "utf-8" if flags & 0x800 else "cp437"
         name = data[name_start:name_end].decode(encoding)
-        if PurePosixPath(name).name == member_basename:
+        exact_path = "/" in member_name
+        matches_member = (
+            name == member_name
+            if exact_path
+            else PurePosixPath(name).name == member_name
+        )
+        if matches_member:
             matches.append(
                 {
                     "name": name,
@@ -285,23 +294,27 @@ def _download(url: str, target: Path) -> None:
         raise
 
 
-def _find_archive_member(archive_path: Path, basename: str) -> str:
+def _find_archive_member(archive_path: Path, member_name: str) -> str:
     try:
         with ZipFile(archive_path) as archive:
             matches = [
                 name
                 for name in archive.namelist()
-                if PurePosixPath(name).name == basename
+                if (
+                    name == member_name
+                    if "/" in member_name
+                    else PurePosixPath(name).name == member_name
+                )
             ]
     except BadZipFile as exc:
         raise ValueError(f"Downloaded model archive is not a ZIP: {archive_path}") from exc
     if not matches:
         raise FileNotFoundError(
-            f"Model {basename!r} was not found in {archive_path}."
+            f"Model {member_name!r} was not found in {archive_path}."
         )
     if len(matches) > 1:
         raise ValueError(
-            f"Model basename {basename!r} is ambiguous in {archive_path}: "
+            f"Model name {member_name!r} is ambiguous in {archive_path}: "
             + ", ".join(matches)
         )
     return matches[0]
