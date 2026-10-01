@@ -17,23 +17,46 @@ def write_mace_datasets(
     labels: Sequence[dict[str, Any]],
     *,
     training_ids: set[str],
+    validation_ids: set[str],
     test_ids: set[str],
     output_directory: str | Path,
 ) -> dict[str, str]:
     """Write disjoint MACE extxyz datasets from parsed CP2K labels."""
-    if training_ids & test_ids:
-        raise ValueError("Active-learning training and test IDs overlap.")
+    overlaps = {
+        "training/validation": training_ids & validation_ids,
+        "training/test": training_ids & test_ids,
+        "validation/test": validation_ids & test_ids,
+    }
+    invalid = {
+        name: sorted(values) for name, values in overlaps.items() if values
+    }
+    if invalid:
+        raise ValueError(
+            "Active-learning dataset IDs overlap: " + repr(invalid)
+        )
     try:
         from ase.io import read, write
     except ImportError as exc:
         raise ImportError("ASE is required to build MACE datasets.") from exc
     output = Path(output_directory)
     output.mkdir(parents=True, exist_ok=True)
-    paths = {"train": output / "train.extxyz", "test": output / "test.extxyz"}
-    grouped = {"train": [], "test": []}
+    paths = {
+        "train": output / "train.extxyz",
+        "valid": output / "valid.extxyz",
+        "test": output / "test.extxyz",
+    }
+    grouped = {"train": [], "valid": [], "test": []}
     for label in labels:
         candidate_id = str(label["candidate_id"])
-        split = "train" if candidate_id in training_ids else "test" if candidate_id in test_ids else None
+        split = (
+            "train"
+            if candidate_id in training_ids
+            else "valid"
+            if candidate_id in validation_ids
+            else "test"
+            if candidate_id in test_ids
+            else None
+        )
         if split is None:
             continue
         atoms = read(str(label["structure_path"]))
@@ -47,14 +70,19 @@ def write_mace_datasets(
         if stress is not None:
             atoms.info["REF_stress_GPa"] = stress
         grouped[split].append(atoms)
-    if not grouped["train"] or not grouped["test"]:
-        raise ValueError("Both active-learning train and test datasets must be non-empty.")
+    if any(not grouped[split] for split in ("train", "valid", "test")):
+        raise ValueError(
+            "Active-learning train, validation, and test datasets must all "
+            "be non-empty."
+        )
     for split, atoms_list in grouped.items():
         write(paths[split], atoms_list, format="extxyz")
     manifest = {
         "train": str(paths["train"]),
+        "valid": str(paths["valid"]),
         "test": str(paths["test"]),
         "training_ids": sorted(training_ids),
+        "validation_ids": sorted(validation_ids),
         "test_ids": sorted(test_ids),
     }
     save_benchmark_data(output / "dataset_manifest.json", manifest)
@@ -86,7 +114,7 @@ def build_mace_finetune_commands(
             "mace_run_train",
             "--name", name,
             "--train_file", datasets["train"],
-            "--valid_file", datasets["test"],
+            "--valid_file", datasets["valid"],
             "--foundation_model", foundation,
             "--energy_key", "REF_energy",
             "--forces_key", "REF_forces",

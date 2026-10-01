@@ -8,6 +8,7 @@ import unittest
 
 from modules.module_c_mlips.applicability import assess_campaign_structure
 from modules.module_c_mlips.campaign import (
+    _sampling_assessment,
     _validated_campaign_model,
     build_campaign_tasks,
 )
@@ -119,6 +120,30 @@ class ModuleCCampaignTests(unittest.TestCase):
             {item["candidate_id"] for item in test}
             & {item["candidate_id"] for item in training}
         )
+
+    def test_widom_sampling_status_requires_relative_ci_target(self) -> None:
+        result = {
+            "status": "completed",
+            "method": "widom",
+            "uncertainty": {
+                "metrics": {
+                    "henry_coefficient_mol_kg_pa": {
+                        "relative_ci95_half_width": 0.18,
+                    },
+                    "isosteric_heat_zero_loading_kj_mol": {
+                        "relative_ci95_half_width": 0.04,
+                    },
+                }
+            },
+        }
+
+        report = _sampling_assessment(
+            result,
+            {"relative_ci95_target": 0.05},
+        )
+
+        self.assertEqual(report["status"], "not_converged")
+        self.assertEqual(report["relative_ci95_target"], 0.05)
 
     def test_validated_model_is_selected_from_active_learning_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

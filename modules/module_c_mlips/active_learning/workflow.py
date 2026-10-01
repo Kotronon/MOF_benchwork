@@ -38,6 +38,7 @@ def run_active_learning(
     run_plan: dict[str, Any],
     *,
     submit: bool = False,
+    train: bool = False,
     resume: bool = False,
 ) -> dict[str, Any]:
     """Advance the restartable CP2K-to-MACE workflow as far as possible."""
@@ -142,6 +143,7 @@ def run_active_learning(
         datasets = write_mace_datasets(
             labels,
             training_ids=set(state.training_ids),
+            validation_ids=set(state.validation_ids),
             test_ids=set(state.test_ids),
             output_directory=(
                 root / f"iteration_{state.iteration:02d}" / "datasets"
@@ -154,7 +156,7 @@ def run_active_learning(
             base_model=settings.base_model,
             device=settings.device,
         )
-        if not submit:
+        if not train:
             state.status = "training_prepared"
             state.history.append(
                 {"iteration": state.iteration, "event": "training_prepared"}
@@ -173,7 +175,7 @@ def run_active_learning(
         _execute_training(commands, state, state_path)
 
     if state.status == "training_prepared":
-        if not submit:
+        if not train:
             return _state_report(
                 state,
                 state_path,
@@ -268,9 +270,14 @@ def _initialize(
         fractions=settings.candidate_fractions,
         iteration=0,
     )
-    test_records, training_records = _stratified_split(
+    test_records, initial_training_records = _stratified_split(
         candidates,
         test_count=settings.test_configurations,
+        fractions=settings.candidate_fractions,
+    )
+    validation_records, training_records = _stratified_split(
+        initial_training_records,
+        test_count=settings.validation_configurations,
         fractions=settings.candidate_fractions,
     )
     state.test_ids = [
@@ -278,6 +285,9 @@ def _initialize(
     ]
     state.training_ids = [
         item["candidate_id"] for item in training_records
+    ]
+    state.validation_ids = [
+        item["candidate_id"] for item in validation_records
     ]
     baselines = _write_baseline_candidates(
         framework,
@@ -302,6 +312,7 @@ def _initialize(
             "event": "initialized",
             "candidate_count": len(candidates),
             "training_count": len(state.training_ids),
+            "validation_count": len(state.validation_ids),
             "test_count": len(state.test_ids),
             "baseline_job_count": len(baselines),
             "cutoff_test_job_count": len(jobs),

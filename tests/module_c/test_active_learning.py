@@ -16,6 +16,7 @@ from modules.module_c_mlips.active_learning.dft import (
 )
 from modules.module_c_mlips.active_learning.models import ActiveLearningState
 from modules.module_c_mlips.active_learning.training import (
+    build_mace_finetune_commands,
     classify_validation_metrics,
     write_mace_datasets,
 )
@@ -86,9 +87,30 @@ class ActiveLearningTests(unittest.TestCase):
             write_mace_datasets(
                 [],
                 training_ids={"same"},
+                validation_ids=set(),
                 test_ids={"same"},
                 output_directory="unused",
             )
+
+    def test_mace_uses_validation_file_not_held_out_test_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            commands = build_mace_finetune_commands(
+                {
+                    "train": "train.extxyz",
+                    "valid": "valid.extxyz",
+                    "test": "test.extxyz",
+                },
+                temporary,
+                committee_size=1,
+                base_model="mace_mp_0a_small",
+                device="cpu",
+                seeds=[12345],
+            )
+
+        command = commands[0]["command"]
+        valid_index = command.index("--valid_file")
+        self.assertEqual(command[valid_index + 1], "valid.extxyz")
+        self.assertNotIn("test.extxyz", command)
 
     def test_validation_thresholds_have_pass_warning_and_failure(self) -> None:
         settings = _ThresholdSettings()
@@ -170,6 +192,44 @@ class ActiveLearningTests(unittest.TestCase):
 
             self.assertEqual(report["status"], "adaptation_not_converged")
 
+    def test_submit_does_not_start_mace_training(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            plan, state_path = self._prepared_models_state(
+                Path(temporary),
+                stable_rounds=0,
+                iteration=0,
+                candidate_count=50,
+            )
+            state = ActiveLearningState.load(state_path)
+            state.status = "ready_to_train"
+            state.model_paths = []
+            state.save(state_path)
+            with patch(
+                "modules.module_c_mlips.active_learning.workflow.load_labels",
+                return_value=[],
+            ), patch(
+                "modules.module_c_mlips.active_learning.workflow.write_mace_datasets",
+                return_value={
+                    "train": "train.extxyz",
+                    "valid": "valid.extxyz",
+                    "test": "test.extxyz",
+                },
+            ), patch(
+                "modules.module_c_mlips.active_learning.workflow.build_mace_finetune_commands",
+                return_value=[],
+            ), patch(
+                "modules.module_c_mlips.active_learning.workflow._execute_training"
+            ) as execute_training:
+                report = run_active_learning(
+                    plan,
+                    submit=True,
+                    train=False,
+                    resume=True,
+                )
+
+        self.assertEqual(report["status"], "training_prepared")
+        execute_training.assert_not_called()
+
     @staticmethod
     def _prepared_models_state(
         root: Path,
@@ -191,6 +251,7 @@ class ActiveLearningTests(unittest.TestCase):
             candidate_count=candidate_count,
             test_ids=["test"],
             training_ids=["train"],
+            validation_ids=["valid"],
             model_paths=["model-0.model", "model-1.model", "model-2.model"],
         )
         state.save(state_path)

@@ -105,7 +105,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--submit",
         action="store_true",
-        help="Execute or submit prepared CP2K and MACE active-learning jobs.",
+        help="Submit prepared CP2K active-learning jobs.",
+    )
+    parser.add_argument(
+        "--train",
+        action="store_true",
+        help="Execute prepared MACE training in the current GPU allocation.",
     )
     parser.add_argument(
         "--systems",
@@ -166,6 +171,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Run cases marked outside the current validated module capability without an interactive prompt.",
     )
     args = parser.parse_args(argv)
+    if args.train and (
+        not args.run_module_c or args.stage != "active-learning"
+    ):
+        parser.error(
+            "--train requires --run-module-c --stage active-learning."
+        )
 
     config = load_benchmark_data(args.config)
     if args.new_run:
@@ -218,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
             selected_models=args.models,
             jobs=args.jobs,
             submit=args.submit,
+            train=args.train,
             resume=args.resume,
         )
         print(json.dumps(result, indent=2))

@@ -1,7 +1,8 @@
 {
   "material": {
-    "name": "MOF-5",
-    "cif_path": "CRAFTED-2.0.0/CIF_FILES/NEUTRAL/IRMOF-1.cif"
+    "name": "ZIF-8",
+    "cif_path": "CRAFTED-2.0.0/CIF_FILES/NEUTRAL/ZIF-8.cif",
+    "charge_scheme": "unspecified"
   },
   "adsorbates": {
     "components": ["CO2"]
@@ -18,7 +19,6 @@
         "mode": "active_learning"
       },
       "adsorption_engine": "mlip_mc",
-      "cross_check_engine": "flames",
       "active_learning": {
         "enabled": true,
         "base_model": "mace_mp_0a_small",
@@ -31,6 +31,11 @@
         "rounds": 4,
         "configurations_per_round": 25,
         "maximum_configurations": 150,
+        "stable_rounds_required": 2,
+        "energy_pass_mae_ev": 0.043,
+        "force_pass_mae_ev_per_A": 0.10,
+        "energy_warning_mae_ev": 0.10,
+        "force_warning_mae_ev_per_A": 0.20,
         "cp2k": {
           "executable": "cp2k.psmp",
           "profile": "pbe_d3_bj",
@@ -41,6 +46,7 @@
           "charge": 0,
           "multiplicity": 1,
           "configuration_reviewed": true,
+          "supported_elements": ["H", "C", "N", "O", "Zn"],
           "slurm": {
             "nodes": 1,
             "ntasks": 32,
@@ -50,7 +56,7 @@
         }
       },
       "campaign": {
-        "id": "mof5_co2_active_learning",
+        "id": "zif8_co2_active_learning",
         "models": [
           {
             "backend": "mace-torch",
@@ -58,7 +64,8 @@
             "model": "small",
             "device": "cuda",
             "default_dtype": "float64",
-            "dispersion": false
+            "dispersion": false,
+            "supported_elements": ["H", "C", "N", "O", "Zn"]
           }
         ]
       }
@@ -73,11 +80,15 @@
     "minimum_image_policy": "error",
     "cutoff_A": 6.0,
     "unit_cells": "auto",
-    "seeds": [12345]
+    "seeds": [12345, 23456, 34567]
+  },
+  "convergence": {
+    "minimum_replicates": 3,
+    "relative_ci95_target": 0.05
   },
   "output": {
     "directory": "outputs/module_C_potential_benchmark",
-    "run_id": "mof5_co2_active_learning",
+    "run_id": "zif8_co2_active_learning",
     "overwrite": false,
     "resume": true,
     "save_plots": true,

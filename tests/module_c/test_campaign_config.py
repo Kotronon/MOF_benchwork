@@ -28,6 +28,10 @@ class ModuleCCampaignConfigTests(unittest.TestCase):
         self.assertEqual(settings["adsorption_engine"], "mlip_mc")
         self.assertFalse(settings["active_learning"]["enabled"])
         self.assertEqual(
+            settings["active_learning"]["validation_configurations"],
+            6,
+        )
+        self.assertEqual(
             settings["campaign"]["stages"]["gcmc_production"][
                 "production_steps"
             ],

@@ -273,6 +273,7 @@ def _normalize_module_c_campaign(settings: dict[str, Any]) -> None:
     active_learning.setdefault("committee_size", 3)
     active_learning.setdefault("dft_labeler", "cp2k")
     active_learning.setdefault("initial_training_configurations", 30)
+    active_learning.setdefault("validation_configurations", 6)
     active_learning.setdefault("test_configurations", 20)
     active_learning.setdefault("rounds", 4)
     active_learning.setdefault("configurations_per_round", 25)
@@ -290,6 +291,7 @@ def _normalize_module_c_campaign(settings: dict[str, Any]) -> None:
     integer_fields = (
         "committee_size",
         "initial_training_configurations",
+        "validation_configurations",
         "test_configurations",
         "rounds",
         "configurations_per_round",
@@ -303,6 +305,14 @@ def _normalize_module_c_campaign(settings: dict[str, Any]) -> None:
                 f"'benchmark.potential_benchmark.active_learning.{field}' "
                 "must be a positive integer."
             )
+    if (
+        active_learning["validation_configurations"]
+        >= active_learning["initial_training_configurations"]
+    ):
+        raise ValueError(
+            "Active-learning validation_configurations must leave at least "
+            "one fitting configuration in initial_training_configurations."
+        )
     planned = (
         active_learning["initial_training_configurations"]
         + active_learning["test_configurations"]

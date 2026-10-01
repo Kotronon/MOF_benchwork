@@ -130,6 +130,7 @@ def run_module_c_campaign(
     selected_models: Sequence[str] = (),
     jobs: int = 1,
     submit: bool = False,
+    train: bool = False,
     resume: bool = False,
 ) -> dict[str, Any]:
     """Expand and execute one stage of a Module C campaign."""
@@ -151,14 +152,25 @@ def run_module_c_campaign(
         raise ValueError("jobs must be positive.")
     if jobs == 1 or normalized_stage == "active_learning":
         results = [
-            _run_campaign_task(task, submit=submit, resume=resume)
+            _run_campaign_task(
+                task,
+                submit=submit,
+                train=train,
+                resume=resume,
+            )
             for task in tasks
         ]
     else:
         results = []
         with ProcessPoolExecutor(max_workers=jobs) as executor:
             futures = {
-                executor.submit(_run_campaign_task, task, submit=submit, resume=resume): task
+                executor.submit(
+                    _run_campaign_task,
+                    task,
+                    submit=submit,
+                    train=train,
+                    resume=resume,
+                ): task
                 for task in tasks
             }
             for future in as_completed(futures):
@@ -277,16 +289,22 @@ def analyze_module_c_campaign(run_plan: dict[str, Any]) -> dict[str, Any]:
                 data = json.loads(result_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 continue
+            sampling_assessment = _sampling_assessment(
+                data,
+                run_plan.get("convergence", {}),
+            )
             rows.append(
                 {
                     "path": str(result_path),
                     "engine": data.get("engine"),
                     "method": data.get("method"),
                     "status": data.get("status"),
-                    "sampling_status": data.get("sampling_status"),
+                    "sampling_status": sampling_assessment["status"],
+                    "sampling_assessment": sampling_assessment,
                     "potential_status": data.get("potential_status"),
                     "reference_status": data.get("reference_status"),
                     "runtime_seconds": data.get("runtime_seconds"),
+                    "metrics": data.get("metrics", {}),
                 }
             )
     report_path = output_root / "campaigns" / campaign_id / "module_c_summary.json"
@@ -302,7 +320,13 @@ def analyze_module_c_campaign(run_plan: dict[str, Any]) -> dict[str, Any]:
     return report
 
 
-def _run_campaign_task(task: dict[str, Any], *, submit: bool, resume: bool) -> dict[str, Any]:
+def _run_campaign_task(
+    task: dict[str, Any],
+    *,
+    submit: bool,
+    train: bool,
+    resume: bool,
+) -> dict[str, Any]:
     plan = build_run_plan(task["config"])
     if plan["benchmark"]["applicability"].get("can_attempt_simulation") is False:
         return {
@@ -311,7 +335,12 @@ def _run_campaign_task(task: dict[str, Any], *, submit: bool, resume: bool) -> d
             "reason": plan["benchmark"]["applicability"]["reason"],
         }
     if task["stage"] == "active_learning":
-        result = run_active_learning(plan, submit=submit, resume=resume)
+        result = run_active_learning(
+            plan,
+            submit=submit,
+            train=train,
+            resume=resume,
+        )
     else:
         result = _run_adsorption(plan, task["stage"])
     return {"task_id": task["task_id"], **result}
@@ -402,12 +431,17 @@ def _run_adsorption(
     method = str(stage_settings.get("method", "widom")).casefold()
     result = engine.run_widom(system, calculator, settings) if method == "widom" else engine.run_gcmc(system, calculator, settings)
     applicability = plan["benchmark"]["applicability"]
+    sampling_assessment = _sampling_assessment(
+        result,
+        plan.get("convergence", {}),
+    )
     result.update(
         {
             "material": plan["material"]["material_id"],
             "model": model.get("name", model.get("model")),
             "stage": stage,
-            "sampling_status": _sampling_status(result),
+            "sampling_status": sampling_assessment["status"],
+            "sampling_assessment": sampling_assessment,
             "potential_status": potential_status,
             "reference_status": applicability.get("reference_status", "not_assessed"),
         }
@@ -447,13 +481,61 @@ def _stage_pressures(values: Sequence[float], settings: dict[str, Any]) -> list[
     return [pressures[0], pressures[len(pressures) // 2], pressures[-1]]
 
 
-def _sampling_status(result: dict[str, Any]) -> str:
+def _sampling_assessment(
+    result: dict[str, Any],
+    convergence: dict[str, Any],
+) -> dict[str, Any]:
     if result.get("status") != "completed":
-        return "failed"
+        return {"status": "failed", "reason": "Engine execution failed."}
     if result.get("method") == "widom":
         uncertainty = result.get("uncertainty")
-        return "converged" if uncertainty else "completed_unassessed"
-    return "completed_unassessed"
+        metrics = (
+            uncertainty.get("metrics", {})
+            if isinstance(uncertainty, dict)
+            else {}
+        )
+        names = (
+            "henry_coefficient_mol_kg_pa",
+            "isosteric_heat_zero_loading_kj_mol",
+        )
+        relative = {
+            name: metrics.get(name, {}).get("relative_ci95_half_width")
+            for name in names
+        }
+        if any(value is None for value in relative.values()):
+            return {
+                "status": "completed_unassessed",
+                "reason": "Relative block confidence intervals are unavailable.",
+                "relative_ci95_half_width": relative,
+            }
+        target = float(convergence.get("relative_ci95_target", 0.05))
+        converged = all(float(value) <= target for value in relative.values())
+        return {
+            "status": "converged" if converged else "not_converged",
+            "criterion": "non_overlapping_block_relative_ci95",
+            "relative_ci95_target": target,
+            "relative_ci95_half_width": relative,
+        }
+    if result.get("method") == "gcmc":
+        points = result.get("pressure_points", [])
+        assessed = [point for point in points if "converged" in point]
+        if not points or len(assessed) != len(points):
+            return {
+                "status": "completed_unassessed",
+                "reason": "Not every pressure point reports convergence.",
+            }
+        return {
+            "status": (
+                "converged"
+                if all(bool(point["converged"]) for point in assessed)
+                else "not_converged"
+            ),
+            "criterion": "all_pressure_points_converged",
+        }
+    return {
+        "status": "completed_unassessed",
+        "reason": "No sampling convergence rule exists for this method.",
+    }
 
 
 def _safe_id(value: str) -> str:

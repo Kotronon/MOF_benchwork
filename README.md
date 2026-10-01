@@ -52,10 +52,11 @@ python benchmark.py \
   --run-module-c --stage screening --systems ZIF-8
 ```
 
-For `validation.mode: active_learning`, the first call creates a stratified,
-permanently held-out test split, empty-framework and isolated-CO2 baselines,
-and CP2K cutoff-test jobs. `--submit` executes local jobs or submits Slurm
-jobs; repeat the command with `--resume` after each cluster phase:
+For `validation.mode: active_learning`, the first call creates separate,
+stratified fit, validation, and permanently held-out test splits, plus
+empty-framework and isolated-CO2 baselines and CP2K cutoff-test jobs.
+`--submit` only submits CP2K jobs. MACE training requires the separate
+`--train` flag so it cannot start accidentally on a login node.
 
 ```bash
 python benchmark.py \
@@ -65,6 +66,30 @@ python benchmark.py \
 python benchmark.py CONFIG.json \
   --run-module-c --stage active-learning --submit --resume
 ```
+
+The ZIF-8 workflow is wrapped in a cluster helper. `start` initializes the
+state and submits the 400/600/800 Ry cutoff jobs. Run `advance` after each
+CP2K phase has completed. When the state reaches `training_prepared`, run
+`train` from an allocated GPU node:
+
+```bash
+bash scripts/run_module_c_zif8_active_learning.sh setup
+bash scripts/run_module_c_zif8_active_learning.sh assess
+bash scripts/run_module_c_zif8_active_learning.sh start
+bash scripts/run_module_c_zif8_active_learning.sh status
+bash scripts/run_module_c_zif8_active_learning.sh advance
+
+# Only inside a GPU allocation:
+bash scripts/run_module_c_zif8_active_learning.sh train
+
+# Only after the state reports dft_validated, also on a GPU node:
+bash scripts/run_module_c_zif8_active_learning.sh widom
+bash scripts/run_module_c_zif8_active_learning.sh gcmc-pilot
+```
+
+The 50 initial host/guest configurations are partitioned into 24 fitting,
+6 validation, and 20 test configurations. The two isolated baselines are
+training-only. The test split is never passed to `mace_run_train`.
 
 The state machine performs CP2K cutoff validation, MACE-MP-0a committee
 fine-tuning, held-out energy/force evaluation, and disagreement-based candidate

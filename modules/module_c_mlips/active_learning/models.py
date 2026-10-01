@@ -14,6 +14,7 @@ class ActiveLearningSettings:
     base_model: str = "mace_mp_0a_small"
     committee_size: int = 3
     initial_training_configurations: int = 30
+    validation_configurations: int = 6
     test_configurations: int = 20
     rounds: int = 4
     configurations_per_round: int = 25
@@ -54,6 +55,7 @@ class ActiveLearningState:
     candidate_count: int = 0
     labeled_count: int = 0
     training_ids: list[str] = field(default_factory=list)
+    validation_ids: list[str] = field(default_factory=list)
     test_ids: list[str] = field(default_factory=list)
     pending_ids: list[str] = field(default_factory=list)
     baseline_ids: list[str] = field(default_factory=list)
@@ -64,12 +66,17 @@ class ActiveLearningState:
     failure_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {"schema_version": 1, **asdict(self)}
+        return {"schema_version": 2, **asdict(self)}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ActiveLearningState":
         values = dict(data)
-        values.pop("schema_version", None)
+        schema_version = int(values.pop("schema_version", 1))
+        if schema_version < 2 and values.get("status") != "new":
+            raise ValueError(
+                "This active-learning state predates the independent validation "
+                "split. Recreate it with --overwrite before submitting jobs."
+            )
         return cls(**values)
 
     @classmethod
