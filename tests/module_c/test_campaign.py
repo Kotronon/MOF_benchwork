@@ -5,9 +5,11 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from modules.module_c_mlips.applicability import assess_campaign_structure
 from modules.module_c_mlips.campaign import (
+    _cp2k_runtime_status,
     _sampling_assessment,
     _validated_campaign_model,
     build_campaign_tasks,
@@ -144,6 +146,25 @@ class ModuleCCampaignTests(unittest.TestCase):
 
         self.assertEqual(report["status"], "not_converged")
         self.assertEqual(report["relative_ci95_target"], 0.05)
+
+    def test_local_cp2k_runtime_checks_mpi_launcher_not_sbatch(self) -> None:
+        available = {"cp2k": "/env/bin/cp2k", "mpirun": "/env/bin/mpirun"}
+        with patch(
+            "modules.module_c_mlips.campaign.shutil.which",
+            side_effect=lambda name: available.get(name),
+        ):
+            status = _cp2k_runtime_status(
+                {
+                    "executable": "cp2k",
+                    "scheduler": "local",
+                    "local": {"launcher": "mpirun"},
+                },
+                required=True,
+            )
+
+        self.assertTrue(status["ready"])
+        self.assertEqual(status["control_command"], "mpirun")
+        self.assertNotEqual(status["control_command"], "sbatch")
 
     def test_validated_model_is_selected_from_active_learning_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

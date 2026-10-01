@@ -37,21 +37,21 @@
         "energy_warning_mae_ev": 0.10,
         "force_warning_mae_ev_per_A": 0.20,
         "cp2k": {
-          "executable": "cp2k.psmp",
+          "executable": "cp2k",
           "profile": "pbe_d3_bj",
           "cutoff_Ry": 600,
           "relative_cutoff_Ry": 60,
           "cutoff_test_Ry": [400, 600, 800],
-          "scheduler": "slurm",
+          "scheduler": "local",
           "charge": 0,
           "multiplicity": 1,
           "configuration_reviewed": true,
           "supported_elements": ["H", "C", "N", "O", "Zn"],
-          "slurm": {
-            "nodes": 1,
-            "ntasks": 32,
-            "time": "12:00:00",
-            "launcher": "srun"
+          "local": {
+            "launcher": "mpirun",
+            "mpi_processes_per_job": 16,
+            "omp_threads_per_process": 1,
+            "max_parallel_jobs": 1
           }
         }
       },

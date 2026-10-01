@@ -105,12 +105,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--submit",
         action="store_true",
-        help="Submit prepared CP2K active-learning jobs.",
+        help="Submit scheduled CP2K jobs or execute local CP2K jobs on the current host.",
     )
     parser.add_argument(
         "--train",
         action="store_true",
-        help="Execute prepared MACE training in the current GPU allocation.",
+        help="Execute prepared MACE training on the current CUDA-capable host.",
     )
     parser.add_argument(
         "--systems",

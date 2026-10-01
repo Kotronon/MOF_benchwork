@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
 
 from modules.module_c_mlips.active_learning.dft import (
+    CP2KLabeler,
     HARTREE_PER_BOHR_TO_EV_PER_A,
     HARTREE_TO_EV,
+    build_local_cp2k_command,
     cutoff_converged,
     parse_cp2k_output,
     render_cp2k_input,
@@ -72,6 +75,75 @@ class ActiveLearningTests(unittest.TestCase):
         self.assertIn("#SBATCH --nodes=2", script)
         self.assertIn("#SBATCH --partition=cpu", script)
         self.assertIn("srun cp2k.psmp -i cp2k.inp -o cp2k.out", script)
+
+    def test_local_cp2k_command_uses_configured_mpi_processes(self) -> None:
+        command = build_local_cp2k_command(
+            ["cp2k", "-i", "cp2k.inp", "-o", "cp2k.out"],
+            {
+                "local": {
+                    "launcher": "mpirun",
+                    "mpi_processes_per_job": 16,
+                }
+            },
+        )
+
+        self.assertEqual(
+            command,
+            [
+                "mpirun",
+                "-np",
+                "16",
+                "cp2k",
+                "-i",
+                "cp2k.inp",
+                "-o",
+                "cp2k.out",
+            ],
+        )
+
+    def test_local_cp2k_execution_records_resources_and_logs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            job = {
+                "candidate_id": "candidate-1",
+                "job_directory": str(root),
+                "command": ["cp2k", "-i", "cp2k.inp", "-o", "cp2k.out"],
+            }
+            labeler = CP2KLabeler(
+                {
+                    "scheduler": "local",
+                    "executable": "cp2k",
+                    "local": {
+                        "launcher": "mpirun",
+                        "mpi_processes_per_job": 8,
+                        "omp_threads_per_process": 2,
+                        "max_parallel_jobs": 1,
+                    },
+                }
+            )
+            completed = subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout="launcher output",
+                stderr="",
+            )
+            with patch(
+                "modules.module_c_mlips.active_learning.dft._record_cp2k_version"
+            ), patch(
+                "modules.module_c_mlips.active_learning.dft.subprocess.run",
+                return_value=completed,
+            ) as run:
+                results = labeler.submit([job])
+
+            call = run.call_args
+            self.assertEqual(call.args[0][:4], ["mpirun", "-np", "8", "cp2k"])
+            self.assertEqual(call.kwargs["env"]["OMP_NUM_THREADS"], "2")
+            self.assertEqual(results[0]["status"], "completed")
+            self.assertEqual(results[0]["execution_resources"]["max_parallel_jobs"], 1)
+            self.assertEqual(
+                (root / "launcher.stdout.log").read_text(encoding="utf-8"),
+                "launcher output",
+            )
 
     def test_mbd_requires_an_explicit_project_template(self) -> None:
         atoms = _MinimalAtoms()

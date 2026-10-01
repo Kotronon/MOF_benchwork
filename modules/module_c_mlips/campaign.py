@@ -95,10 +95,14 @@ def setup_module_c(
             )
         except ImportError as exc:
             flames = {"available": False, "error": str(exc)}
-    cp2k = settings["active_learning"].get("cp2k", {})
-    cp2k_executable = str(cp2k.get("executable", "cp2k.psmp"))
     cp2k_required = settings["validation"]["mode"] == "active_learning"
-    cp2k_available = shutil.which(cp2k_executable) is not None
+    cp2k_status = _cp2k_runtime_status(
+        settings["active_learning"].get("cp2k", {}),
+        required=cp2k_required,
+    )
+    accelerator_status = _training_accelerator_status(
+        str(settings["active_learning"].get("device", "cpu"))
+    )
     dependencies_ready = all(
         item["ready"] for item in dependency_status
     )
@@ -108,17 +112,69 @@ def setup_module_c(
             "ready"
             if dependencies_ready
             and flames_ready
-            and (not cp2k_required or cp2k_available)
+            and cp2k_status["ready"]
+            and accelerator_status["ready"]
             else "missing_dependencies"
         ),
         "models": dependency_status,
         "flames": flames,
-        "cp2k": {
-            "executable": cp2k_executable,
-            "scheduler": cp2k.get("scheduler", "local"),
-            "required_for_active_learning": cp2k_required,
-            "available": cp2k_available,
-        },
+        "cp2k": cp2k_status,
+        "training_accelerator": accelerator_status,
+    }
+
+
+def _cp2k_runtime_status(
+    cp2k: dict[str, Any],
+    *,
+    required: bool,
+) -> dict[str, Any]:
+    executable = str(cp2k.get("executable", "cp2k"))
+    scheduler = str(cp2k.get("scheduler", "local")).casefold()
+    executable_available = shutil.which(executable) is not None
+    if scheduler == "local":
+        local = cp2k.get("local", {})
+        launcher_value = local.get("launcher", "mpirun")
+        launcher = str(launcher_value) if launcher_value else None
+        control_command = launcher
+    else:
+        launcher = None
+        control_command = "sbatch"
+    control_available = (
+        control_command is None
+        or shutil.which(control_command) is not None
+    )
+    return {
+        "executable": executable,
+        "scheduler": scheduler,
+        "required_for_active_learning": required,
+        "available": executable_available,
+        "launcher": launcher,
+        "control_command": control_command,
+        "control_command_available": control_available,
+        "ready": not required or (executable_available and control_available),
+    }
+
+
+def _training_accelerator_status(device: str) -> dict[str, Any]:
+    normalized = device.casefold()
+    cuda_required = normalized.startswith("cuda")
+    cuda_available = False
+    error = None
+    if cuda_required:
+        try:
+            import torch
+        except (ImportError, OSError) as exc:
+            error = str(exc)
+        else:
+            cuda_available = bool(torch.cuda.is_available())
+            if not cuda_available:
+                error = "PyTorch cannot access a CUDA device on the current host."
+    return {
+        "device": device,
+        "cuda_required": cuda_required,
+        "cuda_available": cuda_available if cuda_required else None,
+        "ready": not cuda_required or cuda_available,
+        "error": error,
     }
 
 

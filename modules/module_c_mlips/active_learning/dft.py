@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 import json
+import os
 from pathlib import Path
 import re
 import shlex
@@ -47,10 +49,12 @@ class CP2KLabeler(DFTLabeler):
 
     def __init__(self, settings: dict[str, Any]) -> None:
         self.settings = dict(settings)
-        self.executable = str(self.settings.get("executable", "cp2k.psmp"))
+        self.executable = str(self.settings.get("executable", "cp2k"))
         self.scheduler = str(self.settings.get("scheduler", "local")).casefold()
         if self.scheduler not in {"local", "slurm"}:
             raise ValueError("CP2K scheduler must be 'local' or 'slurm'.")
+        if self.scheduler == "local":
+            _local_execution_settings(self.settings)
 
     def prepare(
         self,
@@ -151,38 +155,72 @@ class CP2KLabeler(DFTLabeler):
         return jobs
 
     def submit(self, jobs: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+        if self.scheduler == "local":
+            local = _local_execution_settings(self.settings)
+            with ThreadPoolExecutor(
+                max_workers=local["max_parallel_jobs"]
+            ) as executor:
+                return list(executor.map(self._execute_local_job, jobs))
+
         submitted = []
         for job in jobs:
             current = dict(job)
             workdir = Path(current["job_directory"])
-            if self.scheduler == "local":
-                _record_cp2k_version(self.executable, workdir)
-                completed = subprocess.run(
-                    current["command"],
-                    cwd=workdir,
-                    capture_output=True,
-                    text=True,
-                )
-                current["returncode"] = completed.returncode
-                current["status"] = "completed" if completed.returncode == 0 else "failed"
-                if completed.returncode != 0:
-                    current["error"] = (completed.stderr or completed.stdout).strip()
-            else:
-                completed = subprocess.run(
-                    ["sbatch", Path(current["script_path"]).name],
-                    cwd=workdir,
-                    capture_output=True,
-                    text=True,
-                )
-                if completed.returncode != 0:
-                    raise RuntimeError((completed.stderr or completed.stdout).strip())
-                match = re.search(r"Submitted batch job\s+(\d+)", completed.stdout)
-                if match is None:
-                    raise RuntimeError(f"Could not parse sbatch output: {completed.stdout}")
-                current["scheduler_job_id"] = match.group(1)
-                current["status"] = "submitted"
+            completed = subprocess.run(
+                ["sbatch", Path(current["script_path"]).name],
+                cwd=workdir,
+                capture_output=True,
+                text=True,
+            )
+            if completed.returncode != 0:
+                raise RuntimeError((completed.stderr or completed.stdout).strip())
+            match = re.search(r"Submitted batch job\s+(\d+)", completed.stdout)
+            if match is None:
+                raise RuntimeError(f"Could not parse sbatch output: {completed.stdout}")
+            current["scheduler_job_id"] = match.group(1)
+            current["status"] = "submitted"
             submitted.append(current)
         return submitted
+
+    def _execute_local_job(self, job: dict[str, Any]) -> dict[str, Any]:
+        """Run one CP2K job directly on the current host."""
+        current = dict(job)
+        workdir = Path(current["job_directory"])
+        local = _local_execution_settings(self.settings)
+        command = build_local_cp2k_command(current["command"], self.settings)
+        environment = os.environ.copy()
+        environment["OMP_NUM_THREADS"] = str(local["omp_threads_per_process"])
+        current["execution_command"] = command
+        current["execution_resources"] = local
+        try:
+            _record_cp2k_version(self.executable, workdir)
+            completed = subprocess.run(
+                command,
+                cwd=workdir,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+        except OSError as exc:
+            current["returncode"] = None
+            current["status"] = "failed"
+            current["error"] = str(exc)
+            return current
+        (workdir / "launcher.stdout.log").write_text(
+            completed.stdout,
+            encoding="utf-8",
+        )
+        (workdir / "launcher.stderr.log").write_text(
+            completed.stderr,
+            encoding="utf-8",
+        )
+        current["returncode"] = completed.returncode
+        current["status"] = (
+            "completed" if completed.returncode == 0 else "failed"
+        )
+        if completed.returncode != 0:
+            current["error"] = (completed.stderr or completed.stdout).strip()
+        return current
 
     def collect(self, jobs: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
         labels = []
@@ -400,6 +438,23 @@ def render_slurm_script(job_name: str, command: list[str], settings: dict[str, A
     )
 
 
+def build_local_cp2k_command(
+    command: Sequence[str],
+    settings: dict[str, Any],
+) -> list[str]:
+    """Build the direct-host CP2K command, optionally using an MPI launcher."""
+    local = _local_execution_settings(settings)
+    launcher = local["launcher"]
+    if launcher is None:
+        return list(command)
+    return [
+        launcher,
+        "-np",
+        str(local["mpi_processes_per_job"]),
+        *command,
+    ]
+
+
 def parse_cp2k_output(path: str | Path) -> dict[str, Any]:
     text = Path(path).read_text(encoding="utf-8", errors="replace")
     if "PROGRAM ENDED AT" not in text:
@@ -522,3 +577,34 @@ def _record_cp2k_version(executable: str, directory: Path) -> None:
         completed.stdout + completed.stderr,
         encoding="utf-8",
     )
+
+
+def _local_execution_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    raw = settings.get("local", {})
+    if not isinstance(raw, dict):
+        raise TypeError("active_learning.cp2k.local must be an object.")
+    launcher_value = raw.get("launcher", "mpirun")
+    launcher = (
+        None
+        if launcher_value is None or not str(launcher_value).strip()
+        else str(launcher_value)
+    )
+    normalized = {
+        "launcher": launcher,
+        "mpi_processes_per_job": int(raw.get("mpi_processes_per_job", 1)),
+        "omp_threads_per_process": int(raw.get("omp_threads_per_process", 1)),
+        "max_parallel_jobs": int(raw.get("max_parallel_jobs", 1)),
+    }
+    for key in (
+        "mpi_processes_per_job",
+        "omp_threads_per_process",
+        "max_parallel_jobs",
+    ):
+        if normalized[key] <= 0:
+            raise ValueError(f"active_learning.cp2k.local.{key} must be positive.")
+    if launcher is None and normalized["mpi_processes_per_job"] != 1:
+        raise ValueError(
+            "Local CP2K execution without an MPI launcher requires "
+            "mpi_processes_per_job=1."
+        )
+    return normalized

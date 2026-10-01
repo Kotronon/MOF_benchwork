@@ -55,8 +55,10 @@ python benchmark.py \
 For `validation.mode: active_learning`, the first call creates separate,
 stratified fit, validation, and permanently held-out test splits, plus
 empty-framework and isolated-CO2 baselines and CP2K cutoff-test jobs.
-`--submit` only submits CP2K jobs. MACE training requires the separate
-`--train` flag so it cannot start accidentally on a login node.
+`--submit` submits CP2K jobs when a scheduler is configured, or executes them
+directly on the current host when `scheduler: local` is configured. MACE
+training requires the separate `--train` flag so it cannot start accidentally
+on a login node.
 
 ```bash
 python benchmark.py \
@@ -67,10 +69,13 @@ python benchmark.py CONFIG.json \
   --run-module-c --stage active-learning --submit --resume
 ```
 
-The ZIF-8 workflow is wrapped in a cluster helper. `start` initializes the
-state and submits the 400/600/800 Ry cutoff jobs. Run `advance` after each
-CP2K phase has completed. When the state reaches `training_prepared`, run
-`train` from an allocated GPU node:
+The ZIF-8 workflow is wrapped in a helper for a directly accessed cluster
+without Slurm. Its `setup` mode installs the pinned CP2K package into the
+currently active Conda environment. The CP2K configuration uses one local MPI
+job with 16 ranks; adjust `mpi_processes_per_job` and `max_parallel_jobs` to the
+actual node before production. `start` and `advance` block while their CP2K
+jobs run, so launch them in `tmux` or another persistent shell. When the state
+reaches `training_prepared`, run `train` on a host with CUDA:
 
 ```bash
 bash scripts/run_module_c_zif8_active_learning.sh setup
@@ -79,13 +84,41 @@ bash scripts/run_module_c_zif8_active_learning.sh start
 bash scripts/run_module_c_zif8_active_learning.sh status
 bash scripts/run_module_c_zif8_active_learning.sh advance
 
-# Only inside a GPU allocation:
+# Only on a host with an accessible CUDA GPU:
 bash scripts/run_module_c_zif8_active_learning.sh train
 
 # Only after the state reports dft_validated, also on a GPU node:
 bash scripts/run_module_c_zif8_active_learning.sh widom
 bash scripts/run_module_c_zif8_active_learning.sh gcmc-pilot
 ```
+
+If CP2K and CUDA are available on the same directly accessed node, the full
+adaptation loop can instead be run with one blocking command:
+
+```bash
+bash scripts/run_module_c_zif8_active_learning.sh production
+```
+
+This resumes an existing state, executes every pending CP2K batch, trains the
+three-model committee, and stops at either `dft_validated` or a reproducible
+failure state. It does not automatically start Widom or GCMC production.
+
+For example, start a persistent direct-host session with:
+
+```bash
+conda activate MOF_sim
+tmux new -s zif8-active-learning
+bash scripts/run_module_c_zif8_active_learning.sh setup
+bash scripts/run_module_c_zif8_active_learning.sh assess
+bash scripts/run_module_c_zif8_active_learning.sh production
+```
+
+Do not run `start` or `advance` concurrently on two hosts against the same
+state directory. The active-learning state updates are intentionally serial.
+`assess` checks scientific and structural applicability only. `setup` reports
+the actual CP2K, MPI, Python-backend, and CUDA availability on the current
+host. During a direct CP2K batch, `status` can be called from a second shell to
+count pending, running, completed, and failed calculations.
 
 The 50 initial host/guest configurations are partitioned into 24 fitting,
 6 validation, and 20 test configurations. The two isolated baselines are

@@ -335,16 +335,35 @@ def _normalize_module_c_campaign(settings: dict[str, Any]) -> None:
     cp2k = active_learning.setdefault("cp2k", {})
     if not isinstance(cp2k, dict):
         raise TypeError("'active_learning.cp2k' must be an object.")
-    cp2k.setdefault("executable", "cp2k.psmp")
+    cp2k.setdefault("executable", "cp2k")
     cp2k.setdefault("profile", "pbe_d3_bj")
     cp2k.setdefault("cutoff_Ry", 600)
     cp2k.setdefault("relative_cutoff_Ry", 60)
     cp2k.setdefault("cutoff_test_Ry", [400, 600, 800])
     cp2k.setdefault("scf_tolerance", 1.0e-6)
     cp2k.setdefault("scheduler", "local")
+    cp2k["scheduler"] = str(cp2k["scheduler"]).casefold()
     cp2k.setdefault("charge", 0)
     cp2k.setdefault("multiplicity", 1)
     cp2k.setdefault("configuration_reviewed", False)
+    if cp2k["scheduler"] not in {"local", "slurm"}:
+        raise ValueError("'active_learning.cp2k.scheduler' must be 'local' or 'slurm'.")
+    local_cp2k = cp2k.setdefault("local", {})
+    if not isinstance(local_cp2k, dict):
+        raise TypeError("'active_learning.cp2k.local' must be an object.")
+    local_cp2k.setdefault("launcher", "mpirun")
+    local_cp2k.setdefault("mpi_processes_per_job", 1)
+    local_cp2k.setdefault("omp_threads_per_process", 1)
+    local_cp2k.setdefault("max_parallel_jobs", 1)
+    for field in (
+        "mpi_processes_per_job",
+        "omp_threads_per_process",
+        "max_parallel_jobs",
+    ):
+        if not isinstance(local_cp2k[field], int) or local_cp2k[field] <= 0:
+            raise ValueError(
+                f"'active_learning.cp2k.local.{field}' must be a positive integer."
+            )
 
     campaign = settings.setdefault("campaign", {})
     if not isinstance(campaign, dict):
