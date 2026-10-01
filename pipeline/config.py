@@ -52,7 +52,12 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     config = deepcopy(data_to_dict(raw_config))
 
     material = _require_mapping(config, "material")
-    material.setdefault("cif_source", material.get("structure_file", "auto"))
+    explicit_cif = material.get("cif_path") or material.get("structure_file")
+    if not material.get("name") and explicit_cif:
+        material["name"] = Path(str(explicit_cif)).stem
+    if not material.get("name"):
+        raise ValueError("'material.name' or 'material.cif_path' is required.")
+    material.setdefault("cif_source", explicit_cif or "auto")
     material.setdefault("charge_scheme", "auto")
     material.setdefault("source", "crafted")
 
@@ -79,6 +84,12 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
         raise TypeError("'benchmark' must be an object.")
     benchmark.setdefault("task", "auto")
     benchmark.setdefault("metrics", [])
+    potential_benchmark = benchmark.get("potential_benchmark")
+    if potential_benchmark is not None:
+        if not isinstance(potential_benchmark, dict):
+            raise TypeError("'benchmark.potential_benchmark' must be an object.")
+        if str(potential_benchmark.get("workflow", "")).strip().casefold() == "campaign":
+            _normalize_module_c_campaign(potential_benchmark)
     benchmark.setdefault(
         "reference",
         {
@@ -197,8 +208,6 @@ def _require_mapping(config: dict[str, Any], key: str) -> dict[str, Any]:
     value = config.setdefault(key, {})
     if not isinstance(value, dict):
         raise TypeError(f"'{key}' must be an object.")
-    if key == "material" and not value.get("name"):
-        raise ValueError("'material.name' is required.")
     return value
 
 
@@ -230,3 +239,143 @@ def _validate_pressures(pressures_bar: Any) -> None:
     for pressure in pressures_bar:
         if not isinstance(pressure, (int, float)) or pressure <= 0:
             raise ValueError("'conditions.pressures_bar' must contain positive numbers.")
+
+
+def _normalize_module_c_campaign(settings: dict[str, Any]) -> None:
+    """Apply stable defaults for the extensible Module C campaign workflow."""
+    validation = settings.setdefault("validation", {})
+    if not isinstance(validation, dict):
+        raise TypeError("'benchmark.potential_benchmark.validation' must be an object.")
+    validation["mode"] = str(validation.get("mode", "screening")).strip().casefold()
+    if validation["mode"] not in {"reference", "screening", "active_learning"}:
+        raise ValueError(
+            "'benchmark.potential_benchmark.validation.mode' must be "
+            "'reference', 'screening', or 'active_learning'."
+        )
+
+    settings["adsorption_engine"] = str(
+        settings.get("adsorption_engine", "mlip_mc")
+    ).strip().casefold().replace("-", "_")
+    if settings["adsorption_engine"] not in {"mlip_mc", "flames", "lammps"}:
+        raise ValueError("Unsupported Module C adsorption_engine.")
+    cross_check = settings.get("cross_check_engine")
+    if cross_check is not None:
+        normalized_cross_check = str(cross_check).strip().casefold().replace("-", "_")
+        if normalized_cross_check not in {"mlip_mc", "flames", "lammps"}:
+            raise ValueError("Unsupported Module C cross_check_engine.")
+        settings["cross_check_engine"] = normalized_cross_check
+
+    active_learning = settings.setdefault("active_learning", {})
+    if not isinstance(active_learning, dict):
+        raise TypeError("'benchmark.potential_benchmark.active_learning' must be an object.")
+    active_learning.setdefault("enabled", validation["mode"] == "active_learning")
+    active_learning.setdefault("base_model", "mace_mp_0a_small")
+    active_learning.setdefault("committee_size", 3)
+    active_learning.setdefault("dft_labeler", "cp2k")
+    active_learning.setdefault("initial_training_configurations", 30)
+    active_learning.setdefault("test_configurations", 20)
+    active_learning.setdefault("rounds", 4)
+    active_learning.setdefault("configurations_per_round", 25)
+    active_learning.setdefault("maximum_configurations", 150)
+    active_learning.setdefault("stable_rounds_required", 2)
+    active_learning.setdefault("energy_pass_mae_ev", 0.043)
+    active_learning.setdefault("force_pass_mae_ev_per_A", 0.10)
+    active_learning.setdefault("energy_warning_mae_ev", 0.10)
+    active_learning.setdefault("force_warning_mae_ev_per_A", 0.20)
+    active_learning.setdefault("candidate_fractions", {
+        "framework": 0.20,
+        "single_adsorbate": 0.40,
+        "multiple_adsorbates": 0.40,
+    })
+    integer_fields = (
+        "committee_size",
+        "initial_training_configurations",
+        "test_configurations",
+        "rounds",
+        "configurations_per_round",
+        "maximum_configurations",
+        "stable_rounds_required",
+    )
+    for field in integer_fields:
+        value = active_learning[field]
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(
+                f"'benchmark.potential_benchmark.active_learning.{field}' "
+                "must be a positive integer."
+            )
+    planned = (
+        active_learning["initial_training_configurations"]
+        + active_learning["test_configurations"]
+        + active_learning["rounds"]
+        * active_learning["configurations_per_round"]
+    )
+    if planned > active_learning["maximum_configurations"]:
+        raise ValueError(
+            "Active-learning initial, test, and round allocations exceed "
+            "maximum_configurations."
+        )
+    fractions = active_learning["candidate_fractions"]
+    if not isinstance(fractions, dict) or set(fractions) != {
+        "framework", "single_adsorbate", "multiple_adsorbates"
+    }:
+        raise ValueError("Active-learning candidate_fractions has invalid keys.")
+    if abs(sum(float(value) for value in fractions.values()) - 1.0) > 1.0e-9:
+        raise ValueError("Active-learning candidate_fractions must sum to 1.0.")
+
+    cp2k = active_learning.setdefault("cp2k", {})
+    if not isinstance(cp2k, dict):
+        raise TypeError("'active_learning.cp2k' must be an object.")
+    cp2k.setdefault("executable", "cp2k.psmp")
+    cp2k.setdefault("profile", "pbe_d3_bj")
+    cp2k.setdefault("cutoff_Ry", 600)
+    cp2k.setdefault("relative_cutoff_Ry", 60)
+    cp2k.setdefault("cutoff_test_Ry", [400, 600, 800])
+    cp2k.setdefault("scf_tolerance", 1.0e-6)
+    cp2k.setdefault("scheduler", "local")
+    cp2k.setdefault("charge", 0)
+    cp2k.setdefault("multiplicity", 1)
+    cp2k.setdefault("configuration_reviewed", False)
+
+    campaign = settings.setdefault("campaign", {})
+    if not isinstance(campaign, dict):
+        raise TypeError("'benchmark.potential_benchmark.campaign' must be an object.")
+    campaign.setdefault("id", "module_c_campaign")
+    campaign.setdefault("systems", [])
+    campaign.setdefault("models", [])
+    if not isinstance(campaign["systems"], list):
+        raise TypeError("'campaign.systems' must be a list.")
+    if not isinstance(campaign["models"], list):
+        raise TypeError("'campaign.models' must be a list.")
+    stages = campaign.setdefault("stages", {})
+    if not isinstance(stages, dict):
+        raise TypeError("'campaign.stages' must be an object.")
+    stages.setdefault(
+        "screening",
+        {"method": "widom", "trials": 1_000, "block_size": 100},
+    )
+    stages.setdefault(
+        "widom",
+        {
+            "method": "widom",
+            "trials": 100_000,
+            "block_size": 10_000,
+            "convergence_checkpoints": [10_000, 25_000, 50_000, 75_000, 100_000],
+        },
+    )
+    stages.setdefault(
+        "gcmc_pilot",
+        {
+            "method": "gcmc",
+            "equilibration_steps": 10_000,
+            "production_steps": 20_000,
+            "pressure_selection": "low_mid_high",
+        },
+    )
+    stages.setdefault(
+        "gcmc_production",
+        {
+            "method": "gcmc",
+            "equilibration_steps": 100_000,
+            "production_steps": 1_000_000,
+        },
+    )

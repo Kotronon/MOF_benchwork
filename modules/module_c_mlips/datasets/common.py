@@ -47,6 +47,7 @@ def load_host_guest_system(
         unit_cells=unit_cells,
         cutoff_A=cutoff_A,
         minimum_image_policy=minimum_image_policy,
+        require_charges=False,
     )
     framework = Atoms(
         symbols=framework_structure.symbols,

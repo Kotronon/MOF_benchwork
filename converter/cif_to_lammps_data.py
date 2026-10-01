@@ -113,6 +113,7 @@ def load_framework_structure(
     unit_cells: list[int] | tuple[int, int, int] = (1, 1, 1),
     cutoff_A: float | None = None,
     minimum_image_policy: str = "error",
+    require_charges: bool = True,
 ) -> FrameworkStructure:
     """Load framework geometry with ASE and charges from the CRAFTED CIF atom-site loop."""
     try:
@@ -124,13 +125,25 @@ def load_framework_structure(
     repetitions = _validate_unit_cells(unit_cells)
     policy = _normalize_minimum_image_policy(minimum_image_policy)
     atoms = read(str(cif_path))
-    charge_records = parse_cif_atom_site_charges(cif_path)
-    if len(atoms) != len(charge_records):
-        raise ValueError(
-            f"ASE atom count and CIF charge count differ for {cif_path}: {len(atoms)} != {len(charge_records)}."
-        )
+    try:
+        charge_records = parse_cif_atom_site_charges(cif_path)
+    except ValueError:
+        if require_charges:
+            raise
+        charge_records = []
+    if charge_records and len(atoms) != len(charge_records):
+        if require_charges:
+            raise ValueError(
+                f"ASE atom count and CIF charge count differ for {cif_path}: "
+                f"{len(atoms)} != {len(charge_records)}."
+            )
+        charge_records = []
 
-    atoms.set_initial_charges([record.charge for record in charge_records])
+    atoms.set_initial_charges(
+        [record.charge for record in charge_records]
+        if charge_records
+        else [0.0] * len(atoms)
+    )
     atoms = _apply_cell_representation(atoms, representation)
     if repetitions != (1, 1, 1):
         atoms = atoms.repeat(repetitions)

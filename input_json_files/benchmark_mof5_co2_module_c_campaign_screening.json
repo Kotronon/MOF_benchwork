@@ -1,0 +1,56 @@
+{
+  "material": {
+    "name": "MOF-5",
+    "cif_path": "CRAFTED-2.0.0/CIF_FILES/DDEC/IRMOF-1.cif",
+    "charge_scheme": "DDEC"
+  },
+  "adsorbates": {
+    "components": ["CO2"]
+  },
+  "conditions": {
+    "temperature_K": 298.15,
+    "pressures_bar": [0.1, 1.0, 10.0]
+  },
+  "benchmark": {
+    "task": "potential_benchmark",
+    "potential_benchmark": {
+      "workflow": "campaign",
+      "validation": {
+        "mode": "screening"
+      },
+      "adsorption_engine": "mlip_mc",
+      "cross_check_engine": "flames",
+      "campaign": {
+        "id": "mof5_co2_module_c_screening",
+        "models": [
+          {
+            "backend": "mace-torch",
+            "name": "mace_mp_0a_small",
+            "model": "small",
+            "device": "cpu",
+            "default_dtype": "float64",
+            "dispersion": false
+          }
+        ]
+      }
+    }
+  },
+  "simulation": {
+    "engine": "MLIP_MC",
+    "method": "WIDOM",
+    "forcefield": "UFF",
+    "framework": "rigid",
+    "cell_representation": "source",
+    "minimum_image_policy": "error",
+    "cutoff_A": 6.0,
+    "unit_cells": "auto",
+    "seeds": [12345]
+  },
+  "output": {
+    "directory": "outputs/module_C_potential_benchmark",
+    "run_id": "mof5_co2_module_c_screening",
+    "overwrite": false,
+    "save_plots": true,
+    "save_csv": true
+  }
+}

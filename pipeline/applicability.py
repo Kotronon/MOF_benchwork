@@ -51,6 +51,10 @@ def _infer_applicability(
 
     if module_id == "C" and _is_potential_benchmark(config):
         workflow = _potential_workflow(config)
+        if workflow == "campaign":
+            from modules.module_c_mlips.applicability import assess_campaign_structure
+
+            return assess_campaign_structure(config, resolved)
         if workflow in {"mlip_mc_widom", "mlip_mc_gcmc"}:
             return _assess_mlip_mc_benchmark(config, workflow)
         return _assess_static_potential_benchmark(config)

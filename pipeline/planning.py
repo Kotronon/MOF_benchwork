@@ -12,6 +12,7 @@ from resolvers.unitcell_resolver import UnitcellResolver
 
 from pipeline.applicability import assess_applicability
 from pipeline.config import normalize_config
+from modules.module_c_mlips.applicability import automatic_supercell
 
 
 def select_module(config: dict[str, Any]) -> dict[str, str]:
@@ -22,27 +23,67 @@ def select_module(config: dict[str, Any]) -> dict[str, str]:
 def resolve_benchmark(config: dict[str, Any]) -> dict[str, Any]:
     """Resolve material, force field, unit cells, and reference data."""
     material_config = config["material"]
-    material_match = MaterialResolver().resolve(
-        material_config["name"],
-        material_config.get("charge_scheme", "auto"),
-    )
+    explicit_cif = material_config.get("cif_path")
+    if explicit_cif:
+        cif_path = Path(str(explicit_cif)).expanduser()
+        if not cif_path.is_file():
+            raise FileNotFoundError(f"Material CIF does not exist: {cif_path}")
+        requested_scheme = str(material_config.get("charge_scheme", "auto"))
+        material = {
+            "query": str(material_config["name"]),
+            "material_id": str(material_config["name"]),
+            "cif_path": str(cif_path),
+            "charge_scheme": (
+                "unspecified"
+                if requested_scheme.strip().casefold() == "auto"
+                else requested_scheme
+            ),
+            "matched_by": "explicit_cif",
+            "aliases": [],
+        }
+    else:
+        material_match = MaterialResolver().resolve(
+            material_config["name"],
+            material_config.get("charge_scheme", "auto"),
+        )
+        material = {
+            "query": material_match.query,
+            "material_id": material_match.material_id,
+            "cif_path": str(material_match.cif_path),
+            "charge_scheme": material_match.charge_scheme,
+            "matched_by": material_match.matched_by,
+            "aliases": list(material_match.aliases),
+        }
     forcefield = ForcefieldResolver().resolve(
         config["simulation"]["forcefield"],
         config["adsorbates"]["components"],
     )
     unit_cells = UnitcellResolver().resolve(
         config["simulation"].get("unit_cells", "auto"),
-        material_match.material_id,
+        material["material_id"],
     )
+    workflow = str(
+        config.get("benchmark", {})
+        .get("potential_benchmark", {})
+        .get("workflow", "")
+    ).strip().casefold()
+    if (
+        workflow == "campaign"
+        and str(config["simulation"].get("unit_cells", "auto")).casefold() == "auto"
+    ):
+        unit_cells = automatic_supercell(
+            material["cif_path"],
+            float(config["simulation"].get("cutoff_A", 6.0)),
+        )
     reference_config = config["benchmark"].get("reference", {})
     references = ReferenceResolver().resolve(
-        material_id=material_match.material_id,
-        charge_scheme=material_match.charge_scheme,
+        material_id=material["material_id"],
+        charge_scheme=material["charge_scheme"],
         forcefield=forcefield["framework"],
         components=config["adsorbates"]["components"],
         temperature_K=float(config["conditions"]["temperature_K"]),
         source=reference_config.get("source", "crafted"),
-        material_aliases=[material_match.query, *material_match.aliases],
+        material_aliases=[material["query"], *material["aliases"]],
         pressures_bar=config["conditions"]["pressures_bar"],
         temperature_tolerance_K=float(reference_config.get("temperature_tolerance_K", 2.0)),
         max_nist_candidates=int(reference_config.get("max_nist_candidates", 5)),
@@ -58,14 +99,7 @@ def resolve_benchmark(config: dict[str, Any]) -> dict[str, Any]:
     )
 
     return {
-        "material": {
-            "query": material_match.query,
-            "material_id": material_match.material_id,
-            "cif_path": str(material_match.cif_path),
-            "charge_scheme": material_match.charge_scheme,
-            "matched_by": material_match.matched_by,
-            "aliases": list(material_match.aliases),
-        },
+        "material": material,
         "forcefield": forcefield,
         "unit_cells": unit_cells,
         "references": references,

@@ -29,6 +29,12 @@ from modules.module_c_mlips.mlip_mc_workflow import run_mlip_mc_benchmark
 from modules.module_c_mlips.model_assets import ensure_model_asset
 from modules.module_c_mlips.datasets import ensure_golddac_dataset
 from modules.module_c_mlips.potential_backends.calculators import build_ase_calculator
+from modules.module_c_mlips.campaign import (
+    analyze_module_c_campaign,
+    cross_check_campaign_engine,
+    run_module_c_campaign,
+    setup_module_c,
+)
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Plan a MOF benchmark run from benchmark.json.")
@@ -68,6 +74,60 @@ def main(argv: list[str] | None = None) -> int:
         "--install-missing",
         action="store_true",
         help="Install missing pinned MLIP-MC dependencies in the active Python environment.",
+    )
+    parser.add_argument(
+        "--setup-module-c",
+        action="store_true",
+        help="Verify or install dependencies for a Module C campaign.",
+    )
+    parser.add_argument(
+        "--assess-module-c",
+        action="store_true",
+        help="Print the property-based Module C applicability assessment.",
+    )
+    parser.add_argument(
+        "--run-module-c",
+        action="store_true",
+        help="Run one stage of the extensible Module C campaign.",
+    )
+    parser.add_argument(
+        "--stage",
+        choices=[
+            "screening",
+            "active-learning",
+            "widom",
+            "gcmc-pilot",
+            "gcmc-production",
+        ],
+        default="screening",
+        help="Module C campaign stage.",
+    )
+    parser.add_argument(
+        "--submit",
+        action="store_true",
+        help="Execute or submit prepared CP2K and MACE active-learning jobs.",
+    )
+    parser.add_argument(
+        "--systems",
+        nargs="+",
+        default=[],
+        help="Limit a Module C campaign to named systems.",
+    )
+    parser.add_argument(
+        "--models",
+        nargs="+",
+        default=[],
+        help="Limit a Module C campaign to named potential models.",
+    )
+    parser.add_argument(
+        "--cross-check-engine",
+        choices=["mlip_mc", "flames", "lammps"],
+        help="Run the primary engine and a second engine on the same campaign task.",
+    )
+    parser.add_argument(
+        "--analyze-module-c",
+        action="store_true",
+        help="Aggregate existing Module C campaign result files.",
     )
     parser.add_argument(
         "--run-variants",
@@ -125,6 +185,57 @@ def main(argv: list[str] | None = None) -> int:
     if not args.skip_registry_update:
         write_generated_registries(args.registry_output_dir)
     run_plan = build_run_plan(config)
+    if any(
+        (
+            args.setup_module_c,
+            args.assess_module_c,
+            args.run_module_c,
+            args.cross_check_engine,
+            args.analyze_module_c,
+        )
+    ):
+        _require_module_c_campaign(run_plan)
+    if args.setup_module_c:
+        result = setup_module_c(
+            run_plan,
+            install_missing=args.install_missing,
+        )
+        print(json.dumps(result, indent=2))
+        return 0
+    if args.assess_module_c:
+        print(
+            json.dumps(
+                run_plan["benchmark"]["applicability"],
+                indent=2,
+            )
+        )
+        return 0
+    if args.run_module_c:
+        result = run_module_c_campaign(
+            config,
+            stage=args.stage,
+            selected_systems=args.systems,
+            selected_models=args.models,
+            jobs=args.jobs,
+            submit=args.submit,
+            resume=args.resume,
+        )
+        print(json.dumps(result, indent=2))
+        return 0
+    if args.cross_check_engine:
+        result = cross_check_campaign_engine(
+            config,
+            cross_check_engine=args.cross_check_engine,
+            stage=args.stage,
+            selected_systems=args.systems,
+            selected_models=args.models,
+        )
+        print(json.dumps(result, indent=2))
+        return 0
+    if args.analyze_module_c:
+        result = analyze_module_c_campaign(run_plan)
+        print(json.dumps(result, indent=2))
+        return 0
     if args.setup_golddac:
         result = _setup_golddac_benchmark(run_plan)
         print(json.dumps(result, indent=2))
@@ -299,6 +410,23 @@ def _confirm_supported_capability(run_plan: dict, *, allow_unsupported: bool = F
 
     if answer.strip().casefold() not in {"y", "yes"}:
         raise RuntimeError("Simulation cancelled by user.")
+
+
+def _require_module_c_campaign(run_plan: dict) -> None:
+    if run_plan.get("module", {}).get("id") != "C":
+        raise ValueError(
+            "This command requires benchmark.task='potential_benchmark'."
+        )
+    workflow = (
+        run_plan.get("benchmark", {})
+        .get("potential_benchmark", {})
+        .get("workflow")
+    )
+    if str(workflow).strip().casefold() != "campaign":
+        raise ValueError(
+            "This command requires "
+            "benchmark.potential_benchmark.workflow='campaign'."
+        )
 
 
 def _configured_mlip_mc_backend(run_plan: dict) -> str:

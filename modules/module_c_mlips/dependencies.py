@@ -14,6 +14,11 @@ from typing import Any
 MLIP_MC_VERSION = "0.1.3"
 MLIP_MC_DISTRIBUTION = "mlip-mc"
 LEGACY_NEQUIP_VERSION = "0.6.2"
+FLAMES_VERSION = "0.4.8"
+FLAMES_COMMIT = "c7eaae1"
+FLAMES_INSTALL_SPECIFICATION = (
+    f"git+https://github.com/lipelopesoliveira/flames.git@{FLAMES_COMMIT}"
+)
 
 _BACKEND_MODULES = {
     "mace-torch": "mace",
@@ -190,6 +195,48 @@ def ensure_torch_dftd(*, install_missing: bool = False) -> dict[str, Any]:
         "module": module,
         "available": True,
         "install_specification": specification,
+        "python_executable": sys.executable,
+    }
+
+
+def ensure_flames_dependencies(*, install_missing: bool = False) -> dict[str, Any]:
+    """Ensure the pinned optional FLAMES runner is importable."""
+    available = _module_available("flames")
+    installed_version = _distribution_version("flames")
+    if available and installed_version in {None, FLAMES_VERSION}:
+        return {
+            "module": "flames",
+            "required_version": FLAMES_VERSION,
+            "installed_version": installed_version,
+            "available": True,
+            "install_specification": FLAMES_INSTALL_SPECIFICATION,
+            "python_executable": sys.executable,
+        }
+    command = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        FLAMES_INSTALL_SPECIFICATION,
+    ]
+    if not install_missing:
+        raise ImportError(
+            "FLAMES 0.4.8 is required for the selected cross-check engine. "
+            "Install it with:\n" + " ".join(command)
+        )
+    completed = subprocess.run(command, capture_output=True, text=True)
+    if completed.returncode != 0:
+        details = (completed.stderr or completed.stdout).strip()
+        raise RuntimeError(f"Automatic FLAMES installation failed.\n{details}")
+    importlib.invalidate_caches()
+    if not _module_available("flames"):
+        raise RuntimeError("FLAMES installation completed but the module is unavailable.")
+    return {
+        "module": "flames",
+        "required_version": FLAMES_VERSION,
+        "installed_version": _distribution_version("flames"),
+        "available": True,
+        "install_specification": FLAMES_INSTALL_SPECIFICATION,
         "python_executable": sys.executable,
     }
 

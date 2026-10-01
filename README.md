@@ -8,6 +8,71 @@ conda activate MOF_sim
 
 ## Module C with MLIP-MC
 
+### Extensible campaign workflow
+
+The `campaign` workflow accepts a direct periodic CIF and evaluates
+applicability from structure, model element coverage, minimum-image cell size,
+pore accessibility, adsorbate definitions, and any required charge/DFT
+metadata. An unregistered but technically valid MOF is run as
+`screening_only`; it is not presented as quantitatively validated.
+
+```bash
+# Property-based assessment without simulation
+python benchmark.py \
+  input_json_files/benchmark_mof5_co2_module_c_campaign_screening.json \
+  --assess-module-c --skip-registry-update
+
+# Optional dependencies are installed only with --install-missing
+python benchmark.py CONFIG.json \
+  --setup-module-c --install-missing --skip-registry-update
+
+# Zero-shot screening, production stages, and an optional FLAMES cross-check
+python benchmark.py CONFIG.json --run-module-c --stage screening
+python benchmark.py CONFIG.json --run-module-c --stage widom --resume
+python benchmark.py CONFIG.json --run-module-c --stage gcmc-pilot --resume
+python benchmark.py CONFIG.json --cross-check-engine flames --stage screening
+python benchmark.py CONFIG.json --analyze-module-c
+```
+
+The optional FLAMES adapter is pinned to release 0.4.8 and an immutable Git
+commit because 0.4.9 is not an available release. The setup command reports a
+missing dependency without changing the environment unless
+`--install-missing` is supplied.
+
+The three paper systems are available as one regression campaign. Select a
+single system with `--systems` when running on a workstation:
+
+```bash
+python benchmark.py \
+  input_json_files/benchmark_module_c_reference_campaign.json \
+  --assess-module-c --skip-registry-update
+
+python benchmark.py \
+  input_json_files/benchmark_module_c_reference_campaign.json \
+  --run-module-c --stage screening --systems ZIF-8
+```
+
+For `validation.mode: active_learning`, the first call creates a stratified,
+permanently held-out test split, empty-framework and isolated-CO2 baselines,
+and CP2K cutoff-test jobs. `--submit` executes local jobs or submits Slurm
+jobs; repeat the command with `--resume` after each cluster phase:
+
+```bash
+python benchmark.py \
+  input_json_files/benchmark_mof5_co2_module_c_active_learning.json \
+  --run-module-c --stage active-learning
+
+python benchmark.py CONFIG.json \
+  --run-module-c --stage active-learning --submit --resume
+```
+
+The state machine performs CP2K cutoff validation, MACE-MP-0a committee
+fine-tuning, held-out energy/force evaluation, and disagreement-based candidate
+selection. It records `dft_validated` only after two consecutive passing
+rounds. Budget exhaustion produces `adaptation_not_converged` and blocks
+automatic Widom/GCMC production. CP2K and MACE are intentionally not launched
+by setup or assessment commands.
+
 ### GoldDAC DFT validation gate
 
 Before running long Widom or GCMC calculations, validate the potential on the
