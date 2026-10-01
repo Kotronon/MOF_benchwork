@@ -344,6 +344,35 @@ def _write_csv(rows: list[dict[str, Any]], output_path: Path) -> None:
         writer.writerows(rows)
 
 
+def _display_backend_name(name: str) -> str:
+    """Return compact labels for plots without changing stored backend IDs."""
+    known_names = {
+        "mace_mp_0a_medium": "MACE-MP",
+        "mace_mp_0a_medium_d3": "MACE-MP + D3",
+        "mace_dac_1": "MACE-DAC",
+        "mace_dac_1_d3": "MACE-DAC + D3",
+    }
+    return known_names.get(name, name.replace("_", " "))
+
+
+def _display_region_name(name: str) -> str:
+    return {
+        "equilibrium": "Eq.",
+        "repulsive": "Rep.",
+        "weak_attraction": "Weak",
+        "unclassified": "Other",
+    }.get(name, name.replace("_", " "))
+
+
+def _display_backend_abbreviation(name: str) -> str:
+    return {
+        "mace_mp_0a_medium": "MP",
+        "mace_mp_0a_medium_d3": "MP\n+D3",
+        "mace_dac_1": "DAC",
+        "mace_dac_1_d3": "DAC\n+D3",
+    }.get(name, _display_backend_name(name))
+
+
 def _write_plots(rows: list[dict[str, Any]], output_path: Path) -> None:
     cache_directory = output_path.parent / ".plot_cache"
     cache_directory.mkdir(parents=True, exist_ok=True)
@@ -368,7 +397,13 @@ def _write_plots(rows: list[dict[str, Any]], output_path: Path) -> None:
         baseline = [row["baseline_interaction_energy_ev"] for row in candidate_rows]
         predicted = [row["candidate_interaction_energy_ev"] for row in candidate_rows]
         all_energies.extend(baseline + predicted)
-        axes[0, 0].scatter(baseline, predicted, label=candidate, alpha=0.75, color=colors(index))
+        axes[0, 0].scatter(
+            baseline,
+            predicted,
+            label=_display_backend_name(candidate),
+            alpha=0.75,
+            color=colors(index),
+        )
     lower, upper = min(all_energies), max(all_energies)
     if lower == upper:
         lower -= 1.0
@@ -388,7 +423,7 @@ def _write_plots(rows: list[dict[str, Any]], output_path: Path) -> None:
             axes[0, 1].scatter(
                 [row["minimum_host_guest_distance_A"] for row in candidate_rows],
                 [row["energy_difference_ev"] for row in candidate_rows],
-                label=candidate,
+                label=_display_backend_name(candidate),
                 alpha=0.75,
                 color=colors(index),
             )
@@ -411,7 +446,10 @@ def _write_plots(rows: list[dict[str, Any]], output_path: Path) -> None:
                     and str(row.get("region") or "unclassified") == region
                 ]
                 if values:
-                    grouped_labels.append(f"{candidate}\n{region}")
+                    grouped_labels.append(
+                        f"{_display_backend_abbreviation(candidate)}\n"
+                        f"{_display_region_name(region)}"
+                    )
                     grouped_values.append(values)
         axes[0, 1].boxplot(
             grouped_values,
@@ -427,11 +465,17 @@ def _write_plots(rows: list[dict[str, Any]], output_path: Path) -> None:
         [row["force_mae_ev_per_angstrom"] for row in rows if row["candidate_backend"] == candidate]
         for candidate in candidates
     ]
-    axes[1, 0].boxplot(force_data, tick_labels=candidates, showmeans=True)
+    axes[1, 0].boxplot(
+        force_data,
+        tick_labels=[_display_backend_name(candidate) for candidate in candidates],
+        showmeans=True,
+    )
     axes[1, 0].set(ylabel="Force MAE (eV/A)", title="Force-error distribution")
 
     baseline_name = rows[0]["baseline_backend"]
-    runtime_labels = [baseline_name, *candidates]
+    runtime_labels = [
+        _display_backend_name(name) for name in [baseline_name, *candidates]
+    ]
     runtime_values = [mean(row["baseline_runtime_seconds"] for row in rows)] + [
         mean(
             row["candidate_runtime_seconds"]
@@ -445,7 +489,8 @@ def _write_plots(rows: list[dict[str, Any]], output_path: Path) -> None:
 
     for axis in axes.flat:
         axis.grid(alpha=0.2)
-        axis.tick_params(axis="x", labelrotation=15)
+        axis.tick_params(axis="x", labelrotation=20, labelsize=8)
+    axes[0, 1].tick_params(axis="x", labelrotation=0, labelsize=7)
     figure.suptitle("Module C potential comparison")
     figure.savefig(output_path, dpi=180)
     plt.close(figure)

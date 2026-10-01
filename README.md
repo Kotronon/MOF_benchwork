@@ -287,9 +287,10 @@ so their MAE diagnoses that failure mode but is not an unbiased test-set MAE.
 ### Cluster-ready ZIF-8 benchmark
 
 The complete corrected validation matrix can be started from the repository
-root. Setup downloads and verifies the Goeminne checkpoint in the active
-environment; smoke checks the model-specific atom typing; production executes
-the nine independent 100,000-insertion runs sequentially on one GPU:
+root. Setup downloads and verifies the Goeminne and MACE-DAC checkpoints in
+the active environment; smoke checks the model-specific atom typing;
+production executes the original nine independent 100,000-insertion runs
+sequentially on one GPU:
 
 ```bash
 conda activate MOF_sim
@@ -298,6 +299,20 @@ bash scripts/run_module_c_zif8_benchmark.sh smoke
 bash scripts/run_module_c_zif8_benchmark.sh production
 ```
 
+After the GoldDAC screening, run the selected MACE-DAC model without an
+additional D3 correction first as a smoke test and then with three independent
+100,000-insertion seeds:
+
+```bash
+bash scripts/run_module_c_zif8_benchmark.sh dac-setup
+bash scripts/run_module_c_zif8_benchmark.sh dac-smoke
+bash scripts/run_module_c_zif8_benchmark.sh dac-production
+```
+
+`bash scripts/run_module_c_zif8_benchmark.sh dac` combines MACE-DAC setup,
+smoke, and production. The `all` mode additionally includes this MACE-DAC
+matrix.
+
 After synchronizing the run directories back to the local repository, create
 all replicate, convergence, and layered reference comparisons with:
 
@@ -305,10 +320,11 @@ all replicate, convergence, and layered reference comparisons with:
 bash scripts/analyze_module_c_zif8_benchmark.sh
 ```
 
-The matrix contains three matched-seed runs for fine-tuned NequIP and
-MACE-MP-0a at 273 K, plus three fine-tuned NequIP runs at 298.15 K for the
-experimental low-pressure comparison. The source hierarchy and DOI provenance
-are stored in `data/references/module_c_zif8_co2.json`.
+The matrix contains three matched-seed runs for fine-tuned NequIP, MACE-MP-0a,
+and MACE-DAC at 273 K, plus three fine-tuned NequIP runs at 298.15 K for the
+experimental low-pressure comparison. The analysis script includes MACE-DAC
+automatically once all three results are present. The source hierarchy and DOI
+provenance are stored in `data/references/module_c_zif8_co2.json`.
 
 The fine-tuning study by Kaur et al. supports the later method of starting from
 MACE-MP-0 and adapting it with a small, high-quality data set. It does not

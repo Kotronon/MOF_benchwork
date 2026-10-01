@@ -492,9 +492,9 @@ def _write_plot(report: dict[str, Any], path: Path) -> None:
         axis.grid(axis="y", alpha=0.25)
         axis.legend(frameon=False, fontsize="small")
     status = (
-        "converged"
+        "target met"
         if report["seed_reproducibility_converged"]
-        else "not converged"
+        else "relative CI target not met"
     )
     fig.suptitle(f"MLIP-MC Widom seed reproducibility ({status})")
     fig.tight_layout(rect=(0, 0, 1, 0.94))

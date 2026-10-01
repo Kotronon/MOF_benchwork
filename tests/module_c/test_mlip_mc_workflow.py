@@ -11,9 +11,43 @@ GCMC_CONFIG = "input_json_files/benchmark_zif8_co2_mlip_mc_gcmc_smoke.json"
 NEQUIP_CONFIG = (
     "input_json_files/benchmark_zif8_co2_nequip_finetuned_widom_smoke.json"
 )
+MACE_DAC_CONFIGS = [
+    (
+        "input_json_files/benchmark_zif8_co2_mace_dac_widom_smoke.json",
+        12345,
+        100,
+    ),
+    *[
+        (
+            "input_json_files/"
+            f"benchmark_zif8_co2_mace_dac_widom_100000_273K_seed{seed}.json",
+            seed,
+            100_000,
+        )
+        for seed in (12345, 23456, 34567)
+    ],
+]
 
 
 class MlipMcWorkflowPlanningTests(unittest.TestCase):
+    def test_mace_dac_widom_configs_are_supported_and_reproducible(self) -> None:
+        run_ids = set()
+        for path, expected_seed, expected_trials in MACE_DAC_CONFIGS:
+            plan = build_run_plan(load_benchmark_data(path))
+            settings = plan["benchmark"]["potential_benchmark"]["mlip_mc"]
+            model = settings["model"]
+
+            self.assertEqual(plan["benchmark"]["applicability"]["status"], "supported")
+            self.assertEqual(settings["seed"], expected_seed)
+            self.assertEqual(settings["trials"], expected_trials)
+            self.assertEqual(model["backend"], "mace-torch")
+            self.assertEqual(model["name"], "mace_dac_1")
+            self.assertFalse(model["dispersion"])
+            self.assertIn("asset", model)
+            run_ids.add(plan["outputs"]["run_id"])
+
+        self.assertEqual(len(run_ids), len(MACE_DAC_CONFIGS))
+
     def test_widom_config_selects_executable_module_c_workflow(self) -> None:
         plan = build_run_plan(load_benchmark_data(WIDOM_CONFIG))
 

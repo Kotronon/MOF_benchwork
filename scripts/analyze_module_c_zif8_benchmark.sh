@@ -12,12 +12,26 @@ SEEDS=(12345 23456 34567)
 
 NEQUIP_273=()
 MACE_273=()
+MACE_DAC_273=()
 NEQUIP_298=()
 for seed in "${SEEDS[@]}"; do
   NEQUIP_273+=("${RUN_ROOT}/zif8_co2_nequip_finetuned_widom_100000_typed_v1_seed${seed}")
   MACE_273+=("${RUN_ROOT}/zif8_co2_mace_mp0a_widom_100000_273K_seed${seed}")
+  MACE_DAC_273+=("${RUN_ROOT}/zif8_co2_mace_dac_widom_100000_273K_seed${seed}")
   NEQUIP_298+=("${RUN_ROOT}/zif8_co2_nequip_finetuned_widom_100000_298K_typed_v1_seed${seed}")
 done
+
+dac_result_count=0
+for run in "${MACE_DAC_273[@]}"; do
+  if [[ -f "${run}/results/mlip_mc_benchmark.json" ]]; then
+    ((dac_result_count += 1))
+  fi
+done
+if (( dac_result_count != 0 && dac_result_count != ${#MACE_DAC_273[@]} )); then
+  printf 'Incomplete MACE-DAC replicate set: %d of %d results found.\n' \
+    "${dac_result_count}" "${#MACE_DAC_273[@]}" >&2
+  exit 1
+fi
 
 for run in "${NEQUIP_273[@]}" "${MACE_273[@]}" "${NEQUIP_298[@]}"; do
   if [[ ! -f "${run}/results/mlip_mc_benchmark.json" ]]; then
@@ -36,6 +50,16 @@ done
   --output-dir "${REPORT_ROOT}/mace_mp0a_273K" \
   --compare-references \
   --curated-reference "${REPORT_ROOT}/nequip_finetuned_273K/widom_curated_reference.json"
+
+if (( dac_result_count == ${#MACE_DAC_273[@]} )); then
+  "${PYTHON_BIN}" -m analysis.mlip_widom_replicates \
+    "${MACE_DAC_273[@]}" \
+    --output-dir "${REPORT_ROOT}/mace_dac_273K" \
+    --compare-references \
+    --curated-reference "${REPORT_ROOT}/nequip_finetuned_273K/widom_curated_reference.json"
+else
+  printf 'Skipping MACE-DAC analysis: no completed replicate set found.\n'
+fi
 
 "${PYTHON_BIN}" -m analysis.mlip_widom_replicates \
   "${NEQUIP_298[@]}" \

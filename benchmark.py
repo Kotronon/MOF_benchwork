@@ -139,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         model_asset = (
             ensure_model_asset(model, download_missing=True)
             if status.backend == "nequip"
+            or isinstance(model.get("asset"), dict)
             else None
         )
         build_ase_calculator(model)

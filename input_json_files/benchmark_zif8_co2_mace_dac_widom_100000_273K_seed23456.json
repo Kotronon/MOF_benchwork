@@ -1,0 +1,34 @@
+{
+  "material": {"name": "ZIF-8", "cif_source": "auto", "charge_scheme": "DDEC", "source": "crafted"},
+  "adsorbates": {"components": ["CO2"], "mixture": null},
+  "conditions": {"temperature_K": 273.0, "pressures_bar": [1.0]},
+  "benchmark": {
+    "task": "potential_benchmark",
+    "metrics": ["average_boltzmann_factor", "henry_coefficient", "isosteric_heat_zero_loading", "block_sem", "runtime_per_step"],
+    "potential_benchmark": {
+      "workflow": "mlip_mc_widom",
+      "mlip_mc": {
+        "trials": 100000,
+        "block_size": 10000,
+        "convergence_checkpoints": [10000,25000,50000,75000,100000],
+        "seed": 23456,
+        "auto_install_dependencies": false,
+        "model": {
+          "backend": "mace-torch",
+          "name": "mace_dac_1",
+          "model": "external/models/mace-dac-1.model",
+          "device": "cuda",
+          "default_dtype": "float32",
+          "dispersion": false,
+          "sha256": "6c31634523ce89f843f8286ebcf841d9a18ab3f2cb505bd52ca1e3e189c34791",
+          "asset": {
+            "url": "https://raw.githubusercontent.com/hspark1212/DAC-SIM/f48c6a02066f1ed853ed7dab3908a624355c1455/dac_sim/models/mace-dac-1.model"
+          }
+        }
+      }
+    }
+  },
+  "simulation": {"engine": "MLIP_MC", "method": "WIDOM", "forcefield": {"framework": "UFF", "adsorbate": "auto", "cross_interactions": "auto"}, "framework": "rigid", "cell_representation": "source", "minimum_image_policy": "error", "cutoff_A": 6.0, "unit_cells": [1, 1, 1], "seeds": [23456]},
+  "convergence": {"minimum_replicates": 3, "relative_ci95_target": 0.05},
+  "output": {"directory": "outputs/module_C_potential_benchmark", "run_id": "zif8_co2_mace_dac_widom_100000_273K_seed23456", "overwrite": false, "save_logs": true, "save_dumps": false, "save_restarts": true, "save_plots": true, "save_csv": true}
+}

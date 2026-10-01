@@ -70,12 +70,11 @@ def run_mlip_mc_benchmark(
         backend,
         install_missing=install_assets,
     )
+    normalized_backend = backend.strip().casefold().replace("_", "-")
     model_asset = (
         ensure_model_asset(model, download_missing=install_assets)
-        if backend.strip().casefold().replace("_", "-") in {
-            "nequip",
-            "nequip-legacy",
-        }
+        if isinstance(model.get("asset"), dict)
+        or normalized_backend in {"nequip", "nequip-legacy"}
         else None
     )
 
