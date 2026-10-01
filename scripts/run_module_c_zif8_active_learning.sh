@@ -7,6 +7,7 @@ cd "${PROJECT_ROOT}"
 
 PYTHON_BIN="${PYTHON_BIN:-python}"
 MODE="${1:-status}"
+CP2K_CONDA_SPEC="${CP2K_CONDA_SPEC:-conda-forge::cp2k=2026.1=ha306f6e_2}"
 CONFIG="${PROJECT_ROOT}/input_json_files/benchmark_zif8_co2_module_c_active_learning.json"
 STATE="${PROJECT_ROOT}/outputs/module_C_potential_benchmark/runs/zif8_co2_active_learning/zif_8__mace_mp_0a_active_learning__active_learning__seed12345/active_learning/state.json"
 
@@ -18,24 +19,58 @@ require_command() {
 }
 
 install_cp2k() {
-  if command -v cp2k >/dev/null 2>&1; then
-    return
-  fi
   require_command conda
   if [[ -z "${CONDA_PREFIX:-}" ]]; then
     printf 'Activate MOF_sim before running setup so CP2K is installed into the intended environment.\n' >&2
     exit 1
   fi
-  printf 'Installing CP2K 2026.2 into %s ...\n' "${CONDA_PREFIX}"
-  conda install --yes --prefix "${CONDA_PREFIX}" 'conda-forge::cp2k=2026.2'
+  if [[ "$(basename -- "${CONDA_PREFIX}")" != "MOF_sim" ]]; then
+    printf 'Refusing to modify %s. Activate the MOF_sim environment first.\n' "${CONDA_PREFIX}" >&2
+    exit 1
+  fi
+  printf 'Installing %s into %s ...\n' "${CP2K_CONDA_SPEC}" "${CONDA_PREFIX}"
+  conda install --yes --prefix "${CONDA_PREFIX}" "${CP2K_CONDA_SPEC}"
   hash -r
+}
+
+verify_python_stack() {
+  "${PYTHON_BIN}" -c '
+import importlib
+import importlib.util
+import json
+from importlib import metadata
+
+import ase
+import mace
+import mlip_mc
+import ovito
+import torch
+
+versions = {
+    "python_packages": {},
+    "ovito": ovito.version_string,
+    "torch": torch.__version__,
+    "cuda_available": torch.cuda.is_available(),
+}
+for distribution in ("ase", "mace-torch", "mlip-mc", "nequip"):
+    try:
+        versions["python_packages"][distribution] = metadata.version(distribution)
+    except metadata.PackageNotFoundError:
+        versions["python_packages"][distribution] = None
+if importlib.util.find_spec("nequip") is not None:
+    importlib.import_module("nequip")
+    versions["nequip_import"] = "passed"
+else:
+    versions["nequip_import"] = "not_installed"
+print(json.dumps(versions, indent=2))
+'
 }
 
 preflight_dft() {
   require_command cp2k
   require_command mpirun
-  cp2k --version >/dev/null
   mpirun --version >/dev/null
+  mpirun -np 1 cp2k --version >/dev/null
   "${PYTHON_BIN}" -c 'import ase, mace, mlip_mc'
 }
 
@@ -108,6 +143,8 @@ case "${MODE}" in
       --install-missing \
       --skip-registry-update
     preflight_dft
+    verify_python_stack
+    conda list --prefix "${CONDA_PREFIX}" cp2k
     ;;
   assess)
     "${PYTHON_BIN}" benchmark.py "${CONFIG}" \

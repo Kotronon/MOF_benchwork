@@ -71,11 +71,14 @@ python benchmark.py CONFIG.json \
 
 The ZIF-8 workflow is wrapped in a helper for a directly accessed cluster
 without Slurm. Its `setup` mode installs the pinned CP2K package into the
-currently active Conda environment. The CP2K configuration uses one local MPI
-job with 16 ranks; adjust `mpi_processes_per_job` and `max_parallel_jobs` to the
-actual node before production. `start` and `advance` block while their CP2K
-jobs run, so launch them in `tmux` or another persistent shell. When the state
-reaches `training_prepared`, run `train` on a host with CUDA:
+currently active Conda environment. The compatible one-environment pin is
+`conda-forge::cp2k=2026.1=ha306f6e_2`; setup then verifies CP2K through MPI and
+re-imports ASE, Torch, MACE, MLIP-MC, OVITO, and optional NequIP. The CP2K
+configuration uses one local MPI job with 16 ranks; adjust
+`mpi_processes_per_job` and `max_parallel_jobs` to the actual node before
+production. `start` and `advance` block while their CP2K jobs run, so launch
+them in `tmux` or another persistent shell. When the state reaches
+`training_prepared`, run `train` on a host with CUDA:
 
 ```bash
 bash scripts/run_module_c_zif8_active_learning.sh setup
