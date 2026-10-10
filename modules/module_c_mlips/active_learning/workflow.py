@@ -75,6 +75,10 @@ def run_active_learning(
             material_id=str(run_plan["material"]["material_id"]),
         )
 
+    if state.status in {"awaiting_cutoff_test", "cutoff_not_converged"}:
+        if _extend_cutoff_test(settings, state, root):
+            state.save(state_path)
+
     if state.status in TERMINAL_STATES:
         return _state_report(state, state_path)
     if state.status == "new":
@@ -320,6 +324,48 @@ def _initialize(
     )
 
 
+
+def _extend_cutoff_test(
+    settings: ActiveLearningSettings,
+    state: ActiveLearningState,
+    root: Path,
+) -> bool:
+    """Append newly configured cutoffs without replacing existing calculations."""
+    jobs_path = root / "cutoff_test" / "cp2k_jobs.json"
+    jobs = _load_jobs(jobs_path)
+    requested = {int(value) for value in settings.cp2k.get("cutoff_test_Ry", [400, 600, 800])}
+    if len(requested) < 2 or any(value <= 0 for value in requested):
+        raise ValueError("CP2K cutoff_test_Ry requires at least two positive cutoffs.")
+    missing = sorted(requested - {int(job["cutoff_Ry"]) for job in jobs})
+    if not missing:
+        return False
+    reference = jobs[0]
+    manifest_path = Path(reference["job_directory"]).parent / "dft_manifest.json"
+    original = json.loads(manifest_path.read_text(encoding="utf-8"))["settings"]
+    # Changing numerical/physical settings would make the old results incomparable.
+    ignored = {"cutoff_Ry", "cutoff_test_Ry", "executable", "scheduler", "local", "slurm"}
+    old_settings = {key: value for key, value in original.items() if key not in ignored}
+    new_settings = {key: value for key, value in settings.cp2k.items() if key not in ignored}
+    if old_settings != new_settings:
+        raise ValueError("Extending a cutoff test requires unchanged CP2K physical and numerical settings.")
+    candidate = {
+        "candidate_id": reference["candidate_id"].rsplit("__cutoff_", 1)[0],
+        "structure_path": reference["structure_path"],
+    }
+    for cutoff in missing:
+        labeler = CP2KLabeler({**settings.cp2k, "cutoff_Ry": cutoff})
+        current = labeler.prepare(
+            [{**candidate, "candidate_id": f"{candidate['candidate_id']}__cutoff_{cutoff}Ry"}],
+            root / "cutoff_test" / f"{cutoff}Ry",
+        )[0]
+        jobs.append(current)
+    save_benchmark_data(jobs_path, {"jobs": sorted(jobs, key=lambda job: int(job["cutoff_Ry"]))})
+    state.status = "awaiting_cutoff_test"
+    state.failure_reason = None
+    state.history.append({"iteration": state.iteration, "event": "cutoff_test_extended", "added_cutoffs_Ry": missing})
+    return True
+
+
 def _advance_cutoff_test(
     settings: ActiveLearningSettings,
     state: ActiveLearningState,
@@ -357,7 +403,7 @@ def _advance_cutoff_test(
     if report["status"] != "passed":
         state.status = "cutoff_not_converged"
         state.failure_reason = (
-            "The CP2K 400/600/800 Ry cutoff convergence gate failed."
+            "The configured CP2K cutoff convergence gate failed."
         )
         return False
     state.selected_cutoff_Ry = int(report["selected_cutoff_Ry"])

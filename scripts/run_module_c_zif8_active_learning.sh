@@ -8,6 +8,10 @@ cd "${PROJECT_ROOT}"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 MODE="${1:-status}"
 CP2K_CONDA_SPEC="${CP2K_CONDA_SPEC:-conda-forge::cp2k=2026.1=ha306f6e_2}"
+# This CP2K build links libdbcsr.so.2.9; its package metadata also allows 2.10.
+CP2K_DBCSR_CONDA_SPEC="${CP2K_DBCSR_CONDA_SPEC:-conda-forge::dbcsr=2.9.1=mpi_openmpi_hcf4b7bf_3}"
+CP2K_LIBXC_CONDA_SPEC="${CP2K_LIBXC_CONDA_SPEC:-conda-forge::libxc=7.0.0=cpu_h54041b4_6}"
+CP2K_LIBXC_C_CONDA_SPEC="${CP2K_LIBXC_C_CONDA_SPEC:-conda-forge::libxc-c=7.0.0=cpu_h75f4f88_6}"
 CONFIG="${PROJECT_ROOT}/input_json_files/benchmark_zif8_co2_module_c_active_learning.json"
 STATE="${PROJECT_ROOT}/outputs/module_C_potential_benchmark/runs/zif8_co2_active_learning/zif_8__mace_mp_0a_active_learning__active_learning__seed12345/active_learning/state.json"
 
@@ -29,7 +33,8 @@ install_cp2k() {
     exit 1
   fi
   printf 'Installing %s into %s ...\n' "${CP2K_CONDA_SPEC}" "${CONDA_PREFIX}"
-  conda install --yes --prefix "${CONDA_PREFIX}" "${CP2K_CONDA_SPEC}"
+  conda install --yes --prefix "${CONDA_PREFIX}" "${CP2K_CONDA_SPEC}" "${CP2K_DBCSR_CONDA_SPEC}" \
+    "${CP2K_LIBXC_CONDA_SPEC}" "${CP2K_LIBXC_C_CONDA_SPEC}"
   hash -r
 }
 
@@ -38,27 +43,34 @@ verify_python_stack() {
 import importlib
 import importlib.util
 import json
+import shutil
+from contextlib import nullcontext
 from importlib import metadata
 
 import ase
 import mace
 import mlip_mc
-import ovito
 import torch
 
 versions = {
     "python_packages": {},
-    "ovito": ovito.version_string,
+    "ovito_executable": shutil.which("ovito"),
+    "ovito_python": "not_installed_optional",
     "torch": torch.__version__,
     "cuda_available": torch.cuda.is_available(),
 }
+if importlib.util.find_spec("ovito") is not None:
+    ovito = importlib.import_module("ovito")
+    versions["ovito_python"] = ovito.version_string
 for distribution in ("ase", "mace-torch", "mlip-mc", "nequip"):
     try:
         versions["python_packages"][distribution] = metadata.version(distribution)
     except metadata.PackageNotFoundError:
         versions["python_packages"][distribution] = None
 if importlib.util.find_spec("nequip") is not None:
-    importlib.import_module("nequip")
+    safe_globals = getattr(torch.serialization, "safe_globals", None)
+    with safe_globals([slice]) if safe_globals else nullcontext():
+        importlib.import_module("nequip")
     versions["nequip_import"] = "passed"
 else:
     versions["nequip_import"] = "not_installed"
@@ -121,7 +133,14 @@ run_production() {
         printf 'Active learning passed the DFT validation gate.\n'
         return
         ;;
-      adaptation_not_converged|cutoff_not_converged)
+      cutoff_not_converged)
+        run_benchmark --resume
+        if [[ "$(state_status)" == "cutoff_not_converged" ]]; then
+          printf 'Cutoff test has not converged. Extend cutoff_test_Ry in %s and resume.\n' "${CONFIG}" >&2
+          return 1
+        fi
+        ;;
+      adaptation_not_converged)
         printf 'Active learning ended without validation: %s\n' "${current_status}" >&2
         return 1
         ;;
@@ -205,6 +224,25 @@ case "${MODE}" in
       --resume \
       --skip-registry-update
     ;;
+  retry-scf)
+    "${PYTHON_BIN}" -c '
+import json
+from pathlib import Path
+import sys
+from modules.module_c_mlips.active_learning.dft import prepare_cp2k_scf_retries
+
+state_path = Path(sys.argv[1])
+state = json.loads(state_path.read_text(encoding="utf-8"))
+if state["status"] != "awaiting_dft":
+    raise SystemExit("SCF retries require status awaiting_dft.")
+config = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+cp2k = config["benchmark"]["potential_benchmark"]["active_learning"]["cp2k"]
+jobs_path = state_path.parent / ("iteration_%02d" % state["iteration"]) / "cp2k" / "cp2k_jobs.json"
+retried = prepare_cp2k_scf_retries(jobs_path, max_scf=int(cp2k.get("max_scf", 1000)))
+print(json.dumps({"prepared_scf_retries": retried}, indent=2))
+' "${STATE}" "${CONFIG}"
+    printf 'Prepared SCF retries. Run production to execute the pending jobs.\n'
+    ;;
   reset)
     run_benchmark --overwrite
     ;;
@@ -249,24 +287,23 @@ elif state.get("status") == "awaiting_dft":
 if jobs_path is not None and jobs_path.is_file():
     jobs = json.load(open(jobs_path, encoding="utf-8"))["jobs"]
     progress = {"total": len(jobs), "pending": 0, "running": 0, "completed": 0, "failed": 0}
-    for job in jobs:
-        output = Path(job["output_path"])
-        if not output.is_file():
-            progress["pending"] += 1
-            continue
-        content = output.read_text(encoding="utf-8", errors="replace")
-        if "PROGRAM ENDED AT" in content:
-            progress["completed"] += 1
-        elif "ABORT" in content or "PROGRAM STOPPED" in content:
-            progress["failed"] += 1
-        else:
+    from modules.module_c_mlips.active_learning.dft import CP2KLabeler
+    statuses = CP2KLabeler({"scheduler": "local"}).status(jobs)
+    for job in statuses:
+        status = job["status"]
+        if status in ("completed", "failed"):
+            progress[status] += 1
+        elif status == "running_or_incomplete":
             progress["running"] += 1
+        else:
+            progress["pending"] += 1
+    summary["cp2k_details"] = statuses
     summary["cp2k_progress"] = progress
 print(json.dumps(summary, indent=2))
 ' "${STATE}"
     ;;
   *)
-    printf 'Usage: %s {setup|assess|start|advance|prepare-training|train|production|widom|gcmc-pilot|status|reset}\n' "$0" >&2
+    printf 'Usage: %s {setup|assess|start|advance|prepare-training|train|production|widom|gcmc-pilot|retry-scf|status|reset}\n' "$0" >&2
     exit 2
     ;;
 esac

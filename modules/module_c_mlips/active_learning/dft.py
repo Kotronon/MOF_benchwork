@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import shutil
 import subprocess
 from typing import Any, Sequence
 
@@ -311,10 +312,76 @@ class CP2KLabeler(DFTLabeler):
         return statuses
 
 
+
+def prepare_cp2k_scf_retries(jobs_path: str | Path, *, max_scf: int) -> list[str]:
+    """Archive SCF failures and prepare only those jobs with a larger step budget."""
+    if max_scf <= 0:
+        raise ValueError("CP2K max_scf must be positive.")
+    path = Path(jobs_path)
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    jobs = manifest["jobs"]
+    repairs = []
+    for job in jobs:
+        output = Path(job["output_path"])
+        if not output.is_file():
+            continue
+        try:
+            parse_cp2k_output(output)
+        except ValueError:
+            content = output.read_text(encoding="utf-8", errors="replace")
+            if "SCF run NOT converged" not in content:
+                if "ABORT" not in content and "PROGRAM STOPPED" not in content:
+                    continue  # Partial output may belong to a running job.
+                raise ValueError(f"Cannot retry a failure unrelated to SCF convergence: {output}")
+        else:
+            continue
+        input_path = Path(job["input_path"])
+        text = input_path.read_text(encoding="utf-8")
+        matches = list(re.finditer(r"(?m)^(\s*MAX_SCF\s+)(\d+)([^\n]*)$", text))
+        if len(matches) != 1 or max_scf <= int(matches[0][2]):
+            raise ValueError(f"Retry requires a larger, unambiguous MAX_SCF in {input_path}")
+        match = matches[0]
+        updated = text[:match.start(2)] + str(max_scf) + text[match.end(2):]
+        if re.search(r"(?m)^\s*SCF_GUESS\s+", updated):
+            updated = re.sub(r"(?m)^(\s*SCF_GUESS\s+)\S+", r"\g<1>RESTART", updated)
+        else:
+            updated = re.sub(r"(?m)^(\s*)MAX_SCF", r"\g<1>SCF_GUESS RESTART\n\g<1>MAX_SCF", updated, count=1)
+        repairs.append((job, updated, int(match[2])))
+    # Validate every proposed repair before modifying any job.
+    for job, updated, previous_limit in repairs:
+        workdir = Path(job["job_directory"])
+        attempt = 1
+        while (workdir / f"scf_retry_{attempt:02d}").exists():
+            attempt += 1
+        archive = workdir / f"scf_retry_{attempt:02d}"
+        archive.mkdir()
+        shutil.copy2(job["input_path"], archive / Path(job["input_path"]).name)
+        for restart in workdir.glob("*-RESTART.wfn*"):
+            shutil.copy2(restart, archive / restart.name)
+        for artifact in (Path(job["output_path"]), workdir / "launcher.stdout.log", workdir / "launcher.stderr.log"):
+            if artifact.is_file():
+                shutil.move(str(artifact), str(archive / artifact.name))
+        Path(job["input_path"]).write_text(updated, encoding="utf-8")
+        job.setdefault("scf_retry_history", []).append({
+            "archive_directory": str(archive),
+            "previous_max_scf": previous_limit,
+            "max_scf": max_scf,
+            "previous_returncode": job.get("returncode"),
+        })
+        job["status"] = "prepared"
+        job.pop("returncode", None)
+        job.pop("error", None)
+        save_benchmark_data(path, manifest)
+    return [job["candidate_id"] for job, _, _ in repairs]
+
+
 def render_cp2k_input(atoms: Any, *, project: str, settings: dict[str, Any]) -> str:
     cutoff = float(settings.get("cutoff_Ry", 600))
     relative_cutoff = float(settings.get("relative_cutoff_Ry", 60))
     eps_scf = float(settings.get("scf_tolerance", 1.0e-6))
+    max_scf = int(settings.get("max_scf", 200))
+    if max_scf <= 0:
+        raise ValueError("CP2K max_scf must be positive.")
     charge = int(settings.get("charge", 0))
     multiplicity = int(settings.get("multiplicity", 1))
     dispersion = str(settings.get("profile", "pbe_d3_bj")).casefold()
@@ -362,7 +429,7 @@ def render_cp2k_input(atoms: Any, *, project: str, settings: dict[str, Any]) -> 
     &END MGRID
     &SCF
       EPS_SCF {eps_scf:.3e}
-      MAX_SCF 200
+      MAX_SCF {max_scf}
       &OT
         PRECONDITIONER FULL_SINGLE_INVERSE
         MINIMIZER DIIS
@@ -381,10 +448,6 @@ def render_cp2k_input(atoms: Any, *, project: str, settings: dict[str, Any]) -> 
         &END PAIR_POTENTIAL
       &END VDW_POTENTIAL
     &END XC
-    &PRINT
-      &FORCES ON
-      &END FORCES
-    &END PRINT
   &END DFT
   &SUBSYS
     &CELL
@@ -399,6 +462,8 @@ def render_cp2k_input(atoms: Any, *, project: str, settings: dict[str, Any]) -> 
 {kinds}
   &END SUBSYS
   &PRINT
+    &FORCES ON
+    &END FORCES
     &STRESS_TENSOR ON
     &END STRESS_TENSOR
   &END PRINT
@@ -457,6 +522,8 @@ def build_local_cp2k_command(
 
 def parse_cp2k_output(path: str | Path) -> dict[str, Any]:
     text = Path(path).read_text(encoding="utf-8", errors="replace")
+    if "SCF run NOT converged" in text:
+        raise ValueError(f"CP2K SCF did not converge: {path}")
     if "PROGRAM ENDED AT" not in text:
         raise ValueError(f"CP2K output is incomplete: {path}")
     energy_matches = re.findall(
@@ -518,6 +585,24 @@ def _parse_cp2k_forces(text: str) -> list[list[float]]:
         text,
         flags=re.DOTALL,
     )
+    modern_blocks = re.findall(
+        r"FORCES\| Atomic forces \[hartree/bohr\](.*?)(?=\n\s*\n|\Z)",
+        text,
+        flags=re.DOTALL,
+    )
+    if modern_blocks:
+        forces = []
+        for line in modern_blocks[-1].splitlines():
+            tokens = line.split()
+            if len(tokens) < 5 or tokens[0] != "FORCES|" or not tokens[1].isdigit():
+                continue
+            forces.append([
+                float(value) * HARTREE_PER_BOHR_TO_EV_PER_A
+                for value in tokens[2:5]
+            ])
+        if not forces:
+            raise ValueError("CP2K atomic-force block is empty.")
+        return forces
     if not blocks:
         raise ValueError("No CP2K atomic-force block found.")
     forces = []

@@ -72,8 +72,14 @@ python benchmark.py CONFIG.json \
 The ZIF-8 workflow is wrapped in a helper for a directly accessed cluster
 without Slurm. Its `setup` mode installs the pinned CP2K package into the
 currently active Conda environment. The compatible one-environment pin is
-`conda-forge::cp2k=2026.1=ha306f6e_2`; setup then verifies CP2K through MPI and
-re-imports ASE, Torch, MACE, MLIP-MC, OVITO, and optional NequIP. The CP2K
+`conda-forge::cp2k=2026.1=ha306f6e_2` together with
+`conda-forge::dbcsr=2.9.1=mpi_openmpi_hcf4b7bf_3`. This CP2K build requires
+`libdbcsr.so.2.9`, which DBCSR 2.10 does not provide. LibXC and libxc-c are
+also pinned to CPU builds of 7.0.0 because 7.1.2 fails during initialization
+with this CP2K build. Setup verifies CP2K through MPI and re-imports ASE,
+Torch, MACE, MLIP-MC, and optional NequIP. The OVITO application and optional
+Python module are reported separately; the Python module is not required
+for active learning. The CP2K
 configuration uses one local MPI job with 16 ranks; adjust
 `mpi_processes_per_job` and `max_parallel_jobs` to the actual node before
 production. `start` and `advance` block while their CP2K jobs run, so launch
@@ -94,6 +100,19 @@ bash scripts/run_module_c_zif8_active_learning.sh train
 bash scripts/run_module_c_zif8_active_learning.sh widom
 bash scripts/run_module_c_zif8_active_learning.sh gcmc-pilot
 ```
+
+If a cutoff test ends with `cutoff_not_converged`, append higher values to
+`active_learning.cp2k.cutoff_test_Ry` in the input configuration and resume with
+`advance` or `production`. The existing cutoff jobs and data splits are preserved;
+only the added cutoffs run. The ZIF-8 configuration includes 1000 and 1200 Ry.
+Physical and numerical CP2K settings must remain unchanged when reusing results.
+
+When individual DFT jobs abort with `SCF run NOT converged`, use
+`bash scripts/run_module_c_zif8_active_learning.sh retry-scf`, then resume
+`production`. The preparation archives failed inputs, outputs, logs and restart
+wavefunctions, raises `MAX_SCF` to the configured `max_scf` (1000 for ZIF-8),
+and uses `SCF_GUESS RESTART`. Successful jobs and the SCF tolerance are preserved.
+Only failures explicitly caused by SCF convergence are prepared for retry.
 
 If CP2K and CUDA are available on the same directly accessed node, the full
 adaptation loop can instead be run with one blocking command:
