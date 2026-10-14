@@ -156,7 +156,7 @@ class ActiveLearningTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             jobs = []
-            for name in ("failed", "completed", "running"):
+            for name in ("failed", "completed", "running"): 
                 workdir = root / name
                 workdir.mkdir()
                 (workdir / "cp2k.inp").write_text("&SCF\n  EPS_SCF 1.000e-06\n  MAX_SCF 200\n&END SCF\n")
