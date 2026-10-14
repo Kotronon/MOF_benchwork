@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from hashlib import md5, sha256
 from pathlib import Path, PurePosixPath
 import shutil
@@ -10,6 +11,20 @@ from typing import Any
 from urllib.request import Request, urlopen
 from zipfile import BadZipFile, ZipFile
 import zlib
+
+
+UMOF_FIGSHARE_ARTICLE_ID = "33311829"
+UMOF_DEFAULT_DIRECTORY = Path("external/models/umof")
+UMOF_DEFAULT_MODELS = {
+    "umof_mh": {
+        "filename": "umof-mh.model",
+        "patterns": ["umof-mh", "umof_mh", "umofmh"],
+    },
+    "umof_polar": {
+        "filename": "umof-polar.model",
+        "patterns": ["umof-polar", "umof_polar", "umofpolar"],
+    },
+}
 
 
 def ensure_model_asset(
@@ -50,6 +65,7 @@ def ensure_model_asset(
             "--install-missing workflow to download the configured model asset."
         )
 
+    asset = _resolve_figshare_asset(asset, model_path)
     direct_url = str(asset.get("url", "")).strip()
     if direct_url:
         model_path.parent.mkdir(parents=True, exist_ok=True)
@@ -128,6 +144,179 @@ def ensure_model_asset(
         archive_member=member,
         transfer_mode="full_archive",
     )
+
+
+def ensure_umof_model_asset(
+    specification: dict[str, Any],
+    *,
+    download_missing: bool = False,
+) -> dict[str, Any]:
+    """Ensure a uMOF-MH/uMOF-POLAR checkpoint is available locally.
+
+    The uMOF paper release is distributed through Figshare. Config files may
+    either provide an explicit downloadable ``asset`` block or only identify the
+    backend as ``umof_mh``/``umof_polar``. In the latter case, this function
+    fills in the standard local path and the Figshare lookup metadata.
+    """
+    if not is_umof_specification(specification):
+        return ensure_model_asset(
+            specification,
+            download_missing=download_missing,
+        )
+    model_key = _umof_model_key(specification)
+    if model_key not in UMOF_DEFAULT_MODELS:
+        raise ValueError(
+            "uMOF model specifications must be named 'umof_mh' or "
+            "'umof_polar'."
+        )
+    defaults = UMOF_DEFAULT_MODELS[model_key]
+    specification.setdefault(
+        "model",
+        str(UMOF_DEFAULT_DIRECTORY / defaults["filename"]),
+    )
+    specification.setdefault(
+        "asset",
+        {
+            "figshare_article_id": UMOF_FIGSHARE_ARTICLE_ID,
+            "file_name_patterns": defaults["patterns"],
+            "candidate_extensions": [".model", ".pt", ".pth"],
+        },
+    )
+    return ensure_model_asset(
+        specification,
+        download_missing=download_missing,
+    )
+
+
+def is_umof_specification(specification: dict[str, Any]) -> bool:
+    """Return True when a model specification describes a uMOF checkpoint."""
+    name = str(specification.get("name", "")).strip().casefold().replace("-", "_")
+    backend = str(
+        specification.get("backend", specification.get("type", ""))
+    ).strip().casefold().replace("-", "_")
+    family = str(
+        specification.get("model_family", "")
+    ).strip().casefold().replace("-", "_")
+    return (
+        name in {"umof_mh", "umof_polar"}
+        or backend in {"umof", "umof_mh", "umof_polar"}
+        or family == "umof"
+    )
+
+
+def _umof_model_key(specification: dict[str, Any]) -> str:
+    for key in ("name", "backend", "type"):
+        value = str(specification.get(key, "")).strip().casefold()
+        normalized = value.replace("-", "_")
+        if normalized in {"umof_mh", "umof_polar"}:
+            return normalized
+    model = str(specification.get("model", "")).strip().casefold()
+    if "polar" in model:
+        return "umof_polar"
+    return "umof_mh"
+
+
+def _resolve_figshare_asset(asset: dict[str, Any], model_path: Path) -> dict[str, Any]:
+    article_id = str(asset.get("figshare_article_id", "")).strip()
+    if not article_id:
+        return asset
+    files = _figshare_files(article_id)
+    selected = _select_figshare_file(files, asset, model_path)
+    download_url = str(selected.get("download_url", "")).strip()
+    if not download_url:
+        file_id = selected.get("id")
+        if not file_id:
+            raise ValueError(
+                f"Figshare file metadata for article {article_id} has no "
+                "download_url or file id."
+            )
+        download_url = f"https://api.figshare.com/v2/file/download/{file_id}"
+    resolved = dict(asset)
+    file_name = str(selected.get("name", model_path.name))
+    if file_name.casefold().endswith(".zip") and (
+        asset.get("member_path") or asset.get("member_basename")
+    ):
+        resolved["archive_url"] = download_url
+        resolved.setdefault("archive_filename", file_name)
+        if selected.get("supplied_md5"):
+            resolved.setdefault("archive_md5", str(selected["supplied_md5"]))
+    else:
+        resolved["url"] = download_url
+    resolved["figshare_file_name"] = file_name
+    resolved["figshare_file_id"] = selected.get("id")
+    return resolved
+
+
+def _figshare_files(article_id: str) -> list[dict[str, Any]]:
+    url = f"https://api.figshare.com/v2/articles/{article_id}/files"
+    with urlopen(url) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    if not isinstance(data, list):
+        raise ValueError(f"Unexpected Figshare response for article {article_id}.")
+    return [item for item in data if isinstance(item, dict)]
+
+
+def _select_figshare_file(
+    files: list[dict[str, Any]],
+    asset: dict[str, Any],
+    model_path: Path,
+) -> dict[str, Any]:
+    if not files:
+        raise FileNotFoundError(
+            f"No files were returned for Figshare article "
+            f"{asset.get('figshare_article_id')}."
+        )
+    file_id = asset.get("file_id")
+    if file_id is not None:
+        for item in files:
+            if str(item.get("id")) == str(file_id):
+                return item
+        raise FileNotFoundError(f"Figshare file id {file_id!r} was not found.")
+
+    names = [
+        str(asset.get("file_name", "")).strip(),
+        *[str(value).strip() for value in asset.get("file_names", [])],
+    ]
+    names = [value for value in names if value]
+    lower_names = {value.casefold() for value in names}
+    for item in files:
+        if str(item.get("name", "")).casefold() in lower_names:
+            return item
+
+    patterns = [
+        str(value).casefold().replace("_", "-")
+        for value in asset.get("file_name_patterns", [])
+        if str(value).strip()
+    ]
+    extensions = [
+        str(value).casefold()
+        for value in asset.get("candidate_extensions", [])
+        if str(value).strip()
+    ]
+    if not patterns:
+        patterns = [model_path.stem.casefold().replace("_", "-")]
+
+    matches = []
+    for item in files:
+        name = str(item.get("name", ""))
+        comparable = name.casefold().replace("_", "-")
+        if extensions and not any(comparable.endswith(ext) for ext in extensions):
+            continue
+        if any(pattern in comparable for pattern in patterns):
+            matches.append(item)
+    if not matches:
+        available = ", ".join(str(item.get("name", "")) for item in files[:20])
+        raise FileNotFoundError(
+            "No matching uMOF model file was found in the Figshare release. "
+            f"Patterns: {patterns}. First available files: {available}"
+        )
+    if len(matches) > 1:
+        names = ", ".join(str(item.get("name", "")) for item in matches)
+        raise ValueError(
+            "uMOF Figshare file selection is ambiguous. Add asset.file_name "
+            f"or asset.file_id. Matches: {names}"
+        )
+    return matches[0]
 
 
 def _finalize_model_asset(

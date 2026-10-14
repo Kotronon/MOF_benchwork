@@ -116,6 +116,12 @@ def build_mace_finetune_commands(
             "--train_file", datasets["train"],
             "--valid_file", datasets["valid"],
             "--foundation_model", foundation,
+            "--restart_latest",
+            "--save_all_checkpoints",
+            "--eval_interval", "1",
+            "--multiheads_finetuning", "False",
+            "--batch_size", "1",
+            "--valid_batch_size", "1",
             "--energy_key", "REF_energy",
             "--forces_key", "REF_forces",
             "--E0s", "average",
@@ -125,7 +131,7 @@ def build_mace_finetune_commands(
             "--model_dir", str(model_dir),
             "--checkpoints_dir", str(member_dir / "checkpoints"),
             "--results_dir", str(member_dir / "results"),
-            "--logs_dir", str(member_dir / "logs"),
+            "--log_dir", str(member_dir / "logs"),
         ]
         commands.append(
             {
@@ -145,6 +151,15 @@ def execute_mace_commands(commands: Sequence[dict[str, Any]]) -> list[dict[str, 
     results = []
     for entry in commands:
         current = dict(entry)
+        # Older prepared manifests must resume checkpoints too.
+        current["command"] = list(entry["command"])
+        for flag in ("--restart_latest", "--save_all_checkpoints"):
+            if flag not in current["command"]:
+                current["command"].append(flag)
+        if "--eval_interval" in current["command"]:
+            current["command"][current["command"].index("--eval_interval") + 1] = "1"
+        else:
+            current["command"].extend(["--eval_interval", "1"])
         workdir = Path(current["working_directory"])
         workdir.mkdir(parents=True, exist_ok=True)
         completed = subprocess.run(current["command"], capture_output=True, text=True)

@@ -59,6 +59,9 @@ def _infer_applicability(
             return _assess_mlip_mc_benchmark(config, workflow)
         return _assess_static_potential_benchmark(config)
 
+    if module_id == "B":
+        return _assess_module_b_mixture(config, resolved)
+
     uses_module_a_execution = module_id == "A" or _is_module_c_gcmc_variant_benchmark(config)
     if not uses_module_a_execution:
         return {
@@ -790,6 +793,153 @@ def _is_module_c_gcmc_variant_benchmark(config: dict[str, Any]) -> bool:
         and isinstance(variants, list)
         and len(variants) > 0
     )
+
+
+def _assess_module_b_mixture(config: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
+    """Assess the local Module-B V1 classical mixture capability."""
+    checks: list[dict[str, Any]] = []
+    reasons: list[str] = []
+    material_id = resolved["material"]["material_id"]
+    components = config.get("adsorbates", {}).get("components", [])
+    mixture = config.get("adsorbates", {}).get("mixture")
+    simulation = config.get("simulation", {})
+    forcefield_adsorbates = resolved.get("forcefield", {}).get("adsorbates", {})
+
+    _append_exact_check(
+        checks,
+        "engine",
+        "LAMMPS",
+        simulation.get("engine"),
+        "Module B V1 supports only the classical LAMMPS mixture path.",
+        reasons,
+        hard_failure=True,
+    )
+    _append_exact_check(
+        checks,
+        "method",
+        "GCMC",
+        simulation.get("method"),
+        "Module B V1 supports only GCMC mixture sampling.",
+        reasons,
+        hard_failure=True,
+    )
+    _append_exact_check(
+        checks,
+        "framework",
+        "rigid",
+        simulation.get("framework"),
+        "Flexible mixture adsorption belongs to Module D.",
+        reasons,
+        hard_failure=True,
+    )
+    if len(components) < 2:
+        checks.append(
+            {
+                "name": "mixture_component_count",
+                "status": "failed",
+                "expected": "at least 2",
+                "actual": len(components),
+                "severity": "unsupported",
+            }
+        )
+        reasons.append("Module B requires at least two adsorbate components.")
+    else:
+        checks.append(
+            {
+                "name": "mixture_component_count",
+                "status": "passed",
+                "expected": "at least 2",
+                "actual": len(components),
+            }
+        )
+
+    if not isinstance(mixture, dict):
+        checks.append(
+            {
+                "name": "gas_phase_mixture",
+                "status": "failed",
+                "expected": "mole fractions for every component",
+                "actual": mixture,
+                "severity": "unsupported",
+            }
+        )
+        reasons.append("Module B requires adsorbates.mixture.")
+    else:
+        checks.append(
+            {
+                "name": "gas_phase_mixture",
+                "status": "passed",
+                "expected": sorted(components),
+                "actual": mixture,
+            }
+        )
+
+    missing_adsorbates = sorted(set(components) - set(forcefield_adsorbates))
+    checks.append(
+        {
+            "name": "adsorbate_definitions",
+            "status": "failed" if missing_adsorbates else "passed",
+            "expected": sorted(components),
+            "actual": sorted(forcefield_adsorbates),
+            "missing": missing_adsorbates,
+            **({"severity": "unsupported"} if missing_adsorbates else {}),
+        }
+    )
+    if missing_adsorbates:
+        reasons.append("Missing adsorbate definitions: " + ", ".join(missing_adsorbates))
+
+    geometry = _crafted_geometry(material_id, "CRAFTED-2.0.0/RAC_DBSCAN/CRAFTED_MOF_geometric.csv")
+    if geometry is None:
+        checks.append(
+            {
+                "name": "crafted_geometry",
+                "status": "warning",
+                "expected": "geometry metadata available",
+                "actual": None,
+                "severity": "warning",
+            }
+        )
+    else:
+        _append_minimum_check(
+            checks,
+            name="pore_volume_cm3_g",
+            expected=0.01,
+            actual=geometry.get("pore_volume_cm3_g"),
+            failure_reason=f"{material_id} has no accessible pore volume for a Module B mixture run.",
+            warnings=[],
+        )
+        checks.append(
+            {
+                "name": "crafted_geometry",
+                "status": "passed",
+                "expected": "geometry metadata available",
+                "actual": geometry["source"],
+            }
+        )
+
+    failed = [check for check in checks if check.get("status") == "failed" and check.get("severity") == "unsupported"]
+    if failed:
+        return {
+            "status": "unsupported",
+            "current_module_capability": "module_b_classical_mixture_v1",
+            "can_attempt_simulation": False,
+            "requires_user_confirmation": False,
+            "recommended_module": "B",
+            "checks": checks,
+            "geometry": geometry,
+            "reason": " ".join(reasons) or "The Module B mixture configuration is outside the current V1 capability.",
+        }
+
+    return {
+        "status": "supported",
+        "current_module_capability": "module_b_classical_mixture_v1",
+        "can_attempt_simulation": True,
+        "requires_user_confirmation": False,
+        "recommended_module": "B",
+        "checks": checks,
+        "geometry": geometry,
+        "reason": "The classical rigid-framework CO2/N2 mixture GCMC path is executable for Module B V1.",
+    }
 
 
 def _module_rules(rules: dict[str, Any], module_id: str) -> dict[str, Any]:

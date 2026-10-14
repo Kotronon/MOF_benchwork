@@ -13,7 +13,11 @@ from modules.module_c_mlips.datasets import (
     ensure_golddac_dataset,
     load_golddac_configurations,
 )
-from modules.module_c_mlips.model_assets import ensure_model_asset
+from modules.module_c_mlips.model_assets import (
+    ensure_model_asset,
+    ensure_umof_model_asset,
+    is_umof_specification,
+)
 from modules.module_c_mlips.models import InteractionConfiguration
 from modules.module_c_mlips.potential_backends.base import PotentialBackend
 from modules.module_c_mlips.potential_backends.classical_lammps import (
@@ -221,7 +225,9 @@ def _build_backends(
     for specification in backend_specs:
         if not isinstance(specification, dict):
             raise TypeError("Each potential backend definition must be an object.")
-        backend_type = str(specification.get("type", "")).strip().casefold()
+        backend_type = str(
+            specification.get("type") or specification.get("backend", "")
+        ).strip().casefold().replace("-", "_")
         backend_name = str(specification.get("name", backend_type)).strip()
         if not backend_name:
             raise ValueError("Each potential backend needs a non-empty name.")
@@ -252,7 +258,23 @@ def _build_backends(
                     ),
                 )
             )
-        elif backend_type == "mace_mp":
+        elif backend_type in {"mace_mp", "mace_torch", "umof", "umof_mh", "umof_polar"}:
+            model_name = str(specification.get("name", backend_name)).casefold().replace("-", "_")
+            if (
+                backend_type in {"umof", "umof_mh", "umof_polar"}
+                or model_name in {"umof_mh", "umof_polar"}
+                or is_umof_specification(specification)
+            ):
+                try:
+                    ensure_umof_model_asset(
+                        specification,
+                        download_missing=False,
+                    )
+                except FileNotFoundError as exc:
+                    raise FileNotFoundError(
+                        f"uMOF checkpoint required for backend "
+                        f"{backend_name!r}: {exc}"
+                    ) from exc
             if isinstance(specification.get("asset"), dict):
                 ensure_model_asset(specification, download_missing=False)
             backends.append(

@@ -50,8 +50,17 @@ def render_run0_input(
 
 def gcmc_input_builder(inputs: dict[str, Any]) -> str:
     """Build a short LAMMPS GCMC input script for a technical insertion smoke test."""
-    component = str(inputs.get("component") or next(iter(inputs["molecule_templates"]))).upper()
-    molecule_id = component.lower()
+    mixture = inputs.get("mixture")
+    components = (
+        [str(component).upper() for component in inputs.get("components", [])]
+        if inputs.get("components")
+        else [str(inputs.get("component") or next(iter(inputs["molecule_templates"]))).upper()]
+    )
+    if mixture is not None:
+        return _mixture_gcmc_input_builder(inputs, components, mixture)
+
+    component = components[0]
+    molecule_id = _component_id(component)
     temperature_K = float(inputs["temperature_K"])
     chemical_potential = float(inputs.get("chemical_potential_kcal_mol", 0.0))
     displacement_A = float(inputs.get("displacement_A", 1.0))
@@ -100,7 +109,7 @@ def gcmc_input_builder(inputs: dict[str, Any]) -> str:
     lines = [
         *setup_lines,
         *[
-            f"molecule {component.lower()} {template_path}"
+            f"molecule {_component_id(component)} {template_path}"
             for component, template_path in inputs["molecule_templates"].items()
         ],
         f"include {inputs['forcefield_include']}",
@@ -132,7 +141,121 @@ def gcmc_input_builder(inputs: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _mixture_gcmc_input_builder(
+    inputs: dict[str, Any],
+    components: list[str],
+    mixture: dict[str, float],
+) -> str:
+    """Build a LAMMPS GCMC input with one GCMC fix per gas component."""
+    temperature_K = float(inputs["temperature_K"])
+    chemical_potential = float(inputs.get("chemical_potential_kcal_mol", 0.0))
+    displacement_A = float(inputs.get("displacement_A", 1.0))
+    run_steps = int(inputs.get("run_steps", 10000))
+    gcmc_every_steps = int(inputs.get("gcmc_every_steps", 10))
+    exchange_attempts = int(inputs.get("exchange_attempts", 10))
+    move_attempts = int(inputs.get("move_attempts", 10))
+    seed = int(inputs.get("seed", 12345))
+    extra_bond_per_atom = int(inputs.get("extra_bond_per_atom", 0))
+    extra_special_per_atom = int(inputs.get("extra_special_per_atom", 0))
+    pressure_bar = float(inputs["pressure_bar"])
+    dump_file = inputs.get("dump_file")
+    dump_every_steps = int(inputs.get("dump_every_steps", 1000))
+    restart_file = inputs.get("restart_file")
+    restart_every_steps = int(inputs.get("restart_every_steps", 0) or 0)
+    read_restart_file = inputs.get("read_restart_file")
+    molecule_templates = inputs["molecule_templates"]
+    component_atom_types = inputs["component_adsorbate_atom_types"]
+    component_atom_counts = inputs["component_atoms_per_molecule"]
+    fugacity_coefficients = inputs.get("fugacity_coefficients", {})
+
+    read_data_options = []
+    if extra_bond_per_atom:
+        read_data_options.extend(["extra/bond/per/atom", str(extra_bond_per_atom)])
+    if extra_special_per_atom:
+        read_data_options.extend(["extra/special/per/atom", str(extra_special_per_atom)])
+    read_data = f"read_data {inputs['framework_data']}"
+    if read_data_options:
+        read_data = f"{read_data} {' '.join(read_data_options)}"
+
+    setup_lines = (
+        [f"read_restart {read_restart_file}"]
+        if read_restart_file
+        else ["units real", "atom_style full", "boundary p p p", read_data]
+    )
+    molecule_lines = [
+        f"molecule {_component_id(component)} {molecule_templates[component]}"
+        for component in components
+    ]
+    component_group_lines = [
+        f"group adsorbate_{_component_id(component)} type {_format_type_ids(component_atom_types[component])}"
+        for component in components
+    ]
+    union_groups = " ".join(f"adsorbate_{_component_id(component)}" for component in components)
+    variable_lines = [
+        (
+            f"variable n{_component_id(component)} equal "
+            f"count(adsorbate_{_component_id(component)})/{int(component_atom_counts[component])}"
+        )
+        for component in components
+    ]
+    gcmc_fixes = []
+    for offset, component in enumerate(components):
+        component_id = _component_id(component)
+        partial_pressure_bar = pressure_bar * float(mixture[component])
+        partial_pressure_atm = partial_pressure_bar * 0.986923266716
+        fugacity_coeff = float(fugacity_coefficients.get(component, 1.0))
+        component_seed = seed + offset * 1000003
+        gcmc_fixes.append(
+            f"# {component} mole_fraction {float(mixture[component]):g} partial_pressure_bar {partial_pressure_bar:g}"
+        )
+        gcmc_fixes.append(
+            f"fix gcmc_{component_id} adsorbate_{component_id} gcmc "
+            f"{gcmc_every_steps} {exchange_attempts} {move_attempts} 0 {component_seed} "
+            f"{temperature_K:g} {chemical_potential:g} {displacement_A:g} "
+            f"mol {component_id} group adsorbate_{component_id} full_energy "
+            f"pressure {partial_pressure_atm:g} fugacity_coeff {fugacity_coeff:g} "
+        )
+
+    thermo_component_variables = " ".join(f"v_n{_component_id(component)}" for component in components)
+    run_line = f"run {run_steps} upto" if read_restart_file else f"run {run_steps}"
+    lines = [
+        *setup_lines,
+        *molecule_lines,
+        f"include {inputs['forcefield_include']}",
+        f"group framework type {_format_type_ids(inputs['framework_atom_types'])}",
+        *component_group_lines,
+        f"group adsorbate union {union_groups}",
+        *variable_lines,
+        f"# pressure_bar metadata: {inputs.get('pressure_bar', 'not_set')}",
+        *gcmc_fixes,
+        "thermo 100",
+        (
+            "thermo_style custom step atoms temp pe etotal press "
+            f"{thermo_component_variables}"
+        ),
+        *(
+            [
+                f"dump traj all custom {dump_every_steps} {dump_file} id mol type q x y z",
+                "dump_modify traj sort id",
+            ]
+            if dump_file
+            else []
+        ),
+        *(
+            [f"restart {restart_every_steps} {restart_file}"]
+            if restart_file and restart_every_steps > 0
+            else []
+        ),
+        run_line,
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def _format_type_ids(type_ids: Any) -> str:
     if isinstance(type_ids, str):
         return type_ids
     return " ".join(str(type_id) for type_id in type_ids)
+
+
+def _component_id(component: str) -> str:
+    return str(component).lower().replace("-", "_")

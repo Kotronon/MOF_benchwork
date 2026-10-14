@@ -263,7 +263,7 @@ class ResolversAndRegistryTests(unittest.TestCase):
         self.assertTrue(forcefield["adsorbates"]["PENTANE"].endswith("pentane.def"))
         self.assertEqual(forcefield["adsorbate_sources"]["PENTANE"], "raspa2_example_molecule_forcefield")
 
-    def test_run_confirmation_rejects_not_implemented_module_before_prepare(self) -> None:
+    def test_run_confirmation_accepts_module_b_mixture_v1(self) -> None:
         config = benchmark.normalize_config(
             {
                 "material": {"name": "MOF-5"},
@@ -275,8 +275,9 @@ class ResolversAndRegistryTests(unittest.TestCase):
         )
         run_plan = benchmark.build_run_plan(config)
 
-        with self.assertRaisesRegex(RuntimeError, "only materializes and runs Module A"):
-            benchmark._confirm_supported_capability(run_plan)
+        self.assertEqual(run_plan["module"]["id"], "B")
+        self.assertEqual(run_plan["benchmark"]["applicability"]["status"], "supported")
+        benchmark._confirm_supported_capability(run_plan)
 
     def test_unknown_material_has_clear_error(self) -> None:
         config = benchmark.normalize_config({"material": {"name": "NOT_A_REAL_MOF"}})

@@ -14,16 +14,18 @@ from modules.module_c_mlips.active_learning.dft import (
     build_local_cp2k_command,
     cutoff_converged,
     parse_cp2k_output,
+    prepare_cp2k_scf_retries,
     render_cp2k_input,
     render_slurm_script,
 )
-from modules.module_c_mlips.active_learning.models import ActiveLearningState
+from modules.module_c_mlips.active_learning.models import ActiveLearningSettings, ActiveLearningState
 from modules.module_c_mlips.active_learning.training import (
     build_mace_finetune_commands,
     classify_validation_metrics,
+    execute_mace_commands,
     write_mace_datasets,
 )
-from modules.module_c_mlips.active_learning.workflow import run_active_learning
+from modules.module_c_mlips.active_learning.workflow import _extend_cutoff_test, run_active_learning
 
 
 class ActiveLearningTests(unittest.TestCase):
@@ -38,6 +40,26 @@ class ActiveLearningTests(unittest.TestCase):
 
         self.assertEqual(report["status"], "passed")
         self.assertEqual(report["selected_cutoff_Ry"], 600)
+
+    def test_cp2k_forces_print_section_is_under_force_eval(self) -> None:
+        from ase import Atoms
+
+        atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]],
+                      cell=[10, 10, 10], pbc=True)
+        text = render_cp2k_input(atoms, project="forces_check", settings={})
+        sections = []
+        force_paths = []
+        for line in text.splitlines():
+            fields = line.strip().split()
+            if not fields:
+                continue
+            if fields[0] == "&END":
+                sections.pop()
+            elif fields[0].startswith("&"):
+                sections.append(fields[0][1:])
+                if fields[0] == "&FORCES":
+                    force_paths.append(tuple(sections))
+        self.assertEqual(force_paths, [("FORCE_EVAL", "PRINT", "FORCES")])
 
     def test_cp2k_output_parser_converts_atomic_units(self) -> None:
         content = """ENERGY| Total FORCE_EVAL ( QS ) energy (a.u.): -2.000000
@@ -57,6 +79,155 @@ class ActiveLearningTests(unittest.TestCase):
             parsed["forces_ev_per_A"][0][0],
             0.1 * HARTREE_PER_BOHR_TO_EV_PER_A,
         )
+
+    def test_cp2k_output_parser_reads_modern_force_table(self) -> None:
+        content = """ENERGY| Total FORCE_EVAL ( QS ) energy [hartree] -2.000000
+ FORCES| Atomic forces [hartree/bohr]
+ FORCES|   Atom     x               y               z               |f|
+ FORCES|      1  1.00000000E-01 -2.00000000E-01 3.00000000E-01 3.74165739E-01
+ FORCES|      2 -1.00000000E-01  2.00000000E-01 -3.00000000E-01 3.74165739E-01
+
+ PROGRAM ENDED AT 2026-01-01
+"""
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "cp2k.out"
+            path.write_text(content, encoding="utf-8")
+            parsed = parse_cp2k_output(path)
+            statuses = CP2KLabeler({}).status([
+                {"candidate_id": "modern", "output_path": str(path)}
+            ])
+        self.assertEqual(statuses[0]["status"], "completed")
+        self.assertEqual(len(parsed["forces_ev_per_A"]), 2)
+        for actual, expected in zip(parsed["forces_ev_per_A"][0], [0.1, -0.2, 0.3]):
+            self.assertAlmostEqual(actual, expected * HARTREE_PER_BOHR_TO_EV_PER_A)
+
+    def test_resume_extends_failed_cutoff_test_without_replacing_outputs(self) -> None:
+        from ase import Atoms
+        from ase.io import write
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plan, state_path = self._prepared_models_state(
+                root, stable_rounds=0, iteration=0, candidate_count=50,
+            )
+            active_root = state_path.parent
+            structure = root / "candidate.extxyz"
+            write(structure, Atoms("C", positions=[[0, 0, 0]], cell=[10, 10, 10], pbc=True))
+            original = {"cutoff_test_Ry": [400, 600], "relative_cutoff_Ry": 60}
+            jobs = CP2KLabeler(original).prepare_cutoff_test(
+                {"candidate_id": "candidate", "structure_path": str(structure)},
+                active_root / "cutoff_test",
+            )
+            snapshots = {}
+            for job in jobs:
+                output = Path(job["output_path"])
+                output.write_text("existing output", encoding="utf-8")
+                snapshots[output] = output.read_bytes()
+                input_path = Path(job["input_path"])
+                snapshots[input_path] = input_path.read_bytes()
+            state = ActiveLearningState.load(state_path)
+            state.status = "cutoff_not_converged"
+            state.failure_reason = "failed gate"
+            state.save(state_path)
+            configured = {**original, "cutoff_test_Ry": [400, 600, 800, 1000]}
+            plan["benchmark"]["potential_benchmark"]["active_learning"]["cp2k"] = configured
+            with patch(
+                "modules.module_c_mlips.active_learning.workflow._advance_cutoff_test",
+                return_value=True,
+            ):
+                run_active_learning(plan, resume=True)
+            resumed = ActiveLearningState.load(state_path)
+            self.assertEqual(resumed.status, "awaiting_cutoff_test")
+            self.assertIsNone(resumed.failure_reason)
+            self.assertEqual(resumed.training_ids, state.training_ids)
+            self.assertEqual(resumed.test_ids, state.test_ids)
+            self.assertEqual(resumed.history[-1]["added_cutoffs_Ry"], [800, 1000])
+            expanded = json.loads((active_root / "cutoff_test/cp2k_jobs.json").read_text())["jobs"]
+            self.assertEqual([job["cutoff_Ry"] for job in expanded], [400, 600, 800, 1000])
+            for path, content in snapshots.items():
+                self.assertEqual(path.read_bytes(), content)
+            settings = ActiveLearningSettings(cp2k=configured)
+            self.assertFalse(_extend_cutoff_test(settings, resumed, active_root))
+            changed = ActiveLearningSettings(cp2k={**configured, "cutoff_test_Ry": [400, 600, 1200], "relative_cutoff_Ry": 80})
+            with self.assertRaisesRegex(ValueError, "unchanged CP2K"):
+                _extend_cutoff_test(changed, resumed, active_root)
+
+    def test_scf_retry_archives_failures_and_preserves_completed_jobs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            jobs = []
+            for name in ("failed", "completed", "running"):
+                workdir = root / name
+                workdir.mkdir()
+                (workdir / "cp2k.inp").write_text("&SCF\n  EPS_SCF 1.000e-06\n  MAX_SCF 200\n&END SCF\n")
+                (workdir / "launcher.stderr.log").write_text("old log")
+                (workdir / f"{name}-RESTART.wfn").write_bytes(b"wavefunction")
+                output = (
+                    "[ABORT] SCF run NOT converged."
+                    if name == "failed" else
+                    "ENERGY| Total FORCE_EVAL ( QS ) energy [hartree] -2.0\n"
+                    " FORCES| Atomic forces [hartree/bohr]\n"
+                    " FORCES| 1 0.1 0.2 0.3 0.4\n\n PROGRAM ENDED AT today\n"
+                )
+                if name == "running":
+                    output = "SCF iteration 61 still in progress\n"
+                (workdir / "cp2k.out").write_text(output)
+                jobs.append({"candidate_id": name, "job_directory": str(workdir),
+                             "input_path": str(workdir / "cp2k.inp"),
+                             "output_path": str(workdir / "cp2k.out"),
+                             "status": name, "returncode": 1 if name == "failed" else 0})
+            manifest = root / "cp2k_jobs.json"
+            manifest.write_text(json.dumps({"jobs": jobs}))
+            successful = {path: path.read_bytes() for name in ("completed", "running")
+                          for path in (root / name).iterdir()}
+            retried = prepare_cp2k_scf_retries(manifest, max_scf=1000)
+            self.assertEqual(retried, ["failed"])
+            failed = root / "failed"
+            self.assertFalse((failed / "cp2k.out").exists())
+            self.assertEqual((failed / "scf_retry_01/cp2k.out").read_text(), "[ABORT] SCF run NOT converged.")
+            self.assertEqual((failed / "scf_retry_01/failed-RESTART.wfn").read_bytes(), b"wavefunction")
+            self.assertEqual((failed / "failed-RESTART.wfn").read_bytes(), b"wavefunction")
+            self.assertIn("MAX_SCF 1000", (failed / "cp2k.inp").read_text())
+            self.assertIn("EPS_SCF 1.000e-06", (failed / "cp2k.inp").read_text())
+            self.assertIn("SCF_GUESS RESTART", (failed / "cp2k.inp").read_text())
+            repaired = json.loads(manifest.read_text())["jobs"][0]
+            self.assertEqual(repaired["status"], "prepared")
+            self.assertNotIn("returncode", repaired)
+            for path, content in successful.items():
+                self.assertEqual(path.read_bytes(), content)
+            self.assertEqual(prepare_cp2k_scf_retries(manifest, max_scf=1000), [])
+
+    def test_scf_retry_rejects_other_failures_before_modifying_jobs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            jobs = []
+            for index, content in enumerate(("[ABORT] SCF run NOT converged.", "[ABORT] out of memory")):
+                workdir = root / str(index)
+                workdir.mkdir()
+                (workdir / "cp2k.out").write_text(content)
+                (workdir / "cp2k.inp").write_text("MAX_SCF 200\n")
+                jobs.append({"candidate_id": str(index), "job_directory": str(workdir),
+                             "input_path": str(workdir / "cp2k.inp"), "output_path": str(workdir / "cp2k.out")})
+            manifest = root / "cp2k_jobs.json"
+            manifest.write_text(json.dumps({"jobs": jobs}))
+            with self.assertRaisesRegex(ValueError, "unrelated to SCF"):
+                prepare_cp2k_scf_retries(manifest, max_scf=1000)
+            self.assertTrue((root / "0/cp2k.out").exists())
+            self.assertEqual((root / "0/cp2k.inp").read_text(), "MAX_SCF 200\n")
+
+    def test_parser_rejects_unconverged_scf_even_with_normal_termination(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "cp2k.out"
+            path.write_text("SCF run NOT converged\nPROGRAM ENDED AT today\n")
+            with self.assertRaisesRegex(ValueError, "SCF did not converge"):
+                parse_cp2k_output(path)
+
+    def test_cp2k_input_uses_configured_scf_step_limit(self) -> None:
+        text = render_cp2k_input(_MinimalAtoms(), project="scf", settings={"max_scf": 1000})
+        self.assertIn("MAX_SCF 1000", text)
+        self.assertIn("EPS_SCF 1.000e-06", text)
+        with self.assertRaisesRegex(ValueError, "max_scf must be positive"):
+            render_cp2k_input(_MinimalAtoms(), project="scf", settings={"max_scf": 0})
 
     def test_slurm_script_records_reproducible_resources(self) -> None:
         script = render_slurm_script(
@@ -183,6 +354,40 @@ class ActiveLearningTests(unittest.TestCase):
         valid_index = command.index("--valid_file")
         self.assertEqual(command[valid_index + 1], "valid.extxyz")
         self.assertNotIn("test.extxyz", command)
+        self.assertIn("--restart_latest", command)
+        self.assertIn("--save_all_checkpoints", command)
+        self.assertEqual(command[command.index("--eval_interval") + 1], "1")
+        self.assertIn("--log_dir", command)
+        self.assertNotIn("--logs_dir", command)
+        mode_index = command.index("--multiheads_finetuning")
+        self.assertEqual(command[mode_index + 1], "False")
+        self.assertEqual(command[command.index("--E0s") + 1], "average")
+        self.assertEqual(command[command.index("--batch_size") + 1], "1")
+        self.assertEqual(command[command.index("--valid_batch_size") + 1], "1")
+
+    def test_training_resumes_legacy_commands_without_mutating_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            models = root / "models"
+            models.mkdir()
+            (models / "trained.model").write_text("model")
+            for command in (["mace_run_train"], ["mace_run_train", "--restart_latest",
+                                                     "--save_all_checkpoints", "--eval_interval", "10"]):
+                entry = {"command": command, "working_directory": str(root),
+                         "model_directory": str(models)}
+                original = list(command)
+                with patch(
+                    "modules.module_c_mlips.active_learning.training.subprocess.run",
+                    return_value=subprocess.CompletedProcess([], 0, "finished", ""),
+                ) as run:
+                    result = execute_mace_commands([entry])
+                executed = run.call_args.args[0]
+                self.assertEqual(executed.count("--restart_latest"), 1)
+                self.assertEqual(executed.count("--save_all_checkpoints"), 1)
+                self.assertEqual(executed.count("--eval_interval"), 1)
+                self.assertEqual(executed[executed.index("--eval_interval") + 1], "1")
+                self.assertEqual(entry["command"], original)
+                self.assertEqual(result[0]["status"], "completed")
 
     def test_validation_thresholds_have_pass_warning_and_failure(self) -> None:
         settings = _ThresholdSettings()

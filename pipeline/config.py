@@ -70,7 +70,10 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     if not components:
         components = ["CO2"]
     adsorbates["components"] = [str(component).upper() for component in components]
-    adsorbates.setdefault("mixture", None)
+    adsorbates["mixture"] = _normalize_mixture(
+        adsorbates.get("mixture"),
+        adsorbates["components"],
+    )
 
     conditions = config.setdefault("conditions", {})
     if not isinstance(conditions, dict):
@@ -225,6 +228,47 @@ def _normalize_forcefield(value: Any) -> dict[str, str]:
             "cross_interactions": str(value.get("cross_interactions", "auto")),
         }
     raise TypeError("'simulation.forcefield' must be a string or object.")
+
+
+def _normalize_mixture(value: Any, components: list[str]) -> dict[str, float] | None:
+    """Normalize and validate gas-phase mole fractions for mixture runs."""
+    if value is None:
+        if len(components) > 1:
+            raise ValueError("'adsorbates.mixture' is required when multiple components are configured.")
+        return None
+    if not isinstance(value, dict):
+        raise TypeError("'adsorbates.mixture' must be an object mapping component names to mole fractions.")
+
+    component_set = set(components)
+    mixture = {str(component).upper(): fraction for component, fraction in value.items()}
+    mixture_set = set(mixture)
+    missing = sorted(component_set - mixture_set)
+    extra = sorted(mixture_set - component_set)
+    if missing or extra:
+        details = []
+        if missing:
+            details.append(f"missing components: {', '.join(missing)}")
+        if extra:
+            details.append(f"unknown components: {', '.join(extra)}")
+        raise ValueError("'adsorbates.mixture' must match adsorbates.components exactly (" + "; ".join(details) + ").")
+
+    normalized: dict[str, float] = {}
+    for component, fraction in mixture.items():
+        if isinstance(fraction, bool) or not isinstance(fraction, (int, float)):
+            raise ValueError(f"'adsorbates.mixture.{component}' must be a numeric mole fraction.")
+        if fraction <= 0.0:
+            raise ValueError(f"'adsorbates.mixture.{component}' must be positive.")
+        normalized[component] = float(fraction)
+
+    total = sum(normalized.values())
+    if abs(total - 1.0) > 1.0e-9:
+        raise ValueError("'adsorbates.mixture' mole fractions must sum to 1.0.")
+    if len(components) == 1:
+        only_component = components[0]
+        if set(normalized) != {only_component}:
+            raise ValueError("'adsorbates.mixture' must match the single configured component.")
+        return None
+    return normalized
 
 
 def _default_method(config: dict[str, Any]) -> str:

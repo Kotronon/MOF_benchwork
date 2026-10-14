@@ -94,6 +94,17 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
         if atom_type.source == "adsorbate" and atom_type.mass is not None
     }
     atom_type_ids = {atom_type.label: atom_type.type_id for atom_type in forcefield.atom_types}
+    component_adsorbate_atom_type_ids = {
+        component: [
+            atom_type_ids[atom_type]
+            for atom_type in unique(atom.atom_type for atom in molecule.atoms)
+        ]
+        for component, molecule in molecules.items()
+    }
+    component_atoms_per_molecule = {
+        component: len(molecule.atoms)
+        for component, molecule in molecules.items()
+    }
     atom_charges = {
         atom_type.label: atom_type.charge
         for atom_type in forcefield.atom_types
@@ -154,6 +165,8 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
                 forcefield_path=forcefield_path,
                 framework_atom_type_ids=framework_atom_type_ids,
                 adsorbate_atom_type_ids=adsorbate_atom_type_ids,
+                component_adsorbate_atom_type_ids=component_adsorbate_atom_type_ids,
+                component_atoms_per_molecule=component_atoms_per_molecule,
                 component=component,
                 pressure_bar=prepare_plan["parameters"]["pressures_bar"][0],
                 extra_special_per_atom=extra_special_per_atom,
@@ -165,12 +178,25 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
 
     for input_script in prepare_plan["planned_files"]["input_scripts"]:
         pressure_bar = input_script["pressure_bar"]
-        fugacity_coeff = fugacity_coeff_coolprop(
-            component=component,
-            temperature_K=prepare_plan["parameters"]["temperature_K"],
-            pressure_bar=pressure_bar,
-            backend="PR",
-        )
+        if prepare_plan["parameters"].get("mixture"):
+            fugacity_coefficients = {
+                mixture_component: fugacity_coeff_coolprop(
+                    component=mixture_component,
+                    temperature_K=prepare_plan["parameters"]["temperature_K"],
+                    pressure_bar=pressure_bar * mole_fraction,
+                    backend="PR",
+                )
+                for mixture_component, mole_fraction in prepare_plan["parameters"]["mixture"].items()
+            }
+            fugacity_coeff = 1.0
+        else:
+            fugacity_coefficients = None
+            fugacity_coeff = fugacity_coeff_coolprop(
+                component=component,
+                temperature_K=prepare_plan["parameters"]["temperature_K"],
+                pressure_bar=pressure_bar,
+                backend="PR",
+            )
         gcmc_input_path = Path(input_script["path"])
         gcmc_input_path.parent.mkdir(parents=True, exist_ok=True)
         builder_inputs = _gcmc_builder_inputs(
@@ -180,11 +206,14 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
             forcefield_path=forcefield_path,
             framework_atom_type_ids=framework_atom_type_ids,
             adsorbate_atom_type_ids=adsorbate_atom_type_ids,
+            component_adsorbate_atom_type_ids=component_adsorbate_atom_type_ids,
+            component_atoms_per_molecule=component_atoms_per_molecule,
             component=component,
             pressure_bar=pressure_bar,
             extra_special_per_atom=extra_special_per_atom,
             seed=input_script["seed"],
             fugacity_coeff=fugacity_coeff,
+            fugacity_coefficients=fugacity_coefficients,
             dump_file=input_script.get("dump"),
             dump_every_steps=prepare_plan["parameters"].get("dump_every_steps", 1000),
             restart_file=input_script.get("restart"),
@@ -205,6 +234,8 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
             "framework_cell_lengths_A": list(framework_structure.cell_lengths),
             "framework_cell_angles_deg": list(framework_structure.cell_angles),
             "adsorbate_atoms_per_molecule": len(molecules[component].atoms),
+            "component_atoms_per_molecule": component_atoms_per_molecule,
+            "mixture": prepare_plan["parameters"].get("mixture"),
         },
         "evaluation": prepare_plan.get("evaluation", {}),
         "applicability": prepare_plan.get("applicability", {}),
@@ -244,11 +275,14 @@ def _gcmc_builder_inputs(
     forcefield_path: Path,
     framework_atom_type_ids: list[int],
     adsorbate_atom_type_ids: list[int],
+    component_adsorbate_atom_type_ids: dict[str, list[int]],
+    component_atoms_per_molecule: dict[str, int],
     component: str,
     pressure_bar: float,
     extra_special_per_atom: int,
     seed: int,
     fugacity_coeff: float = 1.0,
+    fugacity_coefficients: dict[str, float] | None = None,
     dump_file: str | None = None,
     dump_every_steps: int = 1000,
     restart_file: str | None = None,
@@ -261,6 +295,10 @@ def _gcmc_builder_inputs(
         "forcefield_include": str(forcefield_path),
         "framework_atom_types": framework_atom_type_ids,
         "adsorbate_atom_types": adsorbate_atom_type_ids,
+        "component_adsorbate_atom_types": component_adsorbate_atom_type_ids,
+        "component_atoms_per_molecule": component_atoms_per_molecule,
+        "components": prepare_plan["parameters"]["components"],
+        "mixture": prepare_plan["parameters"].get("mixture"),
         "component": component,
         "temperature_K": prepare_plan["parameters"]["temperature_K"],
         "pressure_bar": pressure_bar,
@@ -274,6 +312,7 @@ def _gcmc_builder_inputs(
         "extra_bond_per_atom": extra_special_per_atom,
         "extra_special_per_atom": extra_special_per_atom,
         "fugacity_coeff": fugacity_coeff,
+        "fugacity_coefficients": fugacity_coefficients or {},
         "dump_file": dump_file,
         "dump_every_steps": dump_every_steps,
         "restart_file": restart_file,

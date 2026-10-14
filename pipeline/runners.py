@@ -36,6 +36,8 @@ def run_benchmark(materialized_plan: dict[str, Any]) -> dict[str, Any]:
         framework_atoms=_framework_atom_count(materialized_plan),
         adsorbate_atoms_per_molecule=_adsorbate_atom_count(materialized_plan),
         discard_fraction=_discard_fraction(materialized_plan),
+        component_atom_counts=_component_atom_counts(materialized_plan),
+        mixture=_mixture(materialized_plan),
     )
 
     return {
@@ -60,6 +62,8 @@ def run_isotherm(materialized_plan: dict[str, Any], jobs: int = 1) -> dict[str, 
     discard_fraction = _discard_fraction(materialized_plan)
     framework_atoms = _framework_atom_count(materialized_plan)
     adsorbate_atoms_per_molecule = _adsorbate_atom_count(materialized_plan)
+    component_atom_counts = _component_atom_counts(materialized_plan)
+    mixture = _mixture(materialized_plan)
     resume = bool(materialized_plan.get("resume", False))
     expected_steps = int(materialized_plan.get("parameters", {}).get("run_steps", 0) or 0)
     indexed_runs = list(enumerate(runs, start=1))
@@ -77,6 +81,8 @@ def run_isotherm(materialized_plan: dict[str, Any], jobs: int = 1) -> dict[str, 
                 framework_atoms,
                 adsorbate_atoms_per_molecule,
                 expected_steps,
+                component_atom_counts=component_atom_counts,
+                mixture=mixture,
             )
         if existing is None:
             run_to_submit = dict(run)
@@ -105,6 +111,8 @@ def run_isotherm(materialized_plan: dict[str, Any], jobs: int = 1) -> dict[str, 
                 discard_fraction,
                 framework_atoms,
                 adsorbate_atoms_per_molecule,
+                component_atom_counts,
+                mixture,
             )
     elif pending_runs:
         print(f"Running {len(pending_runs)} of {total_runs} pressure points with {jobs} parallel jobs", flush=True)
@@ -118,6 +126,8 @@ def run_isotherm(materialized_plan: dict[str, Any], jobs: int = 1) -> dict[str, 
                     discard_fraction,
                     framework_atoms,
                     adsorbate_atoms_per_molecule,
+                    component_atom_counts,
+                    mixture,
                 ): index
                 for index, run in pending_runs
             }
@@ -145,6 +155,14 @@ def run_isotherm(materialized_plan: dict[str, Any], jobs: int = 1) -> dict[str, 
     convergence_csv = Path(materialized_plan["working_directory"]) / "convergence_report.csv"
     save_benchmark_data(convergence_json, convergence_report)
     _write_convergence_csv(convergence_csv, aggregated_results)
+    mixture_csv = _write_mixture_results_csv(
+        Path(materialized_plan["working_directory"]) / "mixture_results.csv",
+        aggregated_results,
+    )
+    selectivity_csv = _write_selectivity_surface_csv(
+        Path(materialized_plan["working_directory"]) / "selectivity_surface.csv",
+        aggregated_results,
+    )
 
     evaluation = evaluate_isotherm(output_path, evaluation_config=materialized_plan.get("evaluation"))
 
@@ -153,6 +171,8 @@ def run_isotherm(materialized_plan: dict[str, Any], jobs: int = 1) -> dict[str, 
         "summary_file": str(output_path),
         "convergence_report": str(convergence_json),
         "convergence_csv": str(convergence_csv),
+        "mixture_results_csv": str(mixture_csv) if mixture_csv else None,
+        "selectivity_surface_csv": str(selectivity_csv) if selectivity_csv else None,
         "evaluation": evaluation,
     }
 
@@ -164,6 +184,8 @@ def _run_pressure_point(
     discard_fraction: float,
     framework_atoms: int,
     adsorbate_atoms_per_molecule: int,
+    component_atom_counts: dict[str, int] | None = None,
+    mixture: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     input_script = run["path"]
     pressure_bar = run["pressure_bar"]
@@ -197,6 +219,8 @@ def _run_pressure_point(
         framework_atoms=framework_atoms,
         adsorbate_atoms_per_molecule=adsorbate_atoms_per_molecule,
         discard_fraction=discard_fraction,
+        component_atom_counts=component_atom_counts,
+        mixture=mixture,
     )
 
     print(f"[{index}/{total_runs}] Finished {pressure_bar} bar", flush=True)
@@ -223,6 +247,10 @@ def _write_resume_input(run: dict[str, Any], restart_file: Path) -> str:
                 "forcefield_include": run["forcefield_include"],
                 "framework_atom_types": run["framework_atom_types"],
                 "adsorbate_atom_types": run["adsorbate_atom_types"],
+                "component_adsorbate_atom_types": run.get("component_adsorbate_atom_types", {}),
+                "component_atoms_per_molecule": run.get("component_atoms_per_molecule", {}),
+                "components": run.get("components", [run["component"]]),
+                "mixture": run.get("mixture"),
                 "component": run["component"],
                 "temperature_K": run["temperature_K"],
                 "pressure_bar": run["pressure_bar"],
@@ -236,6 +264,7 @@ def _write_resume_input(run: dict[str, Any], restart_file: Path) -> str:
                 "extra_bond_per_atom": run.get("extra_bond_per_atom", 0),
                 "extra_special_per_atom": run.get("extra_special_per_atom", 0),
                 "fugacity_coeff": run.get("fugacity_coeff", 1.0),
+                "fugacity_coefficients": run.get("fugacity_coefficients", {}),
                 "dump_file": run.get("dump"),
                 "dump_every_steps": run.get("dump_every_steps", 1000),
                 "restart_file": run.get("restart"),
@@ -256,6 +285,8 @@ def _existing_pressure_point_result(
     framework_atoms: int,
     adsorbate_atoms_per_molecule: int,
     expected_steps: int,
+    component_atom_counts: dict[str, int] | None = None,
+    mixture: dict[str, float] | None = None,
 ) -> dict[str, Any] | None:
     input_script = run["path"]
     pressure_bar = run["pressure_bar"]
@@ -291,6 +322,8 @@ def _existing_pressure_point_result(
             framework_atoms=framework_atoms,
             adsorbate_atoms_per_molecule=adsorbate_atoms_per_molecule,
             discard_fraction=discard_fraction,
+            component_atom_counts=component_atom_counts,
+            mixture=mixture,
         )
         print(f"[{index}/{total_runs}] Parsed completed {pressure_bar} bar log", flush=True)
         return _pressure_point_result(
@@ -431,6 +464,7 @@ def _aggregate_replicates(
             and relative_ci95 <= relative_target
         )
         sample_summary = replicates[0]["summary"]
+        component_summary = _aggregate_component_summaries(replicates)
         aggregated.append(
             {
                 "pressure_bar": pressure_bar,
@@ -453,6 +487,7 @@ def _aggregate_replicates(
                     "ci95_lower_adsorbates": average - ci95_half_width if ci95_half_width is not None else None,
                     "ci95_upper_adsorbates": average + ci95_half_width if ci95_half_width is not None else None,
                     "relative_ci95_half_width": relative_ci95,
+                    **component_summary,
                 },
             }
         )
@@ -515,6 +550,74 @@ def _write_convergence_csv(path: Path, results: list[dict[str, Any]]) -> None:
             )
 
 
+def _write_mixture_results_csv(path: Path, results: list[dict[str, Any]]) -> Path | None:
+    if not any("components" in result.get("summary", {}) for result in results):
+        return None
+    component_names = sorted({
+        component
+        for result in results
+        for component in result.get("summary", {}).get("components", {})
+    })
+    fieldnames = ["pressure_bar", "replicate_count", "seeds"]
+    for component in component_names:
+        fieldnames.extend(
+            [
+                f"y_{component}",
+                f"mean_{component}_molecules_per_cell",
+                f"max_{component}_molecules_per_cell",
+                f"standard_error_{component}_molecules",
+            ]
+        )
+    for left in component_names:
+        for right in component_names:
+            if left != right:
+                fieldnames.append(f"selectivity_{left}_{right}")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for result in results:
+            summary = result.get("summary", {})
+            components = summary.get("components", {})
+            row: dict[str, Any] = {
+                "pressure_bar": result["pressure_bar"],
+                "replicate_count": result["replicate_count"],
+                "seeds": ";".join(str(seed) for seed in result["seeds"]),
+            }
+            for component in component_names:
+                component_summary = components.get(component, {})
+                row[f"y_{component}"] = component_summary.get("gas_phase_mole_fraction")
+                row[f"mean_{component}_molecules_per_cell"] = component_summary.get("mean_molecules")
+                row[f"max_{component}_molecules_per_cell"] = component_summary.get("max_molecules")
+                row[f"standard_error_{component}_molecules"] = component_summary.get("standard_error_molecules")
+            for key, selectivity in summary.get("selectivity", {}).items():
+                row[f"selectivity_{key.replace('/', '_')}"] = selectivity.get("value")
+            writer.writerow(row)
+    return path
+
+
+def _write_selectivity_surface_csv(path: Path, results: list[dict[str, Any]]) -> Path | None:
+    if not any("selectivity" in result.get("summary", {}) for result in results):
+        return None
+    fieldnames = ["pressure_bar", "selectivity", "value", "reason"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for result in results:
+            for key, selectivity in result.get("summary", {}).get("selectivity", {}).items():
+                writer.writerow(
+                    {
+                        "pressure_bar": result["pressure_bar"],
+                        "selectivity": key,
+                        "value": selectivity.get("value"),
+                        "reason": selectivity.get("reason", ""),
+                    }
+                )
+    return path
+
+
 def _t_critical_975(degrees_of_freedom: int) -> float:
     """Return the two-sided 95% Student-t critical value without SciPy."""
     table = {
@@ -553,3 +656,92 @@ def _adsorbate_atom_count(materialized_plan: dict[str, Any]) -> int:
     if count <= 0:
         raise ValueError("Materialized plan is missing a positive adsorbate_atoms_per_molecule.")
     return count
+
+
+def _component_atom_counts(materialized_plan: dict[str, Any]) -> dict[str, int] | None:
+    counts = materialized_plan.get("parameters", {}).get("component_atoms_per_molecule")
+    if not counts:
+        return None
+    return {str(component).upper(): int(count) for component, count in counts.items()}
+
+
+def _mixture(materialized_plan: dict[str, Any]) -> dict[str, float] | None:
+    mixture = materialized_plan.get("parameters", {}).get("mixture")
+    if not mixture:
+        return None
+    return {str(component).upper(): float(fraction) for component, fraction in mixture.items()}
+
+
+def _aggregate_component_summaries(replicates: list[dict[str, Any]]) -> dict[str, Any]:
+    if not replicates or "components" not in replicates[0].get("summary", {}):
+        return {}
+
+    component_names = list(replicates[0]["summary"]["components"])
+    components: dict[str, dict[str, Any]] = {}
+    for component in component_names:
+        values = [
+            float(replicate["summary"]["components"][component]["mean_molecules"])
+            for replicate in replicates
+        ]
+        component_sample = replicates[0]["summary"]["components"][component]
+        component_mean = mean(values)
+        components[component] = {
+            **component_sample,
+            "mean_molecules": component_mean,
+            "replicate_mean_molecules": values,
+            "standard_deviation_molecules": stdev(values) if len(values) >= 2 else None,
+            "standard_error_molecules": (
+                stdev(values) / math.sqrt(len(values)) if len(values) >= 2 else None
+            ),
+            "max_molecules": max(
+                float(replicate["summary"]["components"][component].get("max_molecules", 0.0))
+                for replicate in replicates
+            ),
+            "sample_count": sum(
+                int(replicate["summary"]["components"][component].get("sample_count", 0))
+                for replicate in replicates
+            ),
+        }
+
+    mixture = {
+        component: float(summary.get("gas_phase_mole_fraction", 0.0) or 0.0)
+        for component, summary in components.items()
+    }
+    return {
+        "components": components,
+        "selectivity": _selectivity_from_components(components, mixture),
+    }
+
+
+def _selectivity_from_components(
+    components: dict[str, dict[str, Any]],
+    mixture: dict[str, float],
+) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    names = list(components)
+    total_adsorbed = sum(float(component["mean_molecules"]) for component in components.values())
+    for left in names:
+        for right in names:
+            if left == right:
+                continue
+            key = f"{left}/{right}"
+            left_adsorbed = float(components[left]["mean_molecules"])
+            right_adsorbed = float(components[right]["mean_molecules"])
+            left_gas = float(mixture.get(left, 0.0) or 0.0)
+            right_gas = float(mixture.get(right, 0.0) or 0.0)
+            if total_adsorbed <= 0.0 or right_adsorbed <= 0.0 or left_gas <= 0.0 or right_gas <= 0.0:
+                result[key] = {
+                    "value": None,
+                    "reason": "undefined_zero_adsorbed_or_gas_fraction",
+                }
+                continue
+            x_left = left_adsorbed / total_adsorbed
+            x_right = right_adsorbed / total_adsorbed
+            result[key] = {
+                "value": (x_left / x_right) / (left_gas / right_gas),
+                "adsorbed_mole_fraction_left": x_left,
+                "adsorbed_mole_fraction_right": x_right,
+                "gas_mole_fraction_left": left_gas,
+                "gas_mole_fraction_right": right_gas,
+            }
+    return result

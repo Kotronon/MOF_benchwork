@@ -19,7 +19,11 @@ from modules.module_c_mlips.dependencies import (
     ensure_flames_dependencies,
     ensure_mlip_mc_dependencies,
 )
-from modules.module_c_mlips.model_assets import ensure_model_asset
+from modules.module_c_mlips.model_assets import (
+    ensure_model_asset,
+    ensure_umof_model_asset,
+    is_umof_specification,
+)
 from modules.module_c_mlips.potential_backends.calculators import build_ase_calculator
 from pipeline.config import normalize_config, save_benchmark_data
 from pipeline.planning import build_run_plan
@@ -41,7 +45,7 @@ def setup_module_c(
 ) -> dict[str, Any]:
     """Inspect or install configured Module C runtime dependencies."""
     settings = run_plan["benchmark"]["potential_benchmark"]
-    models = _campaign_models(settings)
+    models = _module_c_models_for_setup(settings)
     dependency_status = []
     for model in models:
         backend = str(model.get("backend", model.get("type", "mace-torch")))
@@ -58,9 +62,10 @@ def setup_module_c(
                 }
             )
             continue
+        dependency_backend = "mace-torch" if is_umof_specification(model) else backend
         try:
             status = ensure_mlip_mc_dependencies(
-                backend,
+                dependency_backend,
                 install_missing=install_missing,
             )
         except ImportError as exc:
@@ -78,10 +83,30 @@ def setup_module_c(
             )
             continue
         asset = None
-        if isinstance(model.get("asset"), dict):
-            asset = ensure_model_asset(model, download_missing=install_missing)
+        asset_ready = True
+        asset_error = None
+        try:
+            if is_umof_specification(model):
+                asset = ensure_umof_model_asset(
+                    model,
+                    download_missing=install_missing,
+                )
+            elif isinstance(model.get("asset"), dict):
+                asset = ensure_model_asset(
+                    model,
+                    download_missing=install_missing,
+                )
+        except (FileNotFoundError, ValueError) as exc:
+            asset_ready = False
+            asset_error = str(exc)
         dependency_status.append(
-            {"model": model.get("name", model.get("model")), **status.to_dict(), "asset": asset}
+            {
+                "model": model.get("name", model.get("model")),
+                **status.to_dict(),
+                "ready": bool(status.ready and asset_ready),
+                "asset": asset,
+                "asset_error": asset_error,
+            }
         )
     flames = None
     engines = {
@@ -528,6 +553,34 @@ def _campaign_models(settings: dict[str, Any]) -> list[dict[str, Any]]:
     if not all(isinstance(model, dict) for model in models):
         raise TypeError("Every campaign model must be an object.")
     return models
+
+
+def _module_c_models_for_setup(settings: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return every model spec that Module-C setup must verify."""
+    models = list(_campaign_models(settings))
+    comparison = settings.get("comparison", {})
+    if isinstance(comparison, dict):
+        for key in (
+            "baseline_backends",
+            "umof_backends",
+            "cp2k_finetuned_backends",
+        ):
+            values = comparison.get(key, [])
+            if isinstance(values, list):
+                models.extend(item for item in values if isinstance(item, dict))
+    deduplicated = []
+    seen = set()
+    for model in models:
+        identifier = (
+            str(model.get("name", "")),
+            str(model.get("backend", model.get("type", ""))),
+            str(model.get("model", "")),
+        )
+        if identifier in seen:
+            continue
+        seen.add(identifier)
+        deduplicated.append(model)
+    return deduplicated
 
 
 def _stage_pressures(values: Sequence[float], settings: dict[str, Any]) -> list[float]:

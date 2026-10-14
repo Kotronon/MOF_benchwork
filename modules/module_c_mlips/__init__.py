@@ -11,6 +11,7 @@ from .models import InteractionBond, InteractionConfiguration
 from .runner import run_potential_comparison
 from .mlip_mc_workflow import run_mlip_mc_benchmark
 from .workflow import run_potential_benchmark
+from .strategy_comparison import run_strategy_comparison
 from .adsorption_engines import (
     AdsorptionEngine,
     FLAMESAdsorptionEngine,
@@ -32,6 +33,7 @@ __all__ = [
     "evaluate_interaction",
     "run_potential_comparison",
     "run_potential_benchmark",
+    "run_strategy_comparison",
     "run_mlip_mc_benchmark",
     "AdsorptionEngine",
     "FLAMESAdsorptionEngine",

@@ -7,7 +7,10 @@ import unittest
 from unittest.mock import patch
 from zipfile import ZipFile
 
-from modules.module_c_mlips.model_assets import ensure_model_asset
+from modules.module_c_mlips.model_assets import (
+    ensure_model_asset,
+    ensure_umof_model_asset,
+)
 
 
 class ModelAssetTests(unittest.TestCase):
@@ -102,6 +105,60 @@ class ModelAssetTests(unittest.TestCase):
                             "archive_url": "https://example.invalid/data.zip",
                             "member_basename": "missing.pth",
                         },
+                    }
+                )
+
+    def test_umof_asset_defaults_to_figshare_release(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            target = root / "umof-mh.model"
+            downloads = []
+
+            def fake_download(url: str, output_path: Path) -> None:
+                downloads.append(url)
+                output_path.write_bytes(b"umof-model")
+
+            with patch(
+                "modules.module_c_mlips.model_assets._figshare_files",
+                return_value=[
+                    {
+                        "id": 11,
+                        "name": "uMOF-MH.model",
+                        "download_url": "https://figshare.test/umof-mh.model",
+                    },
+                    {
+                        "id": 12,
+                        "name": "uMOF-POLAR.model",
+                        "download_url": "https://figshare.test/umof-polar.model",
+                    },
+                ],
+            ), patch(
+                "modules.module_c_mlips.model_assets._download",
+                side_effect=fake_download,
+            ):
+                result = ensure_umof_model_asset(
+                    {
+                        "name": "umof_mh",
+                        "model_family": "umof",
+                        "model": str(target),
+                    },
+                    download_missing=True,
+                )
+
+            self.assertEqual(target.read_bytes(), b"umof-model")
+            self.assertEqual(downloads, ["https://figshare.test/umof-mh.model"])
+            self.assertEqual(result["transfer_mode"], "direct_download")
+            self.assertTrue(result["downloaded"])
+
+    def test_umof_download_requires_install_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            target = Path(temporary_directory) / "umof-polar.model"
+            with self.assertRaisesRegex(FileNotFoundError, "--install-missing"):
+                ensure_umof_model_asset(
+                    {
+                        "name": "umof_polar",
+                        "model_family": "umof",
+                        "model": str(target),
                     }
                 )
 

@@ -35,6 +35,7 @@ from modules.module_c_mlips.campaign import (
     run_module_c_campaign,
     setup_module_c,
 )
+from modules.module_c_mlips.strategy_comparison import run_strategy_comparison
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Plan a MOF benchmark run from benchmark.json.")
@@ -89,6 +90,11 @@ def main(argv: list[str] | None = None) -> int:
         "--run-module-c",
         action="store_true",
         help="Run one stage of the extensible Module C campaign.",
+    )
+    parser.add_argument(
+        "--compare-strategies",
+        action="store_true",
+        help="Compare CP2K-local and CP2K-free pretrained Module C strategies.",
     )
     parser.add_argument(
         "--stage",
@@ -201,6 +207,7 @@ def main(argv: list[str] | None = None) -> int:
             args.setup_module_c,
             args.assess_module_c,
             args.run_module_c,
+            args.compare_strategies,
             args.cross_check_engine,
             args.analyze_module_c,
         )
@@ -231,6 +238,13 @@ def main(argv: list[str] | None = None) -> int:
             submit=args.submit,
             train=args.train,
             resume=args.resume,
+        )
+        print(json.dumps(result, indent=2))
+        return 0
+    if args.compare_strategies:
+        result = run_strategy_comparison(
+            run_plan,
+            download_missing=args.install_missing,
         )
         print(json.dumps(result, indent=2))
         return 0

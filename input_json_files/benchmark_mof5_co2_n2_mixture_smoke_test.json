@@ -1,0 +1,77 @@
+{
+  "material": {
+    "name": "MOF-5",
+    "cif_source": "auto",
+    "charge_scheme": "DDEC",
+    "source": "crafted"
+  },
+  "adsorbates": {
+    "components": ["CO2", "N2"],
+    "mixture": {
+      "CO2": 0.15,
+      "N2": 0.85
+    }
+  },
+  "conditions": {
+    "temperature_K": 298.15,
+    "pressures_bar": [1.0]
+  },
+  "benchmark": {
+    "task": "auto",
+    "metrics": ["component_uptake", "selectivity", "runtime"],
+    "reference": {
+      "source": "auto",
+      "preferred_sources": ["crafted", "nist_isodb"],
+      "temperature_tolerance_K": 2.0,
+      "max_nist_candidates": 5
+    },
+    "paper": {
+      "target_protocol": "Technical CO2/N2 mixture GCMC smoke test for Module B."
+    }
+  },
+  "simulation": {
+    "engine": "LAMMPS",
+    "method": "GCMC",
+    "forcefield": {
+      "framework": "UFF",
+      "adsorbate": "auto",
+      "cross_interactions": "auto"
+    },
+    "framework": "rigid",
+    "cell_representation": "conventional",
+    "minimum_image_policy": "error",
+    "units": "real",
+    "atom_style": "full",
+    "pair_style": "lj/cut/coul/long",
+    "cutoff_A": 12.8,
+    "kspace_style": "pppm",
+    "kspace_accuracy": 1e-4,
+    "unit_cells": [1, 1, 1],
+    "seeds": [12345],
+    "cycles": 100,
+    "initialization_cycles": 0
+  },
+  "convergence": {
+    "minimum_replicates": 2,
+    "relative_ci95_target": 0.2
+  },
+  "evaluation": {
+    "simulation_basis": "absolute",
+    "report_excess": false,
+    "pore_volume_cm3_g": "auto",
+    "gas_density_backend": "HEOS",
+    "reference_matching": "by_basis"
+  },
+  "output": {
+    "directory": "outputs/module_B_mixture_selectivity",
+    "run_id": "mof5_co2_n2_smoke",
+    "overwrite": false,
+    "save_logs": true,
+    "save_dumps": false,
+    "dump_every_steps": 1000,
+    "save_restarts": false,
+    "restart_every_steps": 1000,
+    "save_plots": true,
+    "save_csv": true
+  }
+}

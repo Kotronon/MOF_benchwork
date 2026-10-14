@@ -95,6 +95,7 @@ class MaceBackend(PotentialBackend):
         self.calculator = build_ase_calculator(
             {
                 "backend": "mace-torch",
+                "name": self.backend_name,
                 "model": self.model,
                 "device": self.device,
                 "dispersion": self.dispersion,

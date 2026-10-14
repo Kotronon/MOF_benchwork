@@ -10,6 +10,10 @@ from typing import Any
 import numpy as np
 
 from modules.module_c_mlips.dependencies import normalize_mlip_backend
+from modules.module_c_mlips.model_assets import (
+    ensure_umof_model_asset,
+    is_umof_specification,
+)
 
 
 def build_ase_calculator(specification: dict[str, Any]) -> Any:
@@ -98,6 +102,8 @@ def _build_mace_calculator(specification: dict[str, Any]) -> Any:
     dtype = str(specification.get("default_dtype", "float64"))
     if dtype not in {"float32", "float64"}:
         raise ValueError("MACE default_dtype must be 'float32' or 'float64'.")
+    if is_umof_specification(specification):
+        ensure_umof_model_asset(specification, download_missing=False)
     return mace_mp(
         model=specification.get("model", "medium"),
         device=str(specification.get("device", "cpu")),

@@ -1,12 +1,17 @@
-math
-dataclasses
-pathlib
-typing
-numpy
-matplotlib
-pandas
-json
+# Core Python dependencies for planning, conversion, LAMMPS input generation,
+# parsing, and local analysis.
+#
+# Install with:
+#   python -m pip install -r requirements.txt
+#
+# External executables are intentionally not listed here:
+# - LAMMPS must provide the `lmp` command.
+# - CP2K must provide the `cp2k` or `cp2k.psmp` command for active learning.
+# - OVITO is optional for visualization.
+# Module-C MLIP-MC dependencies are pinned separately in requirements-mlip-mc.txt.
 
-ase 
-lammps 
-ovito
+ase
+CoolProp
+matplotlib
+numpy
+pandas
