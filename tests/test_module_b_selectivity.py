@@ -9,7 +9,9 @@ import benchmark
 from modules.module_b_selectivity import (
     build_candidate_pool,
     evaluate_selectivity,
+    initialize_campaign_state_from_isotherm,
     initialize_campaign_state,
+    mixture_results_from_isotherm_summary,
     select_next_candidate,
 )
 from parsers.lammps_log_parser import (
@@ -85,6 +87,18 @@ class ModuleBSelectivityTests(unittest.TestCase):
         self.assertIn("CO2", prepare_plan["planned_files"]["molecule_templates"])
         self.assertIn("N2", prepare_plan["planned_files"]["molecule_templates"])
         json.dumps(prepare_plan)
+
+    def test_module_b_validation_config_selects_module_b(self) -> None:
+        config = benchmark.load_benchmark_data(
+            "input_json_files/benchmark_mof5_co2_n2_mixture_validation.json"
+        )
+        run_plan = benchmark.build_run_plan(config)
+
+        self.assertEqual(run_plan["module"]["id"], "B")
+        self.assertEqual(run_plan["conditions"]["pressures_bar"], [0.1, 1.0, 5.0, 10.0])
+        self.assertEqual(run_plan["simulation"]["seeds"], [12345, 23456, 34567])
+        self.assertEqual(run_plan["simulation"]["cycles"], 20000)
+        self.assertEqual(run_plan["simulation"]["initialization_cycles"], 5000)
 
     def test_mixture_gcmc_input_builder_writes_two_component_fixes(self) -> None:
         script = gcmc_input_builder(
@@ -169,6 +183,95 @@ Loop time of 0.1 on 1 procs
             self.assertEqual(len(build_candidate_pool([0.1, 1.0, 10.0], [0.05, 0.5, 0.85])), 9)
             self.assertIsNotNone(next_candidate)
             json.dumps(state)
+
+    def test_isotherm_summary_seeds_completed_active_learning_candidates(self) -> None:
+        summary = {
+            "results": [
+                {
+                    "pressure_bar": 1.0,
+                    "replicate_count": 3,
+                    "seeds": [12345, 23456, 34567],
+                    "converged": False,
+                    "summary": {
+                        "components": {
+                            "CO2": {
+                                "gas_phase_mole_fraction": 0.15,
+                                "mean_molecules": 2.0,
+                                "standard_error_molecules": 0.2,
+                            },
+                            "N2": {
+                                "gas_phase_mole_fraction": 0.85,
+                                "mean_molecules": 1.0,
+                                "standard_error_molecules": 0.1,
+                            },
+                        },
+                        "selectivity": {
+                            "CO2/N2": {"value": 11.3},
+                        },
+                    },
+                }
+            ]
+        }
+
+        completed = mixture_results_from_isotherm_summary(summary)
+
+        self.assertEqual(completed[0]["candidate_id"], "p1_yco2_0p15")
+        self.assertEqual(completed[0]["status"], "completed")
+        self.assertEqual(completed[0]["selectivity_CO2_N2"], 11.3)
+
+    def test_campaign_state_import_marks_existing_isotherm_points_completed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            summary_path = root / "isotherm_summary.json"
+            state_path = root / "module_b_campaign_state.json"
+            summary_path.write_text(
+                json.dumps(
+                    {
+                        "results": [
+                            {
+                                "pressure_bar": 1.0,
+                                "replicate_count": 3,
+                                "seeds": [12345, 23456, 34567],
+                                "converged": True,
+                                "summary": {
+                                    "components": {
+                                        "CO2": {
+                                            "gas_phase_mole_fraction": 0.15,
+                                            "mean_molecules": 2.0,
+                                        },
+                                        "N2": {
+                                            "gas_phase_mole_fraction": 0.85,
+                                            "mean_molecules": 1.0,
+                                        },
+                                    },
+                                    "selectivity": {
+                                        "CO2/N2": {"value": 11.3},
+                                    },
+                                },
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            state = initialize_campaign_state_from_isotherm(
+                summary_path,
+                state_path,
+                pressures_bar=[0.1, 1.0, 5.0],
+                co2_mole_fractions=[0.15, 0.5],
+            )
+            next_candidate = select_next_candidate(state)
+
+            completed = [
+                candidate
+                for candidate in state["candidates"]
+                if candidate["candidate_id"] == "p1_yco2_0p15"
+            ][0]
+            self.assertEqual(completed["status"], "completed")
+            self.assertNotEqual(next_candidate["candidate_id"], "p1_yco2_0p15")
+            self.assertEqual(state["source_isotherm_summary"], str(summary_path))
+            json.loads(state_path.read_text(encoding="utf-8"))
 
     def test_mixture_result_csv_outputs_component_and_selectivity_columns(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

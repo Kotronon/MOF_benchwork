@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 from pipeline.config import (
     DEFAULT_PRESSURES_BAR,
@@ -21,6 +22,10 @@ from pipeline.registry_generation import write_generated_registries
 from pipeline.runners import run_benchmark, run_isotherm
 from pipeline.variants import build_variant_plans, run_variant_benchmark
 from modules.module_c_mlips.workflow import run_potential_benchmark
+from modules.module_b_selectivity import (
+    initialize_campaign_state,
+    initialize_campaign_state_from_isotherm,
+)
 from modules.module_c_mlips.dependencies import (
     ensure_mlip_mc_dependencies,
     ensure_torch_dftd,
@@ -90,6 +95,11 @@ def main(argv: list[str] | None = None) -> int:
         "--run-module-c",
         action="store_true",
         help="Run one stage of the extensible Module C campaign.",
+    )
+    parser.add_argument(
+        "--init-module-b-campaign",
+        action="store_true",
+        help="Create a Module B active-learning campaign state from an existing mixture run.",
     )
     parser.add_argument(
         "--compare-strategies",
@@ -202,6 +212,10 @@ def main(argv: list[str] | None = None) -> int:
     if not args.skip_registry_update:
         write_generated_registries(args.registry_output_dir)
     run_plan = build_run_plan(config)
+    if args.init_module_b_campaign:
+        result = _initialize_module_b_campaign(run_plan)
+        print(json.dumps(result, indent=2))
+        return 0
     if any(
         (
             args.setup_module_c,
@@ -453,6 +467,38 @@ def _require_module_c_campaign(run_plan: dict) -> None:
             "This command requires "
             "benchmark.potential_benchmark.workflow='campaign'."
         )
+
+
+def _initialize_module_b_campaign(run_plan: dict) -> dict:
+    if run_plan.get("module", {}).get("id") != "B":
+        raise ValueError("--init-module-b-campaign requires a Module B mixture configuration.")
+    prepare_plan = prepare_benchmark(run_plan)
+    working_directory = Path(prepare_plan["working_directory"])
+    output_path = working_directory / "module_b_campaign_state.json"
+    summary_path = working_directory / "isotherm_summary.json"
+    pressures = [0.1, 1.0, 5.0, 10.0, 20.0, 35.0]
+    fractions = [0.05, 0.15, 0.5, 0.85]
+    if summary_path.is_file():
+        state = initialize_campaign_state_from_isotherm(
+            summary_path,
+            output_path,
+            pressures_bar=pressures,
+            co2_mole_fractions=fractions,
+        )
+    else:
+        state = initialize_campaign_state(
+            output_path,
+            pressures_bar=pressures,
+            co2_mole_fractions=fractions,
+        )
+    return {
+        "status": "initialized",
+        "output_path": str(output_path),
+        "source_isotherm_summary": str(summary_path) if summary_path.is_file() else None,
+        "candidate_count": len(state["candidates"]),
+        "completed_count": len(state["results"]),
+        "initial_candidate_ids": state["initial_candidate_ids"],
+    }
 
 
 def _configured_mlip_mc_backend(run_plan: dict) -> str:

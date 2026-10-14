@@ -147,21 +147,93 @@ def initialize_campaign_state(
     *,
     pressures_bar: list[float] | None = None,
     co2_mole_fractions: list[float] | None = None,
+    completed_results: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Create and write a JSON-serializable Module-B active-learning state."""
     candidates = build_candidate_pool(pressures_bar, co2_mole_fractions)
+    results = completed_results or []
+    completed_ids = {
+        result.get("candidate_id")
+        for result in results
+        if result.get("candidate_id")
+    }
+    for candidate in candidates:
+        if candidate["candidate_id"] in completed_ids:
+            candidate["status"] = "completed"
     state = {
         "status": "initialized",
         "strategy": "deterministic_maximin_until_surrogate_available",
         "surrogate_model": "pending_optional_scikit_learn_gaussian_process",
         "candidates": candidates,
         "initial_candidate_ids": initial_candidate_ids(candidates),
-        "results": [],
+        "results": results,
     }
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     return state
+
+
+def initialize_campaign_state_from_isotherm(
+    isotherm_summary_path: str | Path,
+    output_path: str | Path,
+    *,
+    pressures_bar: list[float] | None = None,
+    co2_mole_fractions: list[float] | None = None,
+) -> dict[str, Any]:
+    """Seed a Module-B active-learning state from an existing mixture run."""
+    summary_path = Path(isotherm_summary_path)
+    data = json.loads(summary_path.read_text(encoding="utf-8"))
+    completed_results = mixture_results_from_isotherm_summary(data)
+    state = initialize_campaign_state(
+        output_path,
+        pressures_bar=pressures_bar,
+        co2_mole_fractions=co2_mole_fractions,
+        completed_results=completed_results,
+    )
+    state["source_isotherm_summary"] = str(summary_path)
+    Path(output_path).write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    return state
+
+
+def mixture_results_from_isotherm_summary(
+    isotherm_summary: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Extract compact campaign results from a Module-B isotherm summary."""
+    results = []
+    for point in isotherm_summary.get("results", []):
+        summary = point.get("summary", {})
+        components = summary.get("components", {})
+        if not {"CO2", "N2"}.issubset(components):
+            continue
+        co2 = components["CO2"]
+        n2 = components["N2"]
+        y_co2 = co2.get("gas_phase_mole_fraction")
+        y_n2 = n2.get("gas_phase_mole_fraction")
+        pressure = point.get("pressure_bar")
+        if pressure is None or y_co2 is None or y_n2 is None:
+            continue
+        selectivity = summary.get("selectivity", {}).get("CO2/N2", {})
+        results.append(
+            {
+                "candidate_id": f"p{_token(float(pressure))}_yco2_{_token(float(y_co2))}",
+                "pressure_bar": float(pressure),
+                "mixture": {
+                    "CO2": float(y_co2),
+                    "N2": float(y_n2),
+                },
+                "mean_CO2": co2.get("mean_molecules"),
+                "mean_N2": n2.get("mean_molecules"),
+                "standard_error_CO2": co2.get("standard_error_molecules"),
+                "standard_error_N2": n2.get("standard_error_molecules"),
+                "selectivity_CO2_N2": selectivity.get("value"),
+                "replicate_count": point.get("replicate_count"),
+                "seeds": point.get("seeds", []),
+                "converged": point.get("converged"),
+                "status": "completed",
+            }
+        )
+    return results
 
 
 def append_mixture_result_csv(
