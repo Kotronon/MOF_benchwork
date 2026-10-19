@@ -1,0 +1,91 @@
+{
+  "material": {
+    "name": "MOF-5",
+    "cif_source": "auto",
+    "charge_scheme": "DDEC",
+    "source": "crafted"
+  },
+  "adsorbates": {
+    "components": [
+      "CO2",
+      "CH4"
+    ],
+    "mixture": {
+      "CO2": 0.5,
+      "CH4": 0.5
+    }
+  },
+  "conditions": {
+    "temperature_K": 300.0,
+    "pressures_bar": [
+      1.0
+    ]
+  },
+  "benchmark": {
+    "task": "auto",
+    "metrics": [
+      "component_uptake",
+      "selectivity",
+      "runtime"
+    ],
+    "reference": {
+      "source": "none"
+    },
+    "paper": {
+      "target_protocol": "Technical CO2/CH4 mixture GCMC smoke test for Module B; not a paper reproduction."
+    }
+  },
+  "simulation": {
+    "engine": "LAMMPS",
+    "method": "GCMC",
+    "forcefield": {
+      "framework": "UFF",
+      "adsorbate": "auto",
+      "cross_interactions": "auto"
+    },
+    "framework": "rigid",
+    "cell_representation": "conventional",
+    "minimum_image_policy": "error",
+    "units": "real",
+    "atom_style": "full",
+    "pair_style": "lj/cut/coul/long",
+    "cutoff_A": 12.8,
+    "kspace_style": "pppm",
+    "kspace_accuracy": 0.0001,
+    "unit_cells": [
+      1,
+      1,
+      1
+    ],
+    "seeds": [
+      12345,
+      23456,
+      34567
+    ],
+    "cycles": 100,
+    "initialization_cycles": 100
+  },
+  "convergence": {
+    "minimum_replicates": 2,
+    "relative_ci95_target": 0.2
+  },
+  "evaluation": {
+    "simulation_basis": "absolute",
+    "report_excess": false,
+    "pore_volume_cm3_g": "auto",
+    "gas_density_backend": "HEOS",
+    "reference_matching": "by_basis"
+  },
+  "output": {
+    "directory": "outputs/module_B_mixture_selectivity",
+    "run_id": "general_co2_ch4_technical_smoke",
+    "overwrite": false,
+    "save_logs": true,
+    "save_dumps": false,
+    "dump_every_steps": 1000,
+    "save_restarts": false,
+    "restart_every_steps": 1000,
+    "save_plots": true,
+    "save_csv": true
+  }
+}

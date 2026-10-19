@@ -45,7 +45,8 @@ Automatic selection is property-based:
 - Module A: single-component rigid-framework GCMC.
 - Module B: true multi-component mixture/selectivity GCMC.
 - Module C: Widom, Henry, or potential-benchmark workflows.
-- Module D: flexible-framework or MD/GCMC-flexibility workflows.
+- Module D: flexible frameworks and future cell/structural response. Flexible
+  guest molecules alone do not select Module D.
 
 A single component with `mixture: {"CO2": 1.0}` is normalized to a normal
 single-gas run and therefore stays in Module A. Mixture mole fractions are only
@@ -81,8 +82,9 @@ contains at least two components and gas-phase mole fractions:
 }
 ```
 
-For each pressure point, the input builder creates one `fix gcmc_*` per
-component, uses partial pressures `P_i = y_i * P_total`, writes component
+For each pressure point, the rigid-guest input builder creates one `fix gcmc_*`
+per active component, uses mixture fugacities `f_i = y_i * P_total * phi_i`
+from multicomponent Peng–Robinson (or explicitly supplied fugacities), writes component
 count variables such as `v_nco2` and `v_nn2`, and evaluates selectivity as:
 
 ```text
@@ -99,6 +101,137 @@ python benchmark.py \
 
 The full mixture path writes `mixture_results.csv` and
 `selectivity_surface.csv` in the run directory.
+
+### Module B corrected evaluation
+
+`--evaluate` and `--evaluate-all` detect mixtures and write component-resolved
+results to `evaluation_corrected/`. CO2, N2, total loading and both selectivity
+directions are separate quantities. Pure-gas references are excluded; NIST
+mixture comparisons require matching material, component set, mole fractions,
+temperature (default tolerance 2 K), pressure range and an explicit absolute
+adsorption basis. Pressure interpolation uses only points at the same composition
+(absolute mole-fraction tolerance 1e-6). Excess and unknown-basis mixture references
+are reported as excluded; no pure-gas density correction is applied to a mixture.
+
+```bash
+python benchmark.py input_json_files/benchmark_mof5_co2_n2_mixture_validation.json \
+  --evaluate --skip-registry-update
+```
+
+The report recomputes Student-t intervals for components and paired-seed Fieller
+intervals for selectivity. A point passes the configured precision target only
+when every component and pairwise selectivity passes, with at least three
+independent seeds. Unbounded/undefined intervals fail the precision target.
+This is between-seed precision, not proof of equilibration. Missing raw logs
+are noted. If framework data are absent, a consistent positive framework mass
+from the original `evaluated_isotherm.csv` is reused with provenance; otherwise
+only molecule counts and selectivity are reported. Existing single-gas evaluation
+is unchanged. Original mixture simulation summaries are preserved and the old
+single-gas-style report is marked obsolete.
+
+### General Module B campaigns and flexible guests
+
+Module B uses the same material resolver, framework conversion, charge schemes,
+cell checks and framework forcefields as Module A. There is no additional MOF
+allowlist. Any number of components can be configured, provided all molecular
+definitions and interaction parameters are available. Zero fractions are allowed;
+undefined selectivities are explicitly marked. Framework atoms and cell stay fixed.
+
+The general schema-2 campaign API supports pressure, optional temperature and
+the complete composition simplex. Its default pool contains 4,096 Sobol candidates
+with seed 2026. One GP is fitted per component; holdout labels are excluded from
+training and acquisition. Older CO2/N2 states remain readable and separate.
+
+```bash
+python -m pip install -r requirements-module-b-al.txt
+python -m modules.module_b_campaign init CONFIG.json STATE.json --budget 24
+python -m modules.module_b_campaign propose STATE.json
+python -m modules.module_b_campaign report STATE.json
+```
+
+`init`, `propose` and `report` do not launch simulations. An explicitly authorized
+campaign can execute a bounded number of requests with
+`python -m modules.module_b_campaign run STATE.json --max-requests 1`.
+
+Six pinned Cu-BTC paper profiles separate published settings (`paper`), GitHub
+algorithm behavior (`upstream_compat`) and seed-noise-aware learning (`noise_aware`).
+They prepare algorithm reproduction; they do not establish physical agreement
+with the paper. Unverified structure, charge/model details and uptake units remain
+open. Flexible acyclic guests use Python-orchestrated whole-tree CBMC with LAMMPS
+energies/forces and optional Metropolis-corrected HMC. Flexible rings are rejected.
+
+See [configuration, reproduction scope and short-test instructions](data/module_b/README.md).
+The short flexible examples are analytic Gaussian-tree fixtures, not physical gas models.
+
+### Legacy CO2/N2 active learning
+
+The schema-1 GP workflow is a fixed-temperature CO2/N2 adaptation of
+[Mukherjee et al. (2023)](https://doi.org/10.1039/D3DD00106G), not an exact paper
+reproduction. Install the optional dependency in the environment used for AL:
+
+```bash
+python -m pip install -r requirements-module-b-al.txt
+python -m modules.module_b_active_learning init \
+  input_json_files/benchmark_mof5_co2_n2_mixture_validation.json \
+  outputs/module_B_mixture_selectivity/runs/mof5_co2_n2_validation_pilot/isotherm_summary.json \
+  outputs/module_B_mixture_selectivity/campaigns/mof5_co2_n2_gp/state.json
+python -m modules.module_b_active_learning propose \
+  outputs/module_B_mixture_selectivity/campaigns/mof5_co2_n2_gp/state.json
+```
+
+Initialization refuses to overwrite an existing state. Default candidate pressures
+come from the base config, and CO2 fractions are 0.05, 0.15, 0.5 and 0.85;
+`init --pressures ... --fractions ...` overrides these. `propose` writes a normal
+benchmark input under `requests/` and an `acquisition_report.json`, without
+launching a simulation. Repeated proposals return the pending request. Run its
+config explicitly, then ingest its original run summary and propose again:
+
+```bash
+python benchmark.py REQUEST_CONFIG.json --run-isotherm --skip-registry-update
+python -m modules.module_b_active_learning ingest STATE.json RUN/isotherm_summary.json
+python -m modules.module_b_active_learning propose STATE.json
+```
+
+Each import verifies material, force field, cell, temperature and input-asset
+identity, and rejects a different pending candidate. Re-importing the same data
+is idempotent. A longer replacement run replaces that candidate's observation;
+the previous observation remains in history and is not double-counted.
+
+Before expanding the domain, imprecise pilot points receive one retry by default
+with four times the base equilibration and production steps, in a new run
+directory. This does not guarantee convergence; failed retries remain flagged.
+After this, initial coverage uses maximin distance in scaled `(log10(P), y_CO2)`
+space until at least three usable points and two compositions exist. Separate
+Matérn-5/2 GPs then fit `log1p` component molecule counts with per-point noise from
+the seed standard errors. The model uses scikit-learn's
+[per-observation `alpha` variance](https://scikit-learn.org/stable/modules/generated/sklearn.gaussian_process.GaussianProcessRegressor.html),
+rescaled consistently with the transformed targets.
+
+Acquisition maximizes the larger normalized component 95% latent GP interval.
+The denominator has a 0.05 molecule/cell floor near zero loading. Predictions are
+back-transformed posterior medians; derived selectivity has no claimed GP
+confidence interval because cross-component GP covariance is not modelled.
+The default stopping target is 20%, also requiring all observed GCMC points to
+pass their seed-precision target. Budget/pool exhaustion is a separate status,
+never a claim of successful validation. Default budget: 24 distinct state points.
+Settings are recorded in the state under `options`.
+
+Once enough precise points at multiple compositions exist, reserve at least two
+candidate IDs as holdout and compare AL, maximin and seeded random acquisition:
+
+```bash
+python -m modules.module_b_active_learning validate STATE.json \
+  --holdout p1_yco2_0p5 p5_yco2_0p85 --budgets 3 6 9 --repeats 5
+```
+
+This offline replay excludes holdout labels from fitting and acquisition, uses
+the same initial design and point budgets, and reports component MAE/RMSE,
+latent interval coverage, selectivity MAE, seed counts and available simulation
+time. Equal point budgets need not mean equal compute time. The four existing
+15%-CO2 pilot points cannot validate a two-dimensional surrogate; no efficiency
+gain or external physical validation is claimed from them. The old
+`--init-module-b-campaign`/maximin state API remains a legacy initialization path;
+use the commands above for the complete GP workflow.
 
 ## Module C with MLIP-MC
 

@@ -86,10 +86,32 @@ def plan_forcefield_to_lammps(
 def load_forcefield_parameters(forcefield_config: dict[str, Any]) -> ForcefieldParameters:
     pseudo_atoms = parse_pseudo_atoms(forcefield_config["files"]["pseudo_atoms"])
     lj_parameters, mixing_rule = parse_mixing_rules(forcefield_config["files"]["mixing_rules"])
+    from converter.molecule_to_lammps_template import parse_crafted_molecule_def
+    required_types = {
+        atom.atom_type
+        for definition in forcefield_config.get("adsorbates", {}).values()
+        for atom in parse_crafted_molecule_def(definition).atoms
+    }
+
+    def merge(target, additions, allowed):
+        for name, value in additions.items():
+            if allowed is not None and name not in allowed:
+                continue
+            if name in target and target[name] != value:
+                raise ValueError(
+                    f"Conflicting forcefield parameter for atom type {name!r}; "
+                    "use distinct type IDs or explicitly replace the base forcefield files."
+                )
+            target[name] = value
+
     for source in forcefield_config.get("adsorbate_parameter_files", []):
         source_files = source.get("files", source)
+        allowed = set(source["atom_types"]) if "atom_types" in source else (required_types or None)
+        if "components" in source and "atom_types" not in source:
+            allowed = {atom.atom_type for component in source["components"]
+                       for atom in parse_crafted_molecule_def(forcefield_config["adsorbates"][component]).atoms}
         if "pseudo_atoms" in source_files:
-            pseudo_atoms.update(parse_pseudo_atoms(source_files["pseudo_atoms"]))
+            merge(pseudo_atoms, parse_pseudo_atoms(source_files["pseudo_atoms"]), allowed)
         if "mixing_rules" in source_files:
             source_lj_parameters, source_mixing_rule = parse_mixing_rules(source_files["mixing_rules"])
             if source_mixing_rule != mixing_rule:
@@ -97,7 +119,7 @@ def load_forcefield_parameters(forcefield_config: dict[str, Any]) -> ForcefieldP
                     f"Cannot merge adsorbate forcefield parameters with mixing rule "
                     f"{source_mixing_rule!r} into base mixing rule {mixing_rule!r}."
                 )
-            lj_parameters.update(source_lj_parameters)
+            merge(lj_parameters, source_lj_parameters, allowed)
     return ForcefieldParameters(lj_parameters=lj_parameters, pseudo_atoms=pseudo_atoms, mixing_rule=mixing_rule)
 
 

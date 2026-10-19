@@ -1,0 +1,118 @@
+{
+  "material": {
+    "name": "MOF-5",
+    "cif_source": "auto",
+    "charge_scheme": "DDEC",
+    "source": "crafted"
+  },
+  "adsorbates": {
+    "components": [
+      "TEST_LINEAR",
+      "TEST_BRANCHED"
+    ],
+    "mixture": {
+      "TEST_LINEAR": 0.5,
+      "TEST_BRANCHED": 0.5
+    },
+    "models": {
+      "TEST_LINEAR": "data/module_b/models/gaussian_linear.json",
+      "TEST_BRANCHED": "data/module_b/models/gaussian_branched.json"
+    }
+  },
+  "conditions": {
+    "temperature_K": 300.0,
+    "pressures_bar": [
+      1.0
+    ]
+  },
+  "benchmark": {
+    "task": "auto",
+    "metrics": [
+      "component_uptake",
+      "selectivity",
+      "runtime"
+    ],
+    "reference": {
+      "source": "none"
+    },
+    "paper": {
+      "target_protocol": "Technical fixture only: flexible Gaussian trees in a rigid MOF. Not a physical adsorption reference."
+    }
+  },
+  "simulation": {
+    "engine": "LAMMPS",
+    "method": "GCMC",
+    "forcefield": {
+      "framework": "UFF",
+      "adsorbate": "auto",
+      "cross_interactions": "auto",
+      "definitions": {
+        "TEST_LINEAR": "data/module_b/models/gaussian_linear_definition.json",
+        "TEST_BRANCHED": "data/module_b/models/gaussian_branched_definition.json"
+      },
+      "parameter_files": [
+        {
+          "source": "raspa_methane",
+          "files": {
+            "mixing_rules": "external/RASPA2/forcefield/ExampleMoleculeForceField/force_field_mixing_rules.def",
+            "pseudo_atoms": "external/RASPA2/forcefield/ExampleMoleculeForceField/pseudo_atoms.def"
+          }
+        }
+      ]
+    },
+    "framework": "rigid",
+    "cell_representation": "conventional",
+    "minimum_image_policy": "error",
+    "units": "real",
+    "atom_style": "full",
+    "pair_style": "lj/cut/coul/long",
+    "cutoff_A": 12.8,
+    "kspace_style": "pppm",
+    "kspace_accuracy": 0.0001,
+    "unit_cells": [
+      1,
+      1,
+      1
+    ],
+    "seeds": [
+      12345,
+      23456,
+      34567
+    ],
+    "cycles": 20,
+    "initialization_cycles": 10,
+    "sampling": {
+      "trials": 2,
+      "hmc": {"steps": 2, "every": 5, "step_size": 0.01}
+    },
+    "reservoir": {
+      "fugacities_bar": {
+        "TEST_LINEAR": 1.0,
+        "TEST_BRANCHED": 1.0
+      }
+    }
+  },
+  "convergence": {
+    "minimum_replicates": 2,
+    "relative_ci95_target": 0.2
+  },
+  "evaluation": {
+    "simulation_basis": "absolute",
+    "report_excess": false,
+    "pore_volume_cm3_g": "auto",
+    "gas_density_backend": "HEOS",
+    "reference_matching": "by_basis"
+  },
+  "output": {
+    "directory": "outputs/module_B_mixture_selectivity",
+    "run_id": "general_flexible_guests_technical_smoke",
+    "overwrite": false,
+    "save_logs": true,
+    "save_dumps": false,
+    "dump_every_steps": 1000,
+    "save_restarts": false,
+    "restart_every_steps": 1000,
+    "save_plots": true,
+    "save_csv": true
+  }
+}

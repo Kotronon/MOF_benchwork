@@ -10,6 +10,7 @@ from analysis.plotting import legend_outside_right
 from pipeline.config import load_benchmark_data
 from pipeline.eos import gas_molar_density
 from pipeline.nist_isodb_parser import load_nist_isotherm
+from pipeline.mixture_evaluation import is_mixture, build_mixture_evaluation, evaluate_mixture
 
 
 ISOTHERM_CSV_FIELDS = [
@@ -78,6 +79,11 @@ def sim_results_to_csv(
     evaluation_config: dict[str, Any] | None = None,
 ) -> Path:
     """Write an isotherm summary JSON to a comparable adsorption CSV table."""
+    if is_mixture(sim_results):
+        from pipeline.mixture_evaluation import write_csv
+        result = build_mixture_evaluation(sim_results, framework_data, reference_csv, evaluation_config)
+        write_csv(Path(output_path), result["rows"])
+        return Path(output_path)
     rows = build_evaluation_rows(
         sim_results,
         framework_data=framework_data,
@@ -102,6 +108,8 @@ def evaluate_isotherm(
     evaluation_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Create CSV, Markdown, and plot artifacts for an isotherm run."""
+    if is_mixture(sim_results):
+        return evaluate_mixture(sim_results, output_dir, framework_data, reference_csv, evaluation_config)
     sim_results_path = Path(sim_results)
     target_dir = Path(output_dir) if output_dir else sim_results_path.parent
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -138,6 +146,8 @@ def evaluate_run_directory(
 ) -> dict[str, Any]:
     """Evaluate an already materialized run directory."""
     run_dir = Path(run_directory)
+    if is_mixture(run_dir / "isotherm_summary.json"):
+        return evaluate_mixture(run_dir / "isotherm_summary.json", evaluation_config=evaluation_config)
     return evaluate_isotherm(
         run_dir / "isotherm_summary.json",
         output_dir=run_dir,
@@ -153,6 +163,8 @@ def evaluate_all_references(
     """Evaluate an already materialized run directory against every available reference."""
     run_dir = Path(run_directory)
     sim_results = run_dir / "isotherm_summary.json"
+    if is_mixture(sim_results):
+        return evaluate_mixture(sim_results, evaluation_config=evaluation_config, references=references)
     reference_entries = _reference_entries_for_run(run_dir, references=references)
     if not reference_entries:
         raise FileNotFoundError(f"No reference files found in {run_dir / 'source' / 'references'}.")
@@ -250,6 +262,9 @@ def build_evaluation_rows(
 ) -> list[dict[str, Any]]:
     sim_results_path = Path(sim_results)
     data = load_benchmark_data(sim_results_path)
+
+    if is_mixture(sim_results_path):
+        return build_mixture_evaluation(sim_results_path, framework_data, reference_csv, evaluation_config)["rows"]
 
     framework_data_path = Path(framework_data) if framework_data else _infer_framework_data(sim_results_path)
     framework_mass_amu = framework_mass_from_lammps_data(framework_data_path) if framework_data_path else None

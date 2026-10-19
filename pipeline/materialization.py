@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +13,7 @@ from converter.forcefield_to_lammps import (
 )
 from converter.molecule_to_lammps_template import build_molecule_template, parse_crafted_molecule_def
 from pipeline.config import save_benchmark_data
-from pipeline.eos import fugacity_coeff_coolprop
+from pipeline.eos import fugacity_coeff_coolprop, mixture_fugacities
 from pipeline.lammps_inputs import gcmc_input_builder, render_run0_input
 from pipeline.utils import unique
 
@@ -25,6 +27,29 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
             f"Working directory already exists: {working_dir}. "
             "Use a new output.run_id, enable output.overwrite, or run with --resume."
         )
+    existing_summary = working_dir / "prepare_summary.json"
+    if resume and existing_summary.exists():
+        import json
+        previous = json.loads(existing_summary.read_text())
+        old = previous["prepare_plan"]
+        if old["parameters"] != prepare_plan["parameters"] or old["inputs"] != prepare_plan["inputs"]:
+            raise ValueError("Cannot resume with a changed physical setup or sampling parameters; use a new run_id.")
+        def verify_sources(original, archived):
+            if isinstance(original, dict) and isinstance(archived, dict):
+                for key in original.keys() & archived.keys():
+                    verify_sources(original[key], archived[key])
+            elif isinstance(original, list) and isinstance(archived, list):
+                for left,right in zip(original,archived):
+                    verify_sources(left,right)
+            elif isinstance(original, str) and isinstance(archived, str) and Path(archived).is_file():
+                if not Path(original).is_file() or Path(original).read_bytes() != Path(archived).read_bytes():
+                    raise ValueError("Cannot resume: original input assets changed.")
+        archived_sources = previous.get("result", {}).get("files", {}).get("source_files", {})
+        verify_sources(prepare_plan["inputs"], archived_sources)
+        verify_sources(prepare_plan["parameters"].get("guest_models", {}), archived_sources.get("guest_models", {}))
+        for asset, digest in previous.get("result", {}).get("files", {}).get("source_sha256", {}).items():
+            if not Path(asset).is_file() or hashlib.sha256(Path(asset).read_bytes()).hexdigest() != digest:
+                raise ValueError("Cannot resume: archived inputs changed.")
     working_dir.mkdir(parents=True, exist_ok=True)
 
     for directory in [
@@ -59,6 +84,27 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
         component: parse_crafted_molecule_def(molecule_def_path)
         for component, molecule_def_path in molecule_definitions.items()
     }
+    guest_models = prepare_plan["parameters"].get("guest_models", {})
+    if guest_models:
+        from engines.flexible_guest_runner import load_models
+        checked_models = load_models(guest_models, prepare_plan["parameters"]["temperature_K"])
+        if set(guest_models) - set(molecules):
+            raise ValueError("Guest model names do not match configured components.")
+        for c, model in checked_models.items():
+            if len(model["growth_parents"]) != len(molecules[c].atoms):
+                raise ValueError("Guest topology atom count differs from molecule definition.")
+    if any(not molecule.rigid and len(molecule.atoms) > 1 and c not in guest_models for c,molecule in molecules.items()):
+        raise ValueError("Flexible .def files need an explicit CBMC guest model; rigid-template conversion would discard their topology.")
+    # Isolate component types even when two gases use identical LJ pseudoatoms.
+    type_maps = {c: {a.atom_type: (f"{c}__{a.atom_type}" if len(molecules) > 1 else a.atom_type)
+                    for a in m.atoms} for c, m in molecules.items()}
+    for c, mapping in type_maps.items():
+        for original, label in mapping.items():
+            parameters.lj_parameters[label] = replace(parameters.lj_parameters[original], name=label)
+            parameters.pseudo_atoms[label] = replace(parameters.pseudo_atoms[original], name=label)
+    original_molecules = molecules
+    molecules = {c: replace(m, atoms=tuple(replace(a, atom_type=type_maps[c][a.atom_type]) for a in m.atoms))
+                 for c, m in molecules.items()}
     adsorbate_atom_types = [
         atom.atom_type
         for molecule in molecules.values()
@@ -132,8 +178,8 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
         build_molecule_template(
             molecule_plan["input_definition"],
             template_path,
-            atom_type_ids=atom_type_ids,
-            atom_charges=atom_charges,
+            atom_type_ids={a: atom_type_ids[b] for a,b in type_maps[component].items()},
+            atom_charges={a: atom_charges[b] for a,b in type_maps[component].items()},
         )
         molecule_template_paths[component] = str(template_path)
 
@@ -157,7 +203,7 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
     gcmc_test_path = Path(prepare_plan["planned_files"]["gcmc_test_input"]["path"])
     gcmc_test_path.parent.mkdir(parents=True, exist_ok=True)
     gcmc_test_path.write_text(
-        gcmc_input_builder(
+        '# Flexible guests require the Python CBMC driver: benchmark.py --run-test.\nquit 1\n' if guest_models else gcmc_input_builder(
             _gcmc_builder_inputs(
                 prepare_plan=prepare_plan,
                 framework_data_path=framework_data_path,
@@ -179,15 +225,16 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
     for input_script in prepare_plan["planned_files"]["input_scripts"]:
         pressure_bar = input_script["pressure_bar"]
         if prepare_plan["parameters"].get("mixture"):
-            fugacity_coefficients = {
-                mixture_component: fugacity_coeff_coolprop(
-                    component=mixture_component,
-                    temperature_K=prepare_plan["parameters"]["temperature_K"],
-                    pressure_bar=pressure_bar * mole_fraction,
-                    backend="PR",
-                )
-                for mixture_component, mole_fraction in prepare_plan["parameters"]["mixture"].items()
-            }
+            reservoir = prepare_plan["parameters"].get("reservoir", {})
+            eos = mixture_fugacities(
+                prepare_plan["parameters"]["temperature_K"], pressure_bar,
+                prepare_plan["parameters"]["mixture"],
+                {c: m.to_dict() for c,m in molecules.items()},
+                binary_interactions=reservoir.get("binary_interactions"),
+                root=reservoir.get("root", "vapor"),
+                fugacities_bar=reservoir.get("fugacities_bar"))
+            fugacity_coefficients = eos["coefficients"]
+            input_script["reservoir"] = eos
             fugacity_coeff = 1.0
         else:
             fugacity_coefficients = None
@@ -220,8 +267,14 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
             restart_every_steps=prepare_plan["parameters"].get("restart_every_steps", 50000),
         )
         input_script.update(builder_inputs)
+        if guest_models:
+            input_script.update(sampler="cbmc", guest_models=guest_models, resume=resume,
+                cbmc_trials=int(prepare_plan["parameters"].get("sampling", {}).get("trials", 8)),
+                hmc=prepare_plan["parameters"].get("sampling", {}).get("hmc", {}),
+                guest_atoms={c: [{"type":atom_type_ids[a.atom_type], "charge":atom_charges[a.atom_type],
+                                  "position":[a.x,a.y,a.z]} for a in m.atoms] for c,m in molecules.items()})
         gcmc_input_path.write_text(
-            gcmc_input_builder(builder_inputs),
+            '# Flexible guests require the Python CBMC driver: benchmark.py --run-isotherm.\nquit 1\n' if guest_models else gcmc_input_builder(builder_inputs),
             encoding="utf-8",
         )
 
@@ -249,6 +302,7 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
             "gcmc_test_input": str(gcmc_test_path),
             "summary": prepare_plan["planned_files"]["summary"],
             "source_files": source_files,
+            "source_sha256": {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in (working_dir / "source").rglob("*") if p.is_file()},
             "gcmc_inputs": [script["path"] for script in prepare_plan["planned_files"]["input_scripts"]],
             "gcmc_runs": prepare_plan["planned_files"]["input_scripts"],
             "dump_files": [
@@ -331,16 +385,22 @@ def _copy_prepare_sources(prepare_plan: dict[str, Any], source_dir: Path) -> dic
     copied["adsorbate_parameter_files"] = [
         {
             "source": source.get("source", "unknown"),
+            "atom_types": source.get("atom_types"),
+            "components": source.get("components"),
             "files": {
-                name: str(_copy_file(Path(path), source_dir / "forcefield" / source.get("source", "adsorbate")))
+                name: str(_copy_file(Path(path), source_dir / "forcefield" / f"adsorbate_{index}"))
                 for name, path in source.get("files", {}).items()
             },
         }
-        for source in prepare_plan["inputs"].get("adsorbate_parameter_files", [])
+        for index, source in enumerate(prepare_plan["inputs"].get("adsorbate_parameter_files", []))
     ]
     copied["adsorbate_definitions"] = {
-        component: str(_copy_file(Path(path), source_dir / "molecules"))
+        component: str(_copy_file(Path(path), source_dir / "molecules" / component))
         for component, path in prepare_plan["inputs"]["adsorbate_definitions"].items()
+    }
+    copied["guest_models"] = {
+        c: str(_copy_file(Path(path), source_dir / "models" / c))
+        for c,path in prepare_plan["parameters"].get("guest_models", {}).items() if isinstance(path,str)
     }
     copied["reference_files"] = [
         {

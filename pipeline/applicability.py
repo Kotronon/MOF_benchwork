@@ -828,7 +828,7 @@ def _assess_module_b_mixture(config: dict[str, Any], resolved: dict[str, Any]) -
         "framework",
         "rigid",
         simulation.get("framework"),
-        "Flexible mixture adsorption belongs to Module D.",
+        "Flexible frameworks belong to Module D; flexible guests may use Module B.",
         reasons,
         hard_failure=True,
     )
@@ -938,7 +938,7 @@ def _assess_module_b_mixture(config: dict[str, Any], resolved: dict[str, Any]) -
         "recommended_module": "B",
         "checks": checks,
         "geometry": geometry,
-        "reason": "The classical rigid-framework CO2/N2 mixture GCMC path is executable for Module B V1.",
+        "reason": "The shared Module-A framework path supports this multicomponent mixture.",
     }
 
 

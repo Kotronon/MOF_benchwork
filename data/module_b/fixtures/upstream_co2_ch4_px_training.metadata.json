@@ -1,0 +1,9 @@
+{
+  "source": "https://github.com/mukherjee07/Active-Learning-for-multicomponent-adsorption-in-a-MOF/blob/0415e03f2a67657cf88d8964ad665177c54bbde8/P-X/CO2-CH4/training.csv",
+  "sha256": "98877683465a5bb34ae6ab561e66bfb6a813e521510af096c3232f1d5381a63a",
+  "role": "Algorithm regression fixture only; never imported into live campaigns.",
+  "pressure_unit": "Pa",
+  "temperature_unit": "K",
+  "uptake_unit": "Not verified; numeric labels treated as opaque in algorithm tests.",
+  "initial_coordinate_count": 54
+}
