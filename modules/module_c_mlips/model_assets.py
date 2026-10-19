@@ -18,10 +18,12 @@ UMOF_DEFAULT_DIRECTORY = Path("external/models/umof")
 UMOF_DEFAULT_MODELS = {
     "umof_mh": {
         "filename": "umof-mh.model",
+        "archive_member": "umof_models/uMOF-MH.model",
         "patterns": ["umof-mh", "umof_mh", "umofmh"],
     },
     "umof_polar": {
         "filename": "umof-polar.model",
+        "archive_member": "umof_models/uMOF-POLAR.model",
         "patterns": ["umof-polar", "umof_polar", "umofpolar"],
     },
 }
@@ -182,6 +184,11 @@ def ensure_umof_model_asset(
             "candidate_extensions": [".model", ".pt", ".pth"],
         },
     )
+    asset = specification["asset"]
+    if isinstance(asset, dict) and asset.get("figshare_article_id") == UMOF_FIGSHARE_ARTICLE_ID:
+        asset.setdefault("file_name", "umof_models.zip")
+        if not asset.get("member_path") and not asset.get("member_basename"):
+            asset["member_path"] = defaults["archive_member"]
     return ensure_model_asset(
         specification,
         download_missing=download_missing,

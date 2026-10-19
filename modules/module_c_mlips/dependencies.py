@@ -162,6 +162,35 @@ def ensure_mlip_mc_dependencies(
         )
     return refreshed
 
+def ensure_mace_polar_dependencies(*, install_missing: bool = False) -> None:
+    """Ensure the electrostatics API used by the released uMOF-POLAR model."""
+    required = "0.4.0"
+    if (
+        _module_available("graph_longrange")
+        and _distribution_version("graph_longrange") == required
+    ):
+        return
+    command = [sys.executable, "-m", "pip", "install", f"graph_longrange=={required}"]
+    if not install_missing:
+        raise ImportError(
+            "uMOF-POLAR requires a compatible graph_longrange. Install with: "
+            + shlex.join(command)
+        )
+    completed = subprocess.run(command, capture_output=True, text=True)
+    if completed.returncode != 0:
+        raise RuntimeError(
+            "PolarMACE dependency installation failed: "
+            + (completed.stderr or completed.stdout).strip()
+        )
+    importlib.invalidate_caches()
+    if (
+        not _module_available("graph_longrange")
+        or _distribution_version("graph_longrange") != required
+    ):
+        raise RuntimeError(
+            "The compatible graph_longrange version is unavailable after installation."
+        )
+
 
 def ensure_torch_dftd(*, install_missing: bool = False) -> dict[str, Any]:
     """Ensure the D3 calculator used by dispersion-enabled MACE runs exists."""

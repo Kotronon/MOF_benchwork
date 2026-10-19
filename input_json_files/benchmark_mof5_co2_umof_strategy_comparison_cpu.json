@@ -1,0 +1,118 @@
+{
+  "material": {
+    "name": "MOF-5",
+    "charge_scheme": "DDEC",
+    "source": "crafted"
+  },
+  "adsorbates": {
+    "components": [
+      "CO2"
+    ]
+  },
+  "conditions": {
+    "temperature_K": 298.15,
+    "pressures_bar": [
+      1.0
+    ]
+  },
+  "benchmark": {
+    "task": "potential_benchmark",
+    "metrics": [
+      "energy_mae_vs_cp2k",
+      "force_mae_vs_cp2k",
+      "runtime_per_configuration"
+    ],
+    "potential_benchmark": {
+      "workflow": "campaign",
+      "configuration_set": "smoke",
+      "exclude_regions": [
+        "technical_repulsive_probe"
+      ],
+      "baseline_backend": "mace_mp_0a_small",
+      "backends": [
+        {
+          "type": "mace_mp",
+          "name": "mace_mp_0a_small",
+          "model": "small",
+          "device": "cpu",
+          "default_dtype": "float64",
+          "dispersion": false
+        }
+      ],
+      "comparison": {
+        "strategies": [
+          "umof_pretrained"
+        ],
+        "baseline_backends": [
+          {
+            "type": "mace_mp",
+            "name": "mace_mp_0a_small",
+            "model": "small",
+            "device": "cpu",
+            "default_dtype": "float64",
+            "dispersion": false
+          }
+        ],
+        "umof_backends": [
+          {
+            "backend": "mace-torch",
+            "name": "umof_mh",
+            "model_family": "umof",
+            "model": "external/models/umof-mh.model",
+            "asset": {
+              "figshare_article_id": "33311829",
+              "file_name": "umof_models.zip",
+              "member_path": "umof_models/uMOF-MH.model"
+            },
+            "device": "cpu",
+            "default_dtype": "float64",
+            "dispersion": false,
+            "reference_level": "uMOF r2SCAN-D4",
+            "head": "r2scan+d4"
+          },
+          {
+            "backend": "mace-torch",
+            "name": "umof_polar",
+            "model_family": "umof",
+            "model": "external/models/umof-polar.model",
+            "asset": {
+              "figshare_article_id": "33311829",
+              "file_name": "umof_models.zip",
+              "member_path": "umof_models/uMOF-POLAR.model"
+            },
+            "device": "cpu",
+            "default_dtype": "float64",
+            "dispersion": false,
+            "reference_level": "uMOF r2SCAN-D4",
+            "head": "r2scan+d4",
+            "model_type": "PolarMACE"
+          }
+        ]
+      }
+    }
+  },
+  "simulation": {
+    "engine": "MLIP_MC",
+    "method": "WIDOM",
+    "forcefield": {
+      "framework": "UFF",
+      "adsorbate": "auto",
+      "cross_interactions": "auto"
+    },
+    "framework": "rigid",
+    "cell_representation": "conventional",
+    "minimum_image_policy": "error",
+    "cutoff_A": 12.8,
+    "unit_cells": "auto",
+    "seeds": [
+      12345
+    ]
+  },
+  "output": {
+    "directory": "outputs/module_C_potential_benchmark",
+    "run_id": "mof5_co2_umof_strategy_comparison_cpu",
+    "overwrite": false,
+    "save_plots": true,
+    "save_csv": true
+  }
+}

@@ -133,7 +133,12 @@ python benchmark.py CONFIG.json --analyze-module-c
 The uMOF comparison is treated as a CP2K-free pretrained strategy. It does not
 launch CP2K and does not fine-tune locally. The configured uMOF-MH and
 uMOF-POLAR checkpoints are stored under `external/models/umof/` or under the
-explicit paths in the JSON. When the files are missing, setup can download the
+explicit paths in the JSON. The release stores both checkpoints inside
+`umof_models.zip`; setup extracts the corresponding `umof_models/uMOF-*.model`
+member. The comparison selects the `r2scan+d4` head. uMOF-POLAR uses the
+PolarMACE loader and requires `graph_longrange==0.4.0`, which setup checks and
+installs with `--install-missing`.
+When the files are missing, setup can download the
 required model assets from the uMOF Figshare release, but only when
 `--install-missing` is passed. If CP2K labels already exist from the local
 active-learning workflow, the report includes energy and force MAE against
@@ -156,6 +161,11 @@ python benchmark.py \
   --setup-module-c --install-missing --skip-registry-update
 ```
 
+For a machine without a free CUDA GPU, use
+`input_json_files/benchmark_mof5_co2_umof_strategy_comparison_cpu.json` instead.
+It runs all three models on CPU and writes to a separate run directory; its
+runtime measurements are CPU timings.
+
 Run the comparison after setup:
 
 ```bash
@@ -168,7 +178,11 @@ Expected outputs are written to the run directory:
 
 - `results/strategy_comparison.json`
 - `results/strategy_comparison.csv`
+- `results/strategy_comparison_progress.json` saves completed evaluations during the run
 - `reports/cp2k_reference_comparison.png` when CP2K reference labels exist
+
+Configured `exclude_regions` filters are applied before model evaluation, including
+the synthetic overlapping structures in the smoke set.
 
 The intended scientific comparison is:
 

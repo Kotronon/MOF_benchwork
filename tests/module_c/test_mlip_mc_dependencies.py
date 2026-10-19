@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from modules.module_c_mlips.dependencies import (
     DependencyStatus,
     ensure_mlip_mc_dependencies,
+    ensure_mace_polar_dependencies,
     ensure_torch_dftd,
     inspect_mlip_mc_dependencies,
     normalize_mlip_backend,
@@ -14,6 +15,21 @@ from modules.module_c_mlips.dependencies import (
 
 
 class MlipMcDependencyTests(unittest.TestCase):
+    def test_polar_rejects_incompatible_electrostatics_without_installing(self) -> None:
+        with patch("modules.module_c_mlips.dependencies._module_available", return_value=True), patch(
+            "modules.module_c_mlips.dependencies._distribution_version", return_value="0.4.4"
+        ), patch("modules.module_c_mlips.dependencies.subprocess.run") as run:
+            with self.assertRaisesRegex(ImportError, "graph_longrange==0.4.0"):
+                ensure_mace_polar_dependencies()
+        run.assert_not_called()
+
+    def test_polar_setup_installs_compatible_electrostatics(self) -> None:
+        with patch("modules.module_c_mlips.dependencies._module_available", return_value=True), patch(
+            "modules.module_c_mlips.dependencies._distribution_version", side_effect=["0.4.4", "0.4.0"]
+        ), patch("modules.module_c_mlips.dependencies.subprocess.run", return_value=Mock(returncode=0)) as run:
+            ensure_mace_polar_dependencies(install_missing=True)
+        self.assertEqual(run.call_args.args[0], [sys.executable, "-m", "pip", "install", "graph_longrange==0.4.0"])
+
     def test_backend_aliases_are_normalized(self) -> None:
         self.assertEqual(normalize_mlip_backend("mace_mp"), "mace-torch")
         self.assertEqual(normalize_mlip_backend("ORB"), "orb-models")

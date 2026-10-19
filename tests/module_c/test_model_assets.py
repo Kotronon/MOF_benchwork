@@ -150,6 +150,33 @@ class ModelAssetTests(unittest.TestCase):
             self.assertEqual(result["transfer_mode"], "direct_download")
             self.assertTrue(result["downloaded"])
 
+    def test_umof_extracts_both_models_from_figshare_release_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            source = root / "umof_models.zip"
+            with ZipFile(source, "w") as archive:
+                archive.writestr("umof_models/uMOF-MH.model", b"mh-model")
+                archive.writestr("umof_models/uMOF-POLAR.model", b"polar-model")
+                archive.writestr("__MACOSX/umof_models/._uMOF-MH.model", b"metadata")
+            with patch(
+                "modules.module_c_mlips.model_assets._figshare_files",
+                return_value=[{"id": 67738656, "name": "umof_models.zip",
+                               "download_url": source.as_uri(),
+                               "supplied_md5": md5(source.read_bytes()).hexdigest()}],
+            ):
+                for name, expected in (("umof_mh", b"mh-model"), ("umof_polar", b"polar-model")):
+                    target = root / (name + ".model")
+                    result = ensure_umof_model_asset(
+                        {"name": name, "model": str(target),
+                         "asset": {"figshare_article_id": "33311829",
+                                   "file_name_patterns": [name],
+                                   "candidate_extensions": [".model"]}},
+                        download_missing=True,
+                    )
+                    self.assertEqual(target.read_bytes(), expected)
+                    self.assertEqual(result["transfer_mode"], "full_archive")
+                    self.assertTrue(result["archive_member"].startswith("umof_models/"))
+
     def test_umof_download_requires_install_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             target = Path(temporary_directory) / "umof-polar.model"

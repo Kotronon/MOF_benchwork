@@ -286,6 +286,8 @@ def _build_backends(
                         specification.get("default_dtype", "float32")
                     ),
                     dispersion=bool(specification.get("dispersion", False)),
+                    head=specification.get("head"),
+                    model_type=specification.get("model_type"),
                 )
             )
         elif backend_type == "nequip":

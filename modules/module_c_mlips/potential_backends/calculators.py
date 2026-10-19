@@ -104,11 +104,33 @@ def _build_mace_calculator(specification: dict[str, Any]) -> Any:
         raise ValueError("MACE default_dtype must be 'float32' or 'float64'.")
     if is_umof_specification(specification):
         ensure_umof_model_asset(specification, download_missing=False)
+    options = {}
+    head = specification.get("head")
+    if head is None and is_umof_specification(specification):
+        head = "r2scan+d4"
+    if head is not None:
+        options["head"] = head
+    polar = specification.get("model_type") == "PolarMACE" or str(
+        specification.get("name", "")
+    ).casefold().replace("-", "_") == "umof_polar"
+    if polar:
+        from mace.calculators import mace_polar
+        from modules.module_c_mlips.dependencies import ensure_mace_polar_dependencies
+
+        ensure_mace_polar_dependencies()
+        return mace_polar(
+            model=specification["model"],
+            device=str(specification.get("device", "cpu")),
+            default_dtype=dtype,
+            pbc_handling="auto",
+            **options,
+        )
     return mace_mp(
         model=specification.get("model", "medium"),
         device=str(specification.get("device", "cpu")),
         dispersion=bool(specification.get("dispersion", False)),
         default_dtype=dtype,
+        **options,
     )
 
 

@@ -32,6 +32,8 @@ class MaceBackend(PotentialBackend):
     device: str = "cpu"
     default_dtype: str = "float64"
     dispersion: bool = False
+    head: str | None = None
+    model_type: str | None = None
     calculator: Any | None = field(default=None, repr=False)
     _model_load_seconds: float = field(default=0.0, init=False, repr=False)
 
@@ -79,6 +81,8 @@ class MaceBackend(PotentialBackend):
                 "device": self.device,
                 "default_dtype": self.default_dtype,
                 "dispersion": self.dispersion,
+                "head": self.head,
+                "model_type": self.model_type,
                 "atom_count": len(atoms),
                 "model_load_seconds": self._model_load_seconds,
                 "mace_torch_version": _package_version("mace-torch"),
@@ -99,6 +103,8 @@ class MaceBackend(PotentialBackend):
                 "model": self.model,
                 "device": self.device,
                 "dispersion": self.dispersion,
+                "head": self.head,
+                "model_type": self.model_type,
                 "default_dtype": self.default_dtype,
             }
         )
