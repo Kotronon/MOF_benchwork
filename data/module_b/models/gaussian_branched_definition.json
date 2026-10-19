@@ -1,0 +1,55 @@
+{
+  "name": "TEST_BRANCHED",
+  "critical_temperature_K": 190.564,
+  "critical_pressure_Pa": 4599200.0,
+  "acentric_factor": 0.01142,
+  "rigid": false,
+  "atoms": [
+    {
+      "type": "CH4",
+      "position": [
+        0.0,
+        0,
+        0
+      ]
+    },
+    {
+      "type": "CH4",
+      "position": [
+        0.5,
+        0,
+        0
+      ]
+    },
+    {
+      "type": "CH4",
+      "position": [
+        1.0,
+        0,
+        0
+      ]
+    }
+  ],
+  "bonds": [
+    {
+      "atoms": [
+        1,
+        0
+      ],
+      "coeff": [
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "atoms": [
+        2,
+        0
+      ],
+      "coeff": [
+        1.0,
+        0.0
+      ]
+    }
+  ]
+}

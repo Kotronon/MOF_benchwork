@@ -200,6 +200,8 @@ def _mixture_gcmc_input_builder(
     ]
     gcmc_fixes = []
     for offset, component in enumerate(components):
+        if float(mixture[component]) == 0:
+            continue
         component_id = _component_id(component)
         partial_pressure_bar = pressure_bar * float(mixture[component])
         partial_pressure_atm = partial_pressure_bar * 0.986923266716
@@ -231,7 +233,7 @@ def _mixture_gcmc_input_builder(
         "thermo 100",
         (
             "thermo_style custom step atoms temp pe etotal press "
-            f"{thermo_component_variables}"
+            f"{thermo_component_variables} " + " ".join(f"f_gcmc_{_component_id(c)}[{i}]" for c in components if mixture[c] > 0 for i in range(1, 9))
         ),
         *(
             [

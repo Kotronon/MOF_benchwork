@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import json
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,13 @@ def plan_molecule_template(molecule_def_path: str | Path, output_path: str | Pat
 
 def parse_crafted_molecule_def(molecule_def_path: str | Path) -> CraftedMolecule:
     """Parse the subset of CRAFTED/RASPA molecule .def files used by the pipeline."""
+    if Path(molecule_def_path).suffix == ".json":
+        data = json.loads(Path(molecule_def_path).read_text())
+        return CraftedMolecule(name=data["name"], critical_temperature_K=float(data["critical_temperature_K"]),
+            critical_pressure_Pa=float(data["critical_pressure_Pa"]), acentric_factor=float(data["acentric_factor"]),
+            atoms=tuple(MoleculeAtom(i,a["type"],*a["position"]) for i,a in enumerate(data["atoms"])),
+            bonds=tuple(MoleculeBond(*b["atoms"], "RIGID_BOND") for b in data.get("bonds", [])),
+            rigid=bool(data["rigid"]))
     lines = Path(molecule_def_path).read_text(encoding="utf-8").splitlines()
     content = _content_lines(lines)
     cursor = 0

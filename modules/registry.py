@@ -45,7 +45,7 @@ def _module_d_score(config: dict[str, Any]) -> int:
     simulation = config.get("simulation", {})
     method = str(simulation.get("method", "")).lower()
     framework = str(simulation.get("framework", "rigid")).lower()
-    if framework != "rigid" or "flex" in method or method in {"md/gcmc", "mlip-md/gcmc"}:
+    if framework != "rigid":
         return 90
     return 0
 

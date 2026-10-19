@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "description": "Technical Gaussian-spring fixture, not a physical gas forcefield.",
+  "growth_parents": [
+    null,
+    0,
+    0
+  ],
+  "reference_bond_k_kcal_mol_A2": [
+    null,
+    1.0,
+    1.0
+  ],
+  "bonds": [
+    {
+      "atoms": [
+        1,
+        0
+      ],
+      "coeff": [
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "atoms": [
+        2,
+        0
+      ],
+      "coeff": [
+        1.0,
+        0.0
+      ]
+    }
+  ],
+  "angles": [],
+  "dihedrals": [],
+  "impropers": [],
+  "special_bonds": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "ideal_log_rosenbluth": {
+    "300": 0.0
+  },
+  "normalization_source": "Analytic: U_intra equals reference harmonic-tree energy; all intramolecular nonbonded pairs excluded."
+}

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 import json
+import math
+import re
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +59,8 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
         material["name"] = Path(str(explicit_cif)).stem
     if not material.get("name"):
         raise ValueError("'material.name' or 'material.cif_path' is required.")
+    if explicit_cif:
+        material["cif_path"] = str(explicit_cif)
     material.setdefault("cif_source", explicit_cif or "auto")
     material.setdefault("charge_scheme", "auto")
     material.setdefault("source", "crafted")
@@ -70,6 +74,8 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     if not components:
         components = ["CO2"]
     adsorbates["components"] = [str(component).upper() for component in components]
+    if len(set(adsorbates["components"])) != len(adsorbates["components"]) or any(not re.fullmatch(r"[A-Z][A-Z0-9_]*", c) for c in adsorbates["components"]):
+        raise ValueError("Component IDs must be unique letters/digits/underscores starting with a letter.")
     adsorbates["mixture"] = _normalize_mixture(
         adsorbates.get("mixture"),
         adsorbates["components"],
@@ -168,7 +174,7 @@ def normalize_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(convergence, dict):
         raise TypeError("'convergence' must be an object.")
     convergence.setdefault("minimum_replicates", 3)
-    convergence.setdefault("relative_ci95_target", 0.05)
+    convergence.setdefault("relative_ci95_target", 0.2 if len(adsorbates["components"]) > 1 else 0.05)
     if int(convergence["minimum_replicates"]) < 2:
         raise ValueError("'convergence.minimum_replicates' must be at least 2.")
     if float(convergence["relative_ci95_target"]) <= 0:
@@ -223,6 +229,7 @@ def _normalize_forcefield(value: Any) -> dict[str, str]:
         }
     if isinstance(value, dict):
         return {
+            **deepcopy(value),
             "framework": str(value.get("framework", "UFF")),
             "adsorbate": str(value.get("adsorbate", "auto")),
             "cross_interactions": str(value.get("cross_interactions", "auto")),
@@ -256,8 +263,8 @@ def _normalize_mixture(value: Any, components: list[str]) -> dict[str, float] | 
     for component, fraction in mixture.items():
         if isinstance(fraction, bool) or not isinstance(fraction, (int, float)):
             raise ValueError(f"'adsorbates.mixture.{component}' must be a numeric mole fraction.")
-        if fraction <= 0.0:
-            raise ValueError(f"'adsorbates.mixture.{component}' must be positive.")
+        if not math.isfinite(fraction) or fraction < 0.0:
+            raise ValueError(f"'adsorbates.mixture.{component}' must be finite and nonnegative.")
         normalized[component] = float(fraction)
 
     total = sum(normalized.values())

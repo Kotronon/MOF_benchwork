@@ -1,0 +1,531 @@
+{
+  "case": "CO2-CH4",
+  "space": "P-X",
+  "mode": "paper",
+  "components": [
+    "CO2",
+    "CH4"
+  ],
+  "material": "Cu-BTC",
+  "upstream_commit": "0415e03f2a67657cf88d8964ad665177c54bbde8",
+  "initial_design": [
+    {
+      "candidate_id": "138fc92c12e8c50d446e",
+      "pressure_bar": 1e-06,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.98,
+        "CO2": 0.02
+      }
+    },
+    {
+      "candidate_id": "7d0dfdfb1f045fe980aa",
+      "pressure_bar": 1e-06,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.8,
+        "CO2": 0.2
+      }
+    },
+    {
+      "candidate_id": "4b9d1365d9cf21711640",
+      "pressure_bar": 1e-06,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.6,
+        "CO2": 0.4
+      }
+    },
+    {
+      "candidate_id": "3c5df4214917a0d98371",
+      "pressure_bar": 1e-06,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.4,
+        "CO2": 0.6
+      }
+    },
+    {
+      "candidate_id": "cc8471a786691fe4ff9e",
+      "pressure_bar": 1e-06,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.19999999999999996,
+        "CO2": 0.8
+      }
+    },
+    {
+      "candidate_id": "84bf2aacc6aac098149a",
+      "pressure_bar": 1e-06,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.020000000000000018,
+        "CO2": 0.98
+      }
+    },
+    {
+      "candidate_id": "37f7bd6e09876002713f",
+      "pressure_bar": 1e-05,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.98,
+        "CO2": 0.02
+      }
+    },
+    {
+      "candidate_id": "993444833275bf89bd27",
+      "pressure_bar": 1e-05,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.8,
+        "CO2": 0.2
+      }
+    },
+    {
+      "candidate_id": "3fd02ca0c14f9e3248ed",
+      "pressure_bar": 1e-05,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.6,
+        "CO2": 0.4
+      }
+    },
+    {
+      "candidate_id": "045ba5585d901bfcb9e1",
+      "pressure_bar": 1e-05,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.4,
+        "CO2": 0.6
+      }
+    },
+    {
+      "candidate_id": "59e566c218cc98c02fcf",
+      "pressure_bar": 1e-05,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.19999999999999996,
+        "CO2": 0.8
+      }
+    },
+    {
+      "candidate_id": "7fec24755676a14cf1ce",
+      "pressure_bar": 1e-05,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.020000000000000018,
+        "CO2": 0.98
+      }
+    },
+    {
+      "candidate_id": "c0c9c5082a42dc6c62ac",
+      "pressure_bar": 0.0001,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.98,
+        "CO2": 0.02
+      }
+    },
+    {
+      "candidate_id": "1c5e28e70b19371b359e",
+      "pressure_bar": 0.0001,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.8,
+        "CO2": 0.2
+      }
+    },
+    {
+      "candidate_id": "99acc772c55018ad109f",
+      "pressure_bar": 0.0001,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.6,
+        "CO2": 0.4
+      }
+    },
+    {
+      "candidate_id": "ee78edb7acd37d302131",
+      "pressure_bar": 0.0001,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.4,
+        "CO2": 0.6
+      }
+    },
+    {
+      "candidate_id": "06403fef37215b4dd24a",
+      "pressure_bar": 0.0001,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.19999999999999996,
+        "CO2": 0.8
+      }
+    },
+    {
+      "candidate_id": "ef4676ed0ffdd7398e15",
+      "pressure_bar": 0.0001,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.020000000000000018,
+        "CO2": 0.98
+      }
+    },
+    {
+      "candidate_id": "055b680bd089df571154",
+      "pressure_bar": 0.001,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.98,
+        "CO2": 0.02
+      }
+    },
+    {
+      "candidate_id": "a17360ecc1c8654b7501",
+      "pressure_bar": 0.001,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.8,
+        "CO2": 0.2
+      }
+    },
+    {
+      "candidate_id": "1054f880977523238f5c",
+      "pressure_bar": 0.001,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.6,
+        "CO2": 0.4
+      }
+    },
+    {
+      "candidate_id": "9240402755cbca5d165e",
+      "pressure_bar": 0.001,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.4,
+        "CO2": 0.6
+      }
+    },
+    {
+      "candidate_id": "c73137c614ce3da897dc",
+      "pressure_bar": 0.001,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.19999999999999996,
+        "CO2": 0.8
+      }
+    },
+    {
+      "candidate_id": "e9527a3d5bfaf6a11332",
+      "pressure_bar": 0.001,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.020000000000000018,
+        "CO2": 0.98
+      }
+    },
+    {
+      "candidate_id": "c4ab139e9dfdc96f6066",
+      "pressure_bar": 0.01,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.98,
+        "CO2": 0.02
+      }
+    },
+    {
+      "candidate_id": "418be5ce024f798e2c00",
+      "pressure_bar": 0.01,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.8,
+        "CO2": 0.2
+      }
+    },
+    {
+      "candidate_id": "0cf8dddc443e8d3d4d1b",
+      "pressure_bar": 0.01,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.6,
+        "CO2": 0.4
+      }
+    },
+    {
+      "candidate_id": "ee348ba14966d84e9572",
+      "pressure_bar": 0.01,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.4,
+        "CO2": 0.6
+      }
+    },
+    {
+      "candidate_id": "775eedc6a6c1f6e4b20f",
+      "pressure_bar": 0.01,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.19999999999999996,
+        "CO2": 0.8
+      }
+    },
+    {
+      "candidate_id": "fcfed9640aa0bc0eb1aa",
+      "pressure_bar": 0.01,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.020000000000000018,
+        "CO2": 0.98
+      }
+    },
+    {
+      "candidate_id": "a39a1fc93603542b94f8",
+      "pressure_bar": 0.1,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.98,
+        "CO2": 0.02
+      }
+    },
+    {
+      "candidate_id": "7d1225f7eb7f9a306a40",
+      "pressure_bar": 0.1,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.8,
+        "CO2": 0.2
+      }
+    },
+    {
+      "candidate_id": "f5e83a718a3b7c5bce98",
+      "pressure_bar": 0.1,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.6,
+        "CO2": 0.4
+      }
+    },
+    {
+      "candidate_id": "958a368b7c43bdaeb701",
+      "pressure_bar": 0.1,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.4,
+        "CO2": 0.6
+      }
+    },
+    {
+      "candidate_id": "daa56612d88f5315e622",
+      "pressure_bar": 0.1,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.19999999999999996,
+        "CO2": 0.8
+      }
+    },
+    {
+      "candidate_id": "dc7438725ca4893e99c8",
+      "pressure_bar": 0.1,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.020000000000000018,
+        "CO2": 0.98
+      }
+    },
+    {
+      "candidate_id": "5569614c9d0e4e5f90ed",
+      "pressure_bar": 1.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.98,
+        "CO2": 0.02
+      }
+    },
+    {
+      "candidate_id": "1ba2795864d4c4e11b18",
+      "pressure_bar": 1.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.8,
+        "CO2": 0.2
+      }
+    },
+    {
+      "candidate_id": "2fffdb83670195246a97",
+      "pressure_bar": 1.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.6,
+        "CO2": 0.4
+      }
+    },
+    {
+      "candidate_id": "0e91327ea0664f19e5c3",
+      "pressure_bar": 1.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.4,
+        "CO2": 0.6
+      }
+    },
+    {
+      "candidate_id": "f034872d5acb82ed4c1c",
+      "pressure_bar": 1.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.19999999999999996,
+        "CO2": 0.8
+      }
+    },
+    {
+      "candidate_id": "b2ecd2481f55f4e48ca2",
+      "pressure_bar": 1.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.020000000000000018,
+        "CO2": 0.98
+      }
+    },
+    {
+      "candidate_id": "88be2661f7ddd3aaeb8e",
+      "pressure_bar": 10.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.98,
+        "CO2": 0.02
+      }
+    },
+    {
+      "candidate_id": "12b2c1e12381180bc5bc",
+      "pressure_bar": 10.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.8,
+        "CO2": 0.2
+      }
+    },
+    {
+      "candidate_id": "136f0db0955d31fe2b6f",
+      "pressure_bar": 10.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.6,
+        "CO2": 0.4
+      }
+    },
+    {
+      "candidate_id": "0a7eec000b8e4e5df082",
+      "pressure_bar": 10.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.4,
+        "CO2": 0.6
+      }
+    },
+    {
+      "candidate_id": "44a98a22d7152cbd8115",
+      "pressure_bar": 10.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.19999999999999996,
+        "CO2": 0.8
+      }
+    },
+    {
+      "candidate_id": "f04d8352273345450c16",
+      "pressure_bar": 10.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.020000000000000018,
+        "CO2": 0.98
+      }
+    },
+    {
+      "candidate_id": "5d140bcc09b99cdb0259",
+      "pressure_bar": 100.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.98,
+        "CO2": 0.02
+      }
+    },
+    {
+      "candidate_id": "71e4320e121b7a104349",
+      "pressure_bar": 100.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.8,
+        "CO2": 0.2
+      }
+    },
+    {
+      "candidate_id": "a7501658c221c00fb499",
+      "pressure_bar": 100.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.6,
+        "CO2": 0.4
+      }
+    },
+    {
+      "candidate_id": "819ca4437eb85e15a17a",
+      "pressure_bar": 100.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.4,
+        "CO2": 0.6
+      }
+    },
+    {
+      "candidate_id": "ea940ab5691ddf6abe66",
+      "pressure_bar": 100.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.19999999999999996,
+        "CO2": 0.8
+      }
+    },
+    {
+      "candidate_id": "9d781e22671ce570dac1",
+      "pressure_bar": 100.0,
+      "temperature_K": 300.0,
+      "mixture": {
+        "CH4": 0.020000000000000018,
+        "CO2": 0.98
+      }
+    }
+  ],
+  "kernel": "rbf",
+  "alpha": 0.0001,
+  "optimizer_restarts": 100,
+  "beta": 0.02,
+  "pac_target": 0.9,
+  "holdout_count": 64,
+  "uptake_unit": "requires_verified_original_unit",
+  "physics_status": "requires_verified_structure_charges_forcefield_and_reservoir",
+  "deviations": [
+    "LAMMPS replaces RASPA",
+    "holdouts withheld from acquisition",
+    "fixed optimizer random seed",
+    "duplicate acquisition prevented"
+  ],
+  "candidate_count": 2499,
+  "initial_design_count": 54,
+  "physics_manifest": {
+    "status": "unresolved",
+    "structure": null,
+    "framework_charges": {
+      "source": "Castillo et al. as cited by the paper",
+      "asset": null
+    },
+    "framework_forcefield": "UFF",
+    "adsorbate_forcefield": "TraPPE",
+    "cutoff_A": null,
+    "electrostatics": null,
+    "reservoir": null,
+    "uptake_basis": null,
+    "uptake_unit": null
+  },
+  "simulation_engine": "LAMMPS"
+}

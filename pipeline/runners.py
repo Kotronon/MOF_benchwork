@@ -15,9 +15,14 @@ from parsers.lammps_log_parser import get_log, log_to_json, parse_lammps_log
 from pipeline.config import load_benchmark_data, save_benchmark_data
 from pipeline.evaluate import evaluate_isotherm
 from pipeline.lammps_inputs import gcmc_input_builder
+from pipeline.mixture_statistics import fieller_interval, mean_interval, precision_met
 
 
 def run_benchmark(materialized_plan: dict[str, Any]) -> dict[str, Any]:
+    runs = materialized_plan["files"].get("gcmc_runs", [])
+    if runs and runs[0].get("sampler") == "cbmc":
+        from engines.flexible_guest_runner import run_pressure_point
+        return run_pressure_point(runs[0], 1, 1, _discard_fraction(materialized_plan))
     gcmc_input = materialized_plan["files"]["gcmc_test_input"]
     log_file = Path(materialized_plan["working_directory"]) / "logs" / "gcmc_test.log"
     summary_file = Path(materialized_plan["working_directory"]) / "gcmc_test_summary.json"
@@ -58,6 +63,8 @@ def run_isotherm(materialized_plan: dict[str, Any], jobs: int = 1) -> dict[str, 
 
     isotherm_started_at = perf_counter()
     runs = materialized_plan["files"]["gcmc_runs"]
+    if jobs > 1 and any(run.get("sampler") == "cbmc" for run in runs):
+        raise ValueError("The LAMMPS-library CBMC backend runs serially (jobs=1); use separate processes for independent campaigns.")
     total_runs = len(runs)
     discard_fraction = _discard_fraction(materialized_plan)
     framework_atoms = _framework_atom_count(materialized_plan)
@@ -187,6 +194,9 @@ def _run_pressure_point(
     component_atom_counts: dict[str, int] | None = None,
     mixture: dict[str, float] | None = None,
 ) -> dict[str, Any]:
+    if run.get("sampler") == "cbmc":
+        from engines.flexible_guest_runner import run_pressure_point
+        return run_pressure_point(run, index, total_runs, discard_fraction)
     input_script = run["path"]
     pressure_bar = run["pressure_bar"]
     base_log_file = Path(run["log"])
@@ -288,6 +298,9 @@ def _existing_pressure_point_result(
     component_atom_counts: dict[str, int] | None = None,
     mixture: dict[str, float] | None = None,
 ) -> dict[str, Any] | None:
+    if run.get("sampler") == "cbmc":
+        from engines.flexible_guest_runner import run_pressure_point
+        return run_pressure_point(run, index, total_runs, discard_fraction)
     input_script = run["path"]
     pressure_bar = run["pressure_bar"]
     log_file = Path(run["log"])
@@ -438,7 +451,12 @@ def _aggregate_replicates(
     aggregated = []
     for pressure_bar, replicates in grouped.items():
         replicates.sort(key=lambda item: (int(item.get("replicate_index", 1)), int(item.get("seed", 0))))
-        values = [float(item["summary"]["mean_adsorbates"]) for item in replicates]
+        values = [
+            sum(float(c["mean_molecules"]) for c in item["summary"]["components"].values())
+            if len(item["summary"].get("components", {})) > 1
+            else float(item["summary"]["mean_adsorbates"])
+            for item in replicates
+        ]
         wall_times = [
             float(item["wall_time_seconds"])
             for item in replicates
@@ -465,12 +483,28 @@ def _aggregate_replicates(
         )
         sample_summary = replicates[0]["summary"]
         component_summary = _aggregate_component_summaries(replicates)
+        if component_summary:
+            seeds = [item.get("seed") for item in replicates]
+            if None in seeds or len(set(seeds)) != len(seeds):
+                raise ValueError("Mixture uncertainty requires distinct, identified seed replicates.")
+            statistics = [v for v in component_summary["components"].values() if v["gas_phase_mole_fraction"] > 0]
+            requested_pairs = config.get("selectivity_pairs")
+            if requested_pairs is not None and (not requested_pairs or set(requested_pairs) - set(component_summary["selectivity"])):
+                raise ValueError("selectivity_pairs must name existing component ratios.")
+            mixture_config = {"relative_ci95_target": 0.2, **config}
+            for statistic in [*component_summary["components"].values(), *component_summary["selectivity"].values()]:
+                statistic["precision_met"] = precision_met(statistic, replicate_count, mixture_config)
+            statistics += [v for pair,v in component_summary["selectivity"].items()
+                           if (pair in requested_pairs if requested_pairs is not None else pair.split("/") == sorted(pair.split("/")))
+                           and all(component_summary["components"][c]["gas_phase_mole_fraction"] > 0 for c in pair.split("/"))]
+            converged = all(statistic["precision_met"] for statistic in statistics)
         aggregated.append(
             {
                 "pressure_bar": pressure_bar,
                 "replicate_count": replicate_count,
                 "seeds": [int(item.get("seed", 12345)) for item in replicates],
                 "converged": converged,
+                **({"precision_met": converged, "convergence_scope": "between_seed_precision_only"} if component_summary else {}),
                 "mean_wall_time_seconds": mean(wall_times) if wall_times else None,
                 "total_wall_time_seconds": sum(wall_times) if wall_times else None,
                 "summary": {
@@ -501,7 +535,10 @@ def _convergence_report(
     config = convergence_config or {}
     converged_count = sum(bool(result["converged"]) for result in results)
     return {
-        "criterion": "two-sided_95_percent_t_interval_relative_half_width",
+        "criterion": ("component_t_and_selectivity_fieller_relative_half_width"
+                      if any("components" in r["summary"] for r in results)
+                      else "two-sided_95_percent_t_interval_relative_half_width"),
+        "interpretation": "Between-seed precision; not a proof of equilibrium or time-series convergence.",
         "minimum_replicates": int(config.get("minimum_replicates", 3)),
         "relative_ci95_target": float(config.get("relative_ci95_target", 0.05)),
         "pressure_point_count": len(results),
@@ -518,6 +555,9 @@ def _convergence_report(
                 "ci95_half_width_adsorbates": result["summary"]["ci95_half_width_adsorbates"],
                 "relative_ci95_half_width": result["summary"]["relative_ci95_half_width"],
                 "converged": result["converged"],
+                **({"components": result["summary"]["components"],
+                    "selectivity": result["summary"]["selectivity"],
+                    "precision_met": result["converged"]} if "components" in result["summary"] else {}),
             }
             for result in results
         ],
@@ -677,18 +717,27 @@ def _aggregate_component_summaries(replicates: list[dict[str, Any]]) -> dict[str
         return {}
 
     component_names = list(replicates[0]["summary"]["components"])
+    if any(set(item["summary"].get("components", {})) != set(component_names) for item in replicates):
+        raise ValueError("Mixture replicates must contain the same components.")
+    t_critical = _t_critical_975(len(replicates) - 1) if len(replicates) > 1 else None
     components: dict[str, dict[str, Any]] = {}
     for component in component_names:
         values = [
             float(replicate["summary"]["components"][component]["mean_molecules"])
             for replicate in replicates
         ]
+        if any(not math.isfinite(value) or value < 0 for value in values):
+            raise ValueError("Mixture component means must be finite and nonnegative.")
         component_sample = replicates[0]["summary"]["components"][component]
+        fractions = [item["summary"]["components"][component].get("gas_phase_mole_fraction") for item in replicates]
+        if any(value != fractions[0] for value in fractions):
+            raise ValueError("Cannot aggregate mixture seeds with different gas compositions.")
         component_mean = mean(values)
         components[component] = {
             **component_sample,
             "mean_molecules": component_mean,
             "replicate_mean_molecules": values,
+            **mean_interval(values, t_critical),
             "standard_deviation_molecules": stdev(values) if len(values) >= 2 else None,
             "standard_error_molecules": (
                 stdev(values) / math.sqrt(len(values)) if len(values) >= 2 else None
@@ -707,9 +756,21 @@ def _aggregate_component_summaries(replicates: list[dict[str, Any]]) -> dict[str
         component: float(summary.get("gas_phase_mole_fraction", 0.0) or 0.0)
         for component, summary in components.items()
     }
+    if any(not math.isfinite(y) or y < 0 for y in mixture.values()) or not math.isclose(sum(mixture.values()), 1.0, abs_tol=1e-8):
+        raise ValueError("Mixture gas fractions must be positive and sum to one.")
+    selectivity = _selectivity_from_components(components, mixture)
+    for pair, statistic in selectivity.items():
+        left, right = pair.split("/")
+        if mixture[left] == 0 or mixture[right] == 0:
+            statistic.update(value=None, ci95_lower=None, ci95_upper=None, ci95_half_width=None,
+                             relative_ci95_half_width=None, ci95_status="undefined_gas_fraction")
+            continue
+        scale = mixture[right] / mixture[left]
+        statistic.update(fieller_interval(components[left]["replicate_mean_molecules"],
+                                         components[right]["replicate_mean_molecules"], scale, t_critical))
     return {
         "components": components,
-        "selectivity": _selectivity_from_components(components, mixture),
+        "selectivity": selectivity,
     }
 
 

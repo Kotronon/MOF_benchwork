@@ -45,16 +45,25 @@ class ForcefieldResolver:
         if missing:
             raise LookupError(f"Force field {framework!r} is missing files: {', '.join(missing)}.")
 
+        # Explicit definitions/parameter bundles share exactly the framework path of A.
+        explicit_files = forcefield_config.get("files", {})
+        if explicit_files:
+            base_files.update({k: Path(v) for k, v in explicit_files.items()})
+            if any(not v.is_file() for v in base_files.values()):
+                raise LookupError("Explicit forcefield files are missing.")
+        definitions = {k.upper(): v for k, v in forcefield_config.get("definitions", {}).items()}
         adsorbate_files = {}
         adsorbate_sources = {}
         adsorbate_parameter_files = []
         adsorbate_parameter_keys = set()
         for component in components:
             component_name = component.upper()
-            component_path = forcefield_dir / f"{component_name}.def"
+            component_path = Path(definitions[component_name]) if component_name in definitions else forcefield_dir / f"{component_name}.def"
+            if component_name in definitions and not component_path.is_file():
+                raise LookupError(f"Explicit molecule definition missing: {component_path}")
             if component_path.exists():
                 adsorbate_files[component_name] = str(component_path)
-                adsorbate_sources[component_name] = "crafted"
+                adsorbate_sources[component_name] = "explicit_definition" if component_name in definitions else "crafted"
                 continue
 
             raspa_adsorbate = self._resolve_raspa2_adsorbate(component_name)
@@ -74,6 +83,15 @@ class ForcefieldResolver:
                 )
                 adsorbate_parameter_keys.add(parameter_key)
 
+        # A fallback bundle may also contain other gases with different models.
+        # Import only the types owned by the components resolved from that bundle.
+        for bundle in adsorbate_parameter_files:
+            bundle["components"] = sorted({
+                component
+                for component in adsorbate_files
+                if adsorbate_sources[component] == bundle["source"]
+            })
+
         return {
             "framework": framework,
             "source": "crafted",
@@ -82,7 +100,7 @@ class ForcefieldResolver:
             "files": {name: str(path) for name, path in base_files.items()},
             "adsorbates": adsorbate_files,
             "adsorbate_sources": adsorbate_sources,
-            "adsorbate_parameter_files": adsorbate_parameter_files,
+            "adsorbate_parameter_files": adsorbate_parameter_files + forcefield_config.get("parameter_files", []),
         }
 
     def _resolve_raspa2_adsorbate(self, component_name: str) -> dict[str, Any] | None:

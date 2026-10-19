@@ -117,7 +117,10 @@ def initial_candidate_ids(candidates: list[dict[str, Any]]) -> list[str]:
 
 
 def select_next_candidate(campaign_state: dict[str, Any]) -> dict[str, Any] | None:
-    """Select the next pending candidate without requiring scikit-learn."""
+    """Use GP acquisition for new campaigns; retain maximin for legacy states."""
+    if campaign_state.get("strategy") == "noise_aware_component_gp":
+        from modules.module_b_active_learning import recommend
+        return recommend(campaign_state).get("candidate")
     candidates = campaign_state.get("candidates", [])
     completed = {
         result.get("candidate_id")
@@ -200,39 +203,31 @@ def mixture_results_from_isotherm_summary(
     isotherm_summary: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Extract compact campaign results from a Module-B isotherm summary."""
+    from modules.module_b_profiles import point as state_point
     results = []
-    for point in isotherm_summary.get("results", []):
-        summary = point.get("summary", {})
+    for p in isotherm_summary.get("results", []):
+        summary = p.get("summary", {})
         components = summary.get("components", {})
-        if not {"CO2", "N2"}.issubset(components):
+        if len(components) < 2:
             continue
-        co2 = components["CO2"]
-        n2 = components["N2"]
-        y_co2 = co2.get("gas_phase_mole_fraction")
-        y_n2 = n2.get("gas_phase_mole_fraction")
-        pressure = point.get("pressure_bar")
-        if pressure is None or y_co2 is None or y_n2 is None:
-            continue
-        selectivity = summary.get("selectivity", {}).get("CO2/N2", {})
-        results.append(
-            {
-                "candidate_id": f"p{_token(float(pressure))}_yco2_{_token(float(y_co2))}",
-                "pressure_bar": float(pressure),
-                "mixture": {
-                    "CO2": float(y_co2),
-                    "N2": float(y_n2),
-                },
-                "mean_CO2": co2.get("mean_molecules"),
-                "mean_N2": n2.get("mean_molecules"),
-                "standard_error_CO2": co2.get("standard_error_molecules"),
-                "standard_error_N2": n2.get("standard_error_molecules"),
-                "selectivity_CO2_N2": selectivity.get("value"),
-                "replicate_count": point.get("replicate_count"),
-                "seeds": point.get("seeds", []),
-                "converged": point.get("converged"),
-                "status": "completed",
-            }
-        )
+        mixture = {c: float(s["gas_phase_mole_fraction"]) for c,s in components.items()}
+        temperature = p.get("temperature_K", isotherm_summary.get("temperature_K"))
+        row = {"pressure_bar": float(p["pressure_bar"]), "mixture": mixture,
+               "components": components, "selectivity": summary.get("selectivity", {}),
+               "replicate_count": p.get("replicate_count"), "seeds": p.get("seeds", []),
+               "converged": p.get("converged"), "total_wall_time_seconds": p.get("total_wall_time_seconds"), "status": "completed"}
+        if temperature is not None:
+            row.update(state_point(p["pressure_bar"],temperature,mixture))
+        elif set(mixture) == {"CO2", "N2"}:
+            row["candidate_id"] = f"p{_token(p['pressure_bar'])}_yco2_{_token(mixture['CO2'])}"
+        else:
+            row["candidate_id"] = f"p{_token(p['pressure_bar'])}_" + "_".join(f"{c}_{_token(y)}" for c,y in sorted(mixture.items()))
+        for c,s in components.items():
+            row[f"mean_{c}"] = s.get("mean_molecules")
+            row[f"standard_error_{c}"] = s.get("standard_error_molecules")
+        for pair,s in row["selectivity"].items():
+            row["selectivity_" + pair.replace("/","_")] = s.get("value")
+        results.append(row)
     return results
 
 
@@ -241,21 +236,20 @@ def append_mixture_result_csv(
     rows: list[dict[str, Any]],
 ) -> Path:
     """Write compact mixture/selectivity results for active-learning campaigns."""
-    fieldnames = [
-        "candidate_id",
-        "pressure_bar",
-        "y_CO2",
-        "y_N2",
-        "mean_CO2",
-        "mean_N2",
-        "selectivity_CO2_N2",
-    ]
+    names = sorted({c for r in rows for c in r.get("mixture", {})})
+    if not names:
+        names = sorted({key[2:] for r in rows for key in r if key.startswith("y_")})
+    fieldnames = ["candidate_id", "pressure_bar", "temperature_K"] + [f"y_{c}" for c in names] + [f"mean_{c}" for c in names]
+    fieldnames += sorted({key for r in rows for key in r if key.startswith("selectivity_")})
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(rows)
+        for row in rows:
+            flat = {key: row.get(key) for key in fieldnames}
+            flat.update({f"y_{c}": y for c,y in row.get("mixture", {}).items()})
+            writer.writerow(flat)
     return output
 
 

@@ -117,6 +117,8 @@ def summarize_component_adsorption(
         "sample_count": len(sampled_rows),
         "inserted": any(component["max_molecules"] > 0.0 for component in components.values()),
         "components": components,
+        "mean_adsorbates": sum(c["mean_molecules"] for c in components.values()),
+        "max_adsorbates": max((sum(float(r[f"v_n{_component_id(c)}"]) for c in components) for r in sampled_rows), default=0.),
         "selectivity": _selectivity(components, mixture),
         "warnings": warnings,
     }

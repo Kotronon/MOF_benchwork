@@ -1,0 +1,3 @@
+# Optional Module B GP acquisition and offline validation.
+# Core simulation/evaluation dependencies remain in requirements.txt.
+scikit-learn>=1.7,<2
