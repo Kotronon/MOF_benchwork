@@ -49,7 +49,7 @@
             "name": "mace_mp_0a_small",
             "model": "small",
             "device": "cpu",
-            "default_dtype": "float64",
+            "default_dtype": "float32",
             "dispersion": false
           }
         ],
@@ -64,8 +64,8 @@
               "file_name": "umof_models.zip",
               "member_path": "umof_models/uMOF-MH.model"
             },
-            "device": "cuda",
-            "default_dtype": "float64",
+            "device": "cpu",
+            "default_dtype": "float32",
             "dispersion": false,
             "reference_level": "uMOF r2SCAN-D4",
             "head": "r2scan+d4"
@@ -80,8 +80,8 @@
               "file_name": "umof_models.zip",
               "member_path": "umof_models/uMOF-POLAR.model"
             },
-            "device": "cuda",
-            "default_dtype": "float64",
+            "device": "cpu",
+            "default_dtype": "float32",
             "dispersion": false,
             "reference_level": "uMOF r2SCAN-D4",
             "head": "r2scan+d4",
@@ -103,7 +103,7 @@
     "cell_representation": "conventional",
     "minimum_image_policy": "error",
     "cutoff_A": 12.8,
-    "unit_cells": "auto",
+    "unit_cells": [1, 1, 1],
     "seeds": [
       12345
     ]

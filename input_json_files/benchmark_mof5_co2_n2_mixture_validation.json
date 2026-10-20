@@ -48,7 +48,7 @@
     "kspace_accuracy": 1e-4,
     "unit_cells": [1, 1, 1],
     "seeds": [12345, 23456, 34567],
-    "cycles": 20000,
+    "cycles": 50000,
     "initialization_cycles": 5000
   },
   "convergence": {
@@ -67,8 +67,8 @@
     "run_id": "mof5_co2_n2_validation_pilot",
     "overwrite": false,
     "save_logs": true,
-    "save_dumps": false,
-    "dump_every_steps": 1000,
+    "save_dumps": true,
+    "dump_every_steps": 5000,
     "save_restarts": true,
     "restart_every_steps": 50000,
     "save_plots": true,
