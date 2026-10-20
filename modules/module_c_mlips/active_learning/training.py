@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 import subprocess
 from typing import Any, Sequence
@@ -11,6 +12,109 @@ import numpy as np
 
 from modules.module_c_mlips.potential_backends.calculators import build_ase_calculator
 from pipeline.config import save_benchmark_data
+
+
+def split_multisystem_labels(
+    labels: Sequence[dict[str, Any]],
+    *,
+    unseen_materials: set[str],
+    unseen_gas_compositions: set[str],
+    validation_materials: set[str] | None = None,
+    validation_gas_compositions: set[str] | None = None,
+) -> dict[str, list[str]]:
+    """Split labeled configurations by framework and normalized gas mixture.
+
+    ``gas_composition`` may be a species string or a species-to-fraction
+    mapping. Mixture fractions are normalized, so equivalent ratios have the
+    same key. Train, validation, and test IDs are disjoint; the two additional
+    test lists preserve the unseen-framework and unseen-mixture slices, which
+    may overlap each other.
+    """
+    validation_materials = validation_materials or set()
+    validation_gas_compositions = validation_gas_compositions or set()
+    overlap_materials = unseen_materials & validation_materials
+    overlap_compositions = unseen_gas_compositions & validation_gas_compositions
+    if overlap_materials or overlap_compositions:
+        raise ValueError(
+            "Validation and test holdouts must be disjoint: "
+            f"materials={sorted(overlap_materials)}, "
+            f"gas_compositions={sorted(overlap_compositions)}"
+        )
+
+    unseen_mof_ids: list[str] = []
+    unseen_mixture_ids: list[str] = []
+    validation_ids: list[str] = []
+    training_ids: list[str] = []
+    seen_ids: set[str] = set()
+    for label in labels:
+        candidate_id = str(label["candidate_id"])
+        if candidate_id in seen_ids:
+            raise ValueError(f"Duplicate multi-system label ID: {candidate_id}.")
+        seen_ids.add(candidate_id)
+        material = str(label.get("material", label.get("material_id", ""))).strip()
+        if not material:
+            raise ValueError(f"Label {candidate_id} is missing material metadata.")
+        composition = _gas_composition_key(
+            label.get("gas_composition", label.get("mixture", label.get("adsorbate"))),
+            candidate_id,
+        )
+        is_unseen_material = material in unseen_materials
+        is_unseen_mixture = composition in unseen_gas_compositions
+        if is_unseen_material:
+            unseen_mof_ids.append(candidate_id)
+        if is_unseen_mixture:
+            unseen_mixture_ids.append(candidate_id)
+        if is_unseen_material or is_unseen_mixture:
+            continue
+        if (
+            material in validation_materials
+            or composition in validation_gas_compositions
+        ):
+            validation_ids.append(candidate_id)
+        else:
+            training_ids.append(candidate_id)
+
+    if not training_ids or not validation_ids:
+        raise ValueError(
+            "Multi-system grouped splitting requires non-empty training and "
+            "validation sets."
+        )
+    if unseen_materials and not unseen_mof_ids:
+        raise ValueError("No labels found for the requested unseen materials.")
+    if unseen_gas_compositions and not unseen_mixture_ids:
+        raise ValueError("No labels found for the requested unseen gas compositions.")
+    test_ids = sorted(set(unseen_mof_ids) | set(unseen_mixture_ids))
+    if not test_ids:
+        raise ValueError("At least one unseen material or gas composition is required.")
+    return {
+        "train": sorted(training_ids),
+        "validation": sorted(validation_ids),
+        "test": test_ids,
+        "test_unseen_materials": sorted(unseen_mof_ids),
+        "test_unseen_gas_compositions": sorted(unseen_mixture_ids),
+    }
+
+
+def _gas_composition_key(value: Any, candidate_id: str) -> str:
+    if isinstance(value, str):
+        composition = {value.strip().upper(): 1.0}
+    elif isinstance(value, dict):
+        composition = {
+            str(species).strip().upper(): float(fraction)
+            for species, fraction in value.items()
+        }
+    else:
+        raise ValueError(f"Label {candidate_id} is missing gas-composition metadata.")
+    if not composition or any(
+        not species or not math.isfinite(fraction) or fraction <= 0.0
+        for species, fraction in composition.items()
+    ):
+        raise ValueError(f"Label {candidate_id} has an invalid gas composition.")
+    total = sum(composition.values())
+    normalized = {
+        species: fraction / total for species, fraction in composition.items()
+    }
+    return json.dumps(normalized, sort_keys=True, separators=(",", ":"))
 
 
 def write_mace_datasets(

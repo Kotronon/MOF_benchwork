@@ -180,6 +180,24 @@ defined, configured pair. This measures statistical precision, not complete
 equilibrium convergence. Zero-fraction pairs are reported undefined and do not
 prevent precision assessment of the active subsystem.
 
+For an existing Module-B run with raw LAMMPS logs, generate a time-series report
+without rerunning or modifying the simulation:
+
+```bash
+python -m analysis.module_b_convergence_report \
+  outputs/module_B_mixture_selectivity/runs/RUN_NAME
+```
+
+The report writes JSON, CSV and Markdown under
+`RUN_NAME/analysis/module_b_convergence/`. Per-seed uncertainties use
+autocorrelation-informed batch means combined with independent-seed variation;
+selectivity intervals use paired-seed Fieller inference with the same uncertainty
+propagation. By
+default, it compares the first 20,000 production steps with the remaining last
+30,000 steps, targets 20% relative interval half-width and uses 0.05
+molecules/cell as the small-loading absolute-difference floor. These operational
+thresholds are recorded in the report and do not prove equilibrium.
+
 References must match material, component set, composition, temperature, pressure
 range and known adsorption basis. Total mixture uptake is never compared as CO2
 uptake to a pure-gas isotherm. The corrected MOF-5 pilot stays in its original

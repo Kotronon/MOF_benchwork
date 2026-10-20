@@ -23,12 +23,50 @@ from modules.module_c_mlips.active_learning.training import (
     build_mace_finetune_commands,
     classify_validation_metrics,
     execute_mace_commands,
+    split_multisystem_labels,
     write_mace_datasets,
 )
 from modules.module_c_mlips.active_learning.workflow import _extend_cutoff_test, run_active_learning
 
 
 class ActiveLearningTests(unittest.TestCase):
+    def test_multisystem_split_holds_out_frameworks_and_mixture_ratios(self) -> None:
+        labels = [
+            {"candidate_id": "train", "material": "MOF-A", "gas_composition": "CO2"},
+            {"candidate_id": "validation", "material": "MOF-A", "gas_composition": "N2"},
+            {"candidate_id": "unseen_mof", "material": "MOF-B", "gas_composition": "CO2"},
+            {
+                "candidate_id": "unseen_ratio",
+                "material": "MOF-A",
+                "gas_composition": {"CO2": 0.25, "N2": 0.75},
+            },
+        ]
+
+        splits = split_multisystem_labels(
+            labels,
+            unseen_materials={"MOF-B"},
+            unseen_gas_compositions={'{"CO2":0.25,"N2":0.75}'},
+            validation_gas_compositions={'{"N2":1.0}'},
+        )
+
+        self.assertEqual(splits["train"], ["train"])
+        self.assertEqual(splits["validation"], ["validation"])
+        self.assertEqual(splits["test"], ["unseen_mof", "unseen_ratio"])
+        self.assertEqual(splits["test_unseen_materials"], ["unseen_mof"])
+        self.assertEqual(
+            splits["test_unseen_gas_compositions"], ["unseen_ratio"]
+        )
+        self.assertFalse(set(splits["train"]) & set(splits["test"]))
+
+    def test_multisystem_split_rejects_holdout_overlap(self) -> None:
+        with self.assertRaisesRegex(ValueError, "holdouts must be disjoint"):
+            split_multisystem_labels(
+                [],
+                unseen_materials={"MOF-A"},
+                unseen_gas_compositions=set(),
+                validation_materials={"MOF-A"},
+            )
+
     def test_cutoff_gate_uses_energy_per_atom_and_maximum_force_delta(self) -> None:
         results = {
             400: {"energy_ev": -100.0, "forces_ev_per_A": [[0.0, 0.0, 0.0]]},
