@@ -12,6 +12,28 @@ Install the core Python dependencies with pip inside the active environment:
 python -m pip install -r requirements.txt
 ```
 
+### Git LFS for uMOF archives
+
+The optional uMOF ZIP archives are tracked with Git LFS because GitHub rejects
+regular Git files larger than 100 MB. On macOS, install/configure Git LFS and
+verify the archive rules with:
+
+```bash
+bash scripts/setup_git_lfs.sh
+```
+
+If the ZIPs have already been committed as regular Git blobs, convert the
+current local branch history before pushing. This rewrites local commit IDs, so
+run it only with a clean working tree and before publishing those commits:
+
+```bash
+git lfs migrate import \
+  --include="external/umof_data.zip,external/umof_models.zip" \
+  --include-ref="refs/heads/$(git branch --show-current)"
+git lfs ls-files
+git push
+```
+
 `requirements.txt` covers Python packages only. LAMMPS, OVITO, and CP2K are
 external executables or Conda packages and must be installed separately. Module
 C MLIP-MC dependencies are pinned in `requirements-mlip-mc.txt` and can be set
