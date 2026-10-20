@@ -1,0 +1,2 @@
+external/umof_data.zip filter=lfs diff=lfs merge=lfs -text
+external/umof_models.zip filter=lfs diff=lfs merge=lfs -text
