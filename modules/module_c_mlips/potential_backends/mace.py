@@ -30,7 +30,7 @@ class MaceBackend(PotentialBackend):
     backend_name: str = "mace_mp"
     model: str | Path = "medium"
     device: str = "cpu"
-    default_dtype: str = "float64"
+    default_dtype: str = "float32"
     dispersion: bool = False
     head: str | None = None
     model_type: str | None = None
@@ -61,12 +61,15 @@ class MaceBackend(PotentialBackend):
 
         started = perf_counter()
         try:
+            print(f"Number of atoms: {len(atoms)}")
+            print(f"Cell: {atoms.cell}")
+            print(f"PBC: {atoms.pbc}")
             energy_ev = float(atoms.get_potential_energy())
             forces = atoms.get_forces().tolist()
         except Exception as exc:
             raise RuntimeError(
                 "MACE evaluation failed for configuration "
-                f"{configuration.configuration_id!r}."
+                f"{configuration.configuration_id!r}: {type(exc).__name__}: {exc}."
             ) from exc
         runtime_seconds = perf_counter() - started
 

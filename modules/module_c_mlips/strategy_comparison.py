@@ -61,6 +61,12 @@ def run_strategy_comparison(
         potential,
         comparison,
     )
+    for config in configurations:
+        print(
+            config.configuration_id,
+            len(config.atoms),
+            config.atoms.cell.lengths(),
+        )
     excluded = set(potential.get("exclude_regions", [])) | set(comparison.get("exclude_regions", []))
     configurations = [item for item in configurations if item.region not in excluded]
     if not configurations:
@@ -239,8 +245,8 @@ def _evaluate_backends(
     progress_path: Path | None = None,
 ) -> list[dict[str, Any]]:
     evaluations = []
-    for configuration in configurations:
-        for backend in backends:
+    for backend  in backends:
+        for configuration in configurations :
             try:
                 result = backend.evaluate(configuration)
             except Exception as exc:
