@@ -4,6 +4,8 @@ import importlib.util
 import math
 import os
 import unittest
+from unittest.mock import patch, Mock
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -89,6 +91,40 @@ class MaceBackendTests(unittest.TestCase):
 
         self.assertIs(backend.calculator, calculator)
         self.assertEqual(calculator.calculation_count, 1)
+
+    def test_forwards_head_and_polar_model_type(self) -> None:
+        backend = MaceBackend(backend_name="umof_polar", model="polar.model",
+                              head="r2scan+d4", model_type="PolarMACE")
+        with patch("modules.module_c_mlips.potential_backends.mace.build_ase_calculator") as build:
+            backend._get_calculator()
+        spec = build.call_args.args[0]
+        self.assertEqual(spec["head"], "r2scan+d4")
+        self.assertEqual(spec["model_type"], "PolarMACE")
+
+    def test_calculator_selects_polar_loader_and_periodic_electrostatics(self) -> None:
+        from modules.module_c_mlips.potential_backends.calculators import build_ase_calculator
+
+        loaders = SimpleNamespace(mace_mp=Mock(), mace_polar=Mock())
+        with patch.dict("sys.modules", {"mace.calculators": loaders}), patch(
+            "modules.module_c_mlips.potential_backends.calculators.ensure_umof_model_asset"
+        ), patch("modules.module_c_mlips.dependencies.ensure_mace_polar_dependencies"):
+            result = build_ase_calculator({"backend": "mace-torch", "name": "umof_polar",
+                                           "model": "polar.model", "device": "cpu"})
+        self.assertIs(result, loaders.mace_polar.return_value)
+        self.assertEqual(loaders.mace_polar.call_args.kwargs["head"], "r2scan+d4")
+        self.assertEqual(loaders.mace_polar.call_args.kwargs["pbc_handling"], "auto")
+        loaders.mace_mp.assert_not_called()
+
+    def test_calculator_selects_umof_mh_target_head(self) -> None:
+        from modules.module_c_mlips.potential_backends.calculators import build_ase_calculator
+
+        loaders = SimpleNamespace(mace_mp=Mock(), mace_polar=Mock())
+        with patch.dict("sys.modules", {"mace.calculators": loaders}), patch(
+            "modules.module_c_mlips.potential_backends.calculators.ensure_umof_model_asset"
+        ):
+            build_ase_calculator({"backend": "mace-torch", "name": "umof_mh", "model": "mh.model"})
+        self.assertEqual(loaders.mace_mp.call_args.kwargs["head"], "r2scan+d4")
+        loaders.mace_polar.assert_not_called()
 
     def test_rejects_invalid_dtype(self) -> None:
         with self.assertRaisesRegex(ValueError, "default_dtype"):

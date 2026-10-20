@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import json
 import math
+import logging
+import re
+import threading
+import time
+import zipfile
 from pathlib import Path
 import subprocess
 from typing import Any, Sequence
@@ -251,6 +256,66 @@ def build_mace_finetune_commands(
     return commands
 
 
+def prune_mace_checkpoints(directory: str | Path, *, keep: int = 3) -> int:
+    """Keep recent restart states and best validation states, per run and stage."""
+    if keep < 2:
+        raise ValueError("Keep at least two restart checkpoints.")
+    directory = Path(directory)
+    groups: dict[tuple[str, str], list[tuple[int, Path]]] = {}
+    for path in directory.glob("*.pt"):
+        match = re.fullmatch(r"(.+)_epoch-(\d+)(_swa)?\.pt", path.name)
+        if match:
+            groups.setdefault((match[1], match[3] or ""), []).append((int(match[2]), path))
+    removed = 0
+    for (tag, stage), checkpoints in groups.items():
+        checkpoints.sort(reverse=True)
+        if len(checkpoints) <= keep:
+            continue
+        # Only prune behind several complete, settled files. Never delete a file
+        # while MACE is writing it, or remove fallback states behind a corrupt save.
+        recent = [(epoch, path) for epoch, path in checkpoints
+                  if time.time() - path.stat().st_mtime >= 60][:keep]
+        if len(recent) < keep:
+            continue
+        try:
+            for _, path in recent:
+                if time.time() - path.stat().st_mtime < 60:
+                    break
+                with zipfile.ZipFile(path) as archive:
+                    if archive.testzip() is not None:
+                        break
+            else:
+                preserved = {path for _, path in recent}
+                log = directory.parent / "logs" / f"{tag}.log"
+                if not log.exists():
+                    continue  # Cannot identify the best validation state safely.
+                losses = []
+                for line in log.read_text(errors="replace").splitlines():
+                    match = re.search(r"Epoch (\d+):.*loss=([\d.eE+-]+)", line)
+                    if match:
+                        losses.append((float(match[2]), int(match[1])))
+                available = {epoch: path for epoch, path in checkpoints}
+                best = [(loss, epoch) for loss, epoch in losses if epoch in available]
+                if best:
+                    preserved.add(available[min(best)[1]])
+                for _, path in checkpoints:
+                    if path not in preserved and time.time() - path.stat().st_mtime >= 60:
+                        path.unlink()
+                        removed += 1
+        except (OSError, zipfile.BadZipFile):
+            logging.exception("Checkpoint cleanup skipped for %s", directory)
+    return removed
+
+
+def _checkpoint_cleanup_loop(directory: Path, stopped: threading.Event) -> None:
+    while not stopped.is_set():
+        try:
+            prune_mace_checkpoints(directory)
+        except Exception:
+            logging.exception("Checkpoint cleanup failed for %s", directory)
+        stopped.wait(60)
+
+
 def execute_mace_commands(commands: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     results = []
     for entry in commands:
@@ -266,7 +331,20 @@ def execute_mace_commands(commands: Sequence[dict[str, Any]]) -> list[dict[str, 
             current["command"].extend(["--eval_interval", "1"])
         workdir = Path(current["working_directory"])
         workdir.mkdir(parents=True, exist_ok=True)
-        completed = subprocess.run(current["command"], capture_output=True, text=True)
+        stopped = threading.Event()
+        checkpoint_directory = workdir / "checkpoints"
+        if "--checkpoints_dir" in current["command"]:
+            checkpoint_directory = Path(current["command"][current["command"].index("--checkpoints_dir") + 1])
+        cleaner = threading.Thread(
+            target=_checkpoint_cleanup_loop, args=(checkpoint_directory, stopped), daemon=True,
+        )
+        cleaner.start()
+        try:
+            completed = subprocess.run(current["command"], capture_output=True, text=True)
+        finally:
+            stopped.set()
+            cleaner.join()
+            prune_mace_checkpoints(checkpoint_directory)
         current["returncode"] = completed.returncode
         current["status"] = "completed" if completed.returncode == 0 else "failed"
         log_path = workdir / "training.log"

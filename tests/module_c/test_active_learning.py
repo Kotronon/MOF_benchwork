@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import zipfile
 from pathlib import Path
 import subprocess
 import tempfile
@@ -23,6 +25,7 @@ from modules.module_c_mlips.active_learning.training import (
     build_mace_finetune_commands,
     classify_validation_metrics,
     execute_mace_commands,
+    prune_mace_checkpoints,
     split_multisystem_labels,
     write_mace_datasets,
 )
@@ -426,6 +429,32 @@ class ActiveLearningTests(unittest.TestCase):
                 self.assertEqual(executed[executed.index("--eval_interval") + 1], "1")
                 self.assertEqual(entry["command"], original)
                 self.assertEqual(result[0]["status"], "completed")
+
+    def test_cleanup_preserves_recent_best_and_in_progress_checkpoints(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            checkpoints = root / "checkpoints"
+            checkpoints.mkdir()
+            (root / "logs").mkdir()
+            (root / "logs/run.log").write_text("Epoch 1: loss=0.1\nEpoch 2: loss=1.0\n")
+            for epoch in range(7):
+                path = checkpoints / f"run_epoch-{epoch}.pt"
+                with zipfile.ZipFile(path, "w") as archive:
+                    archive.writestr("state", "checkpoint")
+                os.utime(path, (1, 1))
+            pending = checkpoints / "run_epoch-7.pt"
+            pending.write_text("still writing")
+            unrelated = checkpoints / "notes.pt"
+            unrelated.write_text("leave alone")
+            self.assertEqual(prune_mace_checkpoints(checkpoints), 3)
+            self.assertEqual({p.name for p in checkpoints.iterdir()}, {
+                "run_epoch-1.pt", "run_epoch-4.pt", "run_epoch-5.pt",
+                "run_epoch-6.pt", "run_epoch-7.pt", "notes.pt",
+            })
+            # An incomplete settled save prevents pruning fallback checkpoints.
+            os.utime(pending, (1, 1))
+            self.assertEqual(prune_mace_checkpoints(checkpoints), 0)
+            self.assertTrue((checkpoints / "run_epoch-4.pt").exists())
 
     def test_validation_thresholds_have_pass_warning_and_failure(self) -> None:
         settings = _ThresholdSettings()

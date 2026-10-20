@@ -61,6 +61,10 @@ def run_strategy_comparison(
         potential,
         comparison,
     )
+    excluded = set(potential.get("exclude_regions", [])) | set(comparison.get("exclude_regions", []))
+    configurations = [item for item in configurations if item.region not in excluded]
+    if not configurations:
+        raise ValueError("No strategy-comparison configurations remain after applying exclude_regions.")
     backend_specs = _strategy_backend_specs(
         strategies,
         potential,
@@ -71,7 +75,10 @@ def run_strategy_comparison(
 
     backends = _build_backends(backend_specs, run_plan, workdir / "backends")
     started = perf_counter()
-    evaluations = _evaluate_backends(configurations, backends)
+    evaluations = _evaluate_backends(
+        configurations, backends,
+        progress_path=workdir / "results" / "strategy_comparison_progress.json",
+    )
     strategy_rows = _summarize_strategies(
         strategies,
         backend_specs,
@@ -228,11 +235,26 @@ def _strategy_backend_specs(
 def _evaluate_backends(
     configurations: Sequence[InteractionConfiguration],
     backends: Sequence[PotentialBackend],
+    *,
+    progress_path: Path | None = None,
 ) -> list[dict[str, Any]]:
     evaluations = []
     for configuration in configurations:
         for backend in backends:
-            result = backend.evaluate(configuration)
+            try:
+                result = backend.evaluate(configuration)
+            except Exception as exc:
+                if progress_path is not None:
+                    save_benchmark_data(progress_path, {
+                        "status": "failed",
+                        "failed_configuration_id": configuration.configuration_id,
+                        "failed_backend": backend.name,
+                        "error": str(exc),
+                        "evaluations": evaluations,
+                    })
+                raise RuntimeError(
+                    f"Strategy comparison failed for {configuration.configuration_id!r} with {backend.name!r}."
+                ) from exc
             evaluations.append(
                 {
                     "configuration_id": configuration.configuration_id,
@@ -246,6 +268,10 @@ def _evaluate_backends(
                     "metadata": result.metadata,
                 }
             )
+            if progress_path is not None:
+                save_benchmark_data(progress_path, {"status": "in_progress", "evaluations": evaluations})
+    if progress_path is not None:
+        save_benchmark_data(progress_path, {"status": "completed", "evaluations": evaluations})
     return evaluations
 
 

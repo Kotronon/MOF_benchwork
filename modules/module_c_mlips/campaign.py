@@ -18,6 +18,7 @@ from modules.module_c_mlips.datasets.common import load_host_guest_system
 from modules.module_c_mlips.dependencies import (
     ensure_flames_dependencies,
     ensure_mlip_mc_dependencies,
+    ensure_mace_polar_dependencies,
 )
 from modules.module_c_mlips.model_assets import (
     ensure_model_asset,
@@ -68,6 +69,8 @@ def setup_module_c(
                 dependency_backend,
                 install_missing=install_missing,
             )
+            if model.get("model_type") == "PolarMACE" or str(model.get("name", "")).casefold().replace("-", "_") == "umof_polar":
+                ensure_mace_polar_dependencies(install_missing=install_missing)
         except ImportError as exc:
             dependency_status.append(
                 {

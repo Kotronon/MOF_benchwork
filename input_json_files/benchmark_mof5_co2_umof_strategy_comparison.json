@@ -5,11 +5,15 @@
     "source": "crafted"
   },
   "adsorbates": {
-    "components": ["CO2"]
+    "components": [
+      "CO2"
+    ]
   },
   "conditions": {
     "temperature_K": 298.15,
-    "pressures_bar": [1.0]
+    "pressures_bar": [
+      1.0
+    ]
   },
   "benchmark": {
     "task": "potential_benchmark",
@@ -21,7 +25,9 @@
     "potential_benchmark": {
       "workflow": "campaign",
       "configuration_set": "smoke",
-      "exclude_regions": ["technical_repulsive_probe"],
+      "exclude_regions": [
+        "technical_repulsive_probe"
+      ],
       "baseline_backend": "mace_mp_0a_small",
       "backends": [
         {
@@ -34,7 +40,9 @@
         }
       ],
       "comparison": {
-        "strategies": ["umof_pretrained"],
+        "strategies": [
+          "umof_pretrained"
+        ],
         "baseline_backends": [
           {
             "type": "mace_mp",
@@ -53,13 +61,14 @@
             "model": "external/models/umof-mh.model",
             "asset": {
               "figshare_article_id": "33311829",
-              "file_name_patterns": ["umof-mh", "umof_mh", "umofmh"],
-              "candidate_extensions": [".model", ".pt", ".pth"]
+              "file_name": "umof_models.zip",
+              "member_path": "umof_models/uMOF-MH.model"
             },
             "device": "cuda",
             "default_dtype": "float64",
             "dispersion": false,
-            "reference_level": "uMOF r2SCAN-D4"
+            "reference_level": "uMOF r2SCAN-D4",
+            "head": "r2scan+d4"
           },
           {
             "backend": "mace-torch",
@@ -68,13 +77,15 @@
             "model": "external/models/umof-polar.model",
             "asset": {
               "figshare_article_id": "33311829",
-              "file_name_patterns": ["umof-polar", "umof_polar", "umofpolar"],
-              "candidate_extensions": [".model", ".pt", ".pth"]
+              "file_name": "umof_models.zip",
+              "member_path": "umof_models/uMOF-POLAR.model"
             },
             "device": "cuda",
             "default_dtype": "float64",
             "dispersion": false,
-            "reference_level": "uMOF r2SCAN-D4"
+            "reference_level": "uMOF r2SCAN-D4",
+            "head": "r2scan+d4",
+            "model_type": "PolarMACE"
           }
         ]
       }
@@ -93,7 +104,9 @@
     "minimum_image_policy": "error",
     "cutoff_A": 12.8,
     "unit_cells": "auto",
-    "seeds": [12345]
+    "seeds": [
+      12345
+    ]
   },
   "output": {
     "directory": "outputs/module_C_potential_benchmark",
