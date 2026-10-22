@@ -97,7 +97,7 @@ class ModuleBSelectivityTests(unittest.TestCase):
         self.assertEqual(run_plan["module"]["id"], "B")
         self.assertEqual(run_plan["conditions"]["pressures_bar"], [0.1, 1.0, 5.0, 10.0])
         self.assertEqual(run_plan["simulation"]["seeds"], [12345, 23456, 34567])
-        self.assertEqual(run_plan["simulation"]["cycles"], 20000)
+        self.assertEqual(run_plan["simulation"]["cycles"], 50000)
         self.assertEqual(run_plan["simulation"]["initialization_cycles"], 5000)
 
     def test_mixture_gcmc_input_builder_writes_two_component_fixes(self) -> None:

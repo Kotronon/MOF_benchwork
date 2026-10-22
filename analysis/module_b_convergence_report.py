@@ -84,7 +84,8 @@ def _batch_statistics(values: list[float]) -> dict[str, Any]:
 def _combined_component_interval(
     means: list[float], seed_statistics: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    result = mean_interval(means, _t_critical_975(len(means) - 1))
+    critical = _t_critical_975(len(means) - 1) if len(means) > 1 else None
+    result = mean_interval(means, critical)
     if len(means) < 2 or any(
         item["standard_error_autocorrelation"] is None for item in seed_statistics
     ):
@@ -610,14 +611,21 @@ def _write_markdown(path: Path, report: dict[str, Any]) -> None:
                 status=row["status"],
             )
         )
-    lines.extend(
-        [
-            "",
-            "Species intervals combine independent-seed Student-t variation with within-seed batch-mean uncertainty sized from an initial-positive autocorrelation estimate.",
-            "Selectivity intervals use paired-seed Fieller inference with the same autocorrelation-aware uncertainty propagation. These precision checks do not establish equilibrium.",
-            "",
-        ]
-    )
+    seed_counts = {row["seed_count"] for row in report["results"]}
+    if seed_counts == {1}:
+        interpretation = (
+            "Only one independent seed is available per pressure, so seed-level 95% confidence "
+            "intervals and Fieller intervals cannot be estimated. Per-seed batch diagnostics "
+            "account for temporal autocorrelation but do not replace independent seeds."
+        )
+    else:
+        interpretation = (
+            "Species intervals combine independent-seed Student-t variation with within-seed "
+            "batch-mean uncertainty sized from an initial-positive autocorrelation estimate. "
+            "Selectivity intervals use paired-seed Fieller inference with the same uncertainty "
+            "propagation."
+        )
+    lines.extend(["", interpretation, "These precision checks do not establish equilibrium.", ""])
     path.write_text("\n".join(lines), encoding="utf-8")
 
 

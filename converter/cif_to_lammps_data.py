@@ -131,19 +131,34 @@ def load_framework_structure(
         if require_charges:
             raise
         charge_records = []
-    if charge_records and len(atoms) != len(charge_records):
-        if require_charges:
-            raise ValueError(
-                f"ASE atom count and CIF charge count differ for {cif_path}: "
-                f"{len(atoms)} != {len(charge_records)}."
-            )
-        charge_records = []
-
-    atoms.set_initial_charges(
-        [record.charge for record in charge_records]
-        if charge_records
-        else [0.0] * len(atoms)
-    )
+    if charge_records:
+        # ASE records the asymmetric site owning each expanded atom. Validate all
+        # equivalent sites as well: duplicates may otherwise silently hide a
+        # conflicting charge when ASE keeps the first occurrence.
+        import numpy as np
+        from scipy.spatial import cKDTree
+        positions = atoms.get_scaled_positions() % 1.0
+        tree = cKDTree(positions, boxsize=1.0)
+        assigned = np.full(len(atoms), np.nan)
+        group = atoms.info.get("spacegroup")
+        for record in charge_records:
+            sites = (group.equivalent_sites([record.fractional], onduplicates="keep")[0]
+                     if group is not None else [record.fractional])
+            for site in np.asarray(sites) % 1.0:
+                matches = tree.query_ball_point(site, 1e-3)
+                if len(matches) != 1:
+                    raise ValueError(f"Ambiguous symmetry/charge mapping for {record.label} in {cif_path}.")
+                index = matches[0]
+                if np.isfinite(assigned[index]) and not math.isclose(
+                    assigned[index], record.charge, rel_tol=0, abs_tol=1e-8
+                ):
+                    raise ValueError(f"Conflicting charges on symmetry-equivalent site {record.label}.")
+                assigned[index] = record.charge
+        if not np.isfinite(assigned).all():
+            raise ValueError(f"Incomplete symmetry/charge mapping in {cif_path}.")
+        atoms.set_initial_charges(assigned)
+    else:
+        atoms.set_initial_charges([0.0] * len(atoms))
     atoms = _apply_cell_representation(atoms, representation)
     if repetitions != (1, 1, 1):
         atoms = atoms.repeat(repetitions)

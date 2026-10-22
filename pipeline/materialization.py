@@ -359,6 +359,7 @@ def _gcmc_builder_inputs(
         "chemical_potential_kcal_mol": 0.0,
         "displacement_A": 1.0,
         "run_steps": prepare_plan["parameters"].get("run_steps", 10000),
+        "thermo_every_steps": prepare_plan["parameters"].get("thermo_every_steps", 100),
         "gcmc_every_steps": 1,
         "exchange_attempts": 10,
         "move_attempts": 10,

@@ -347,6 +347,46 @@ vs.
 uMOF pretrained MOF-specific model without new CP2K labels
 ```
 
+### uMOF-MH adsorption fine-tuning on a CPU cluster
+
+The CP2K-free fine-tuning workflow uses the published uMOF adsorption
+configurations for CO2, N2, and CH4. It keeps validation and test frameworks
+disjoint from training, selects nested gas/loading-stratified fractions, and
+compares each adapted checkpoint with zero-shot uMOF-MH on the held-out test
+frameworks. The MACE multihead path replays the official MatPES r2SCAN training
+set to reduce forgetting; on the first training run MACE may download and cache
+that replay data, so provide network access or prepopulate the MACE cache on a
+login node.
+
+From a cluster compute allocation, first prepare and inspect all datasets and
+commands without starting training:
+
+```bash
+export UMOF_DATA_DIRECTORY=external/umof_data
+export UMOF_MH_CHECKPOINT=external/umof_models/uMOF-MH.model
+export UMOF_OUTPUT_DIRECTORY=outputs/module_C_umof_finetuning_matrix
+export UMOF_TRAIN_FRACTIONS=0.1,0.25,0.5,1.0
+export UMOF_SEEDS=12345
+export UMOF_MAX_EPOCHS=50
+bash scripts/run_module_c_umof_finetuning.sh prepare
+```
+
+Once the generated splits and `training_command.json` files look correct,
+launch the sequential CPU matrix from a persistent allocation/session:
+
+```bash
+bash scripts/run_module_c_umof_finetuning.sh train
+```
+
+The wrapper sets CPU math-library thread counts from `SLURM_CPUS_PER_TASK`
+(default 1). Override fractions, seeds, epochs, learning rate, replay weight,
+or device with the `UMOF_*` environment variables shown in the script. Results
+are written per fraction/seed, including `results/held_out_test_comparison.json`
+and the aggregate `fine_tuning_matrix_summary.json`. Use multiple seeds for a
+robust comparison. The released uMOF test MOFs were used during original uMOF
+pretraining, so this is a held-out fine-tuning transfer test, not a claim of
+generalization to MOFs unseen by the released checkpoint.
+
 The optional FLAMES adapter is pinned to release 0.4.8 and an immutable Git
 commit because 0.4.9 is not an available release. The setup command reports a
 missing dependency without changing the environment unless

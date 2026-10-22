@@ -156,6 +156,8 @@ def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
             "framework": run_plan["simulation"].get("framework", "rigid"),
             "reservoir": run_plan["simulation"].get("reservoir", {}),
             "guest_models": run_plan["adsorbates"].get("models", {}),
+            **({"thermo_every_steps": int(run_plan["simulation"]["thermo_every_steps"])}
+               if "thermo_every_steps" in run_plan["simulation"] else {}),
             "sampling": run_plan["simulation"].get("sampling", {}),
             "production_steps": production_steps,
             "equilibration_steps": equilibration_steps,

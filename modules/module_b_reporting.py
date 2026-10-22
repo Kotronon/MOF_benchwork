@@ -168,6 +168,7 @@ def write_artifacts(state, prediction, target):
             f"Surrogate projections ({descriptor}; remaining fractions projected)"
         )
         fig.savefig(target / "surrogate_projections.png", dpi=140)
+        fig.savefig(target / "surrogate_projections.svg")
         plt.close(fig)
         files["projections"] = str(target / "surrogate_projections.png")
     return files

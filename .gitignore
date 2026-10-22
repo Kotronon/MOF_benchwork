@@ -226,14 +226,12 @@ __marimo__/
 CRAFTED-2.0.0/
 CRAFTED-2.0.0.tar.xz
 isodb-library/
-external/*
+external/
 data/generated/
 reports/
 docs/
 docs/**
 
-!external/umof_models.zip
-!external/umof_data.zip
 
 
 # Output files 

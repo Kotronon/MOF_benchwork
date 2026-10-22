@@ -12,6 +12,7 @@ import warnings
 
 from modules.module_b_profiles import point, paper_profile, simplex_candidates
 from modules.module_b_active_learning import _save
+from modules.module_b_runtime import locked, asset_fingerprints, add_raw_uncertainty
 
 
 def identity(config):
@@ -34,6 +35,7 @@ def identity(config):
         "save_restarts",
         "dump_every_steps",
         "restart_every_steps",
+        "thermo_every_steps",
     ):
         setup.pop(key, None)
 
@@ -266,6 +268,8 @@ def predict(state, points):
             offset, scale = float(y.mean()), max(float(y.std()), 0.1)
             y = (y - offset) / scale
             se = np.array([_value(r, c, "standard_error_molecules") for r in train])
+            if not np.isfinite(se).all() or (se < 0).any():
+                raise ValueError("GP noise must be finite and nonnegative.")
             alpha = np.maximum((se / (1 + q) / scale) ** 2, 1e-8)
             kernel = ConstantKernel(1.0, (1e-3, 1e3)) * Matern(
                 [0.5] * x.shape[1], (0.05, 5), nu=2.5
@@ -376,7 +380,9 @@ def recommend(state):
             )
             for i, p in enumerate(state["candidates"])
         ]
-        met = max(scores) <= options["relative_uncertainty_target"]
+        met = max(score for score, p in zip(scores, state["candidates"])
+                  if not options.get("exclude_holdout_from_stopping", False)
+                  or p["candidate_id"] not in held) <= options["relative_uncertainty_target"]
         status = "surrogate_uncertainty_target_met"
     else:
         relative = {
@@ -432,6 +438,7 @@ def recommend(state):
     }
 
 
+@locked
 def propose(path, *, holdout=False):
     path = Path(path)
     state = json.loads(path.read_text())
@@ -439,10 +446,10 @@ def propose(path, *, holdout=False):
         from modules.module_b_active_learning import propose_campaign
 
         return propose_campaign(path)
-    if state["pending_request"]:
-        return {"status": "awaiting_simulation", "request": state["pending_request"]}
     if identity(state["base_config"]) != state["model_identity"]:
         raise ValueError("Simulation assets changed since campaign initialization.")
+    if state["pending_request"]:
+        return {"status": "awaiting_simulation", "request": state["pending_request"]}
     if holdout:
         done = {r["candidate_id"] for r in state["holdout_results"]}
         pending = [r for r in state["holdout"] if r["candidate_id"] not in done]
@@ -478,7 +485,7 @@ def propose(path, *, holdout=False):
                 for k in ("candidate_id", "pressure_bar", "temperature_K", "mixture")
             },
             "action": decision["action"],
-            "config_path": str(target.resolve()),
+            "config_path": str(target),
         }
         state["pending_request"] = request
         state["history"].append({"request": request})
@@ -498,6 +505,7 @@ def propose(path, *, holdout=False):
     return decision
 
 
+@locked
 def ingest(path, summary_path):
     from pipeline.mixture_evaluation import corrected_summary, _prepare
 
@@ -545,7 +553,11 @@ def ingest(path, summary_path):
     ):
         if params.get(key) != planned["parameters"].get(key):
             raise ValueError(f"Imported simulation context differs: {key}")
-    if prep["inputs"] != planned["inputs"]:
+    if state.get("campaign_kind"):
+        for key in ("seeds", "production_steps", "equilibration_steps", "thermo_every_steps"):
+            if params.get(key) != planned["parameters"].get(key):
+                raise ValueError(f"Imported simulation sampling differs: {key}")
+    if asset_fingerprints(prep["inputs"]) != asset_fingerprints(planned["inputs"]):
         raise ValueError("Imported input assets differ from request.")
     provenance = (
         json.loads((summary_path.parent / "prepare_summary.json").read_text())
@@ -594,11 +606,14 @@ def ingest(path, summary_path):
         "replicate_count": row["replicate_count"],
         "seeds": row["seeds"],
         "total_wall_time_seconds": row.get("total_wall_time_seconds"),
-        "source_summary": str(summary_path.resolve()),
+        "source_summary": str(summary_path),
+        "source_summary_sha256": digest,
         "precision_retries": (
             previous.get("precision_retries", 0) + 1 if previous else 0
         ),
     }
+    if state["options"].get("raw_log_uncertainty"):
+        record = add_raw_uncertainty(record, summary_path)
     state[field] = [
         r for r in state[field] if r["candidate_id"] != expected["candidate_id"]
     ] + [record]
@@ -609,13 +624,16 @@ def ingest(path, summary_path):
     return state
 
 
-def execute(path, max_requests, *, holdout=False):
+@locked
+def execute(path, max_requests, *, holdout=False, jobs=1):
     from pipeline.config import normalize_config
     from pipeline.planning import build_run_plan
     from pipeline.prepare import prepare_benchmark
     from pipeline.materialization import materialize_benchmark
     from pipeline.runners import run_isotherm
 
+    if jobs not in (1, 2, 3):
+        raise ValueError("Use one to three parallel seed processes.")
     if max_requests <= 0:
         raise ValueError("An explicit positive execution budget is required.")
     state = json.loads(Path(path).read_text())
@@ -634,15 +652,20 @@ def execute(path, max_requests, *, holdout=False):
         if decision["status"] not in {"request", "awaiting_simulation"}:
             return decision
         request = decision["request"]
+        if (request["action"] == "holdout") != holdout:
+            raise ValueError("Pending request has a different role; resume with the matching training/holdout command.")
+        cfg = {}
         try:
             cfg = normalize_config(json.loads(Path(request["config_path"]).read_text()))
             materialized = materialize_benchmark(prepare_benchmark(build_run_plan(cfg)))
-            result = run_isotherm(materialized)
+            result = run_isotherm(materialized, jobs=jobs)
             ingest(path, result["summary_file"])
         except Exception as exc:
             state = json.loads(Path(path).read_text())
             state["status"] = "technical_error"
             state["last_error"] = str(exc)
+            output = cfg.get("output", {})
+            state["last_error_logs"] = str(Path(output.get("directory") or Path(path).parent) / "runs" / (output.get("run_id") or "unknown") / "logs")
             _save(path, state)
             raise
     state = json.loads(Path(path).read_text())
@@ -651,6 +674,7 @@ def execute(path, max_requests, *, holdout=False):
     return {"status": "execution_budget_exhausted"}
 
 
+@locked
 def report(path):
     import numpy as np
     from itertools import combinations
@@ -744,6 +768,9 @@ def report(path):
     previous = json.loads(curve.read_text()) if curve.exists() else []
     previous = [r for r in previous if r["training_points"] != len(results)] + [result]
     _save(curve, previous)
+    if state.get("campaign_kind"):
+        from modules.module_b_cluster_reporting import write_cluster_report
+        write_cluster_report(state, pred, result, previous, target)
     return result
 
 

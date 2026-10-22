@@ -33,7 +33,9 @@ class ForcefieldResolver:
     def resolve(self, forcefield_config: dict[str, Any], components: list[str]) -> dict[str, Any]:
         framework = _normalize_forcefield_name(forcefield_config.get("framework", "UFF"))
         forcefield_dir = self.forcefield_root / framework
-        if not forcefield_dir.exists():
+        explicit_files = forcefield_config.get("files", {})
+        complete_explicit = {"force_field", "mixing_rules", "pseudo_atoms"} <= explicit_files.keys()
+        if not forcefield_dir.exists() and not complete_explicit:
             raise LookupError(f"Force field {framework!r} not found below {self.forcefield_root}.")
 
         base_files = {
@@ -41,7 +43,8 @@ class ForcefieldResolver:
             "mixing_rules": forcefield_dir / "force_field_mixing_rules.def",
             "pseudo_atoms": forcefield_dir / "pseudo_atoms.def",
         }
-        missing = [name for name, path in base_files.items() if not path.exists()]
+        missing = [name for name, path in base_files.items()
+                   if name not in explicit_files and not path.exists()]
         if missing:
             raise LookupError(f"Force field {framework!r} is missing files: {', '.join(missing)}.")
 

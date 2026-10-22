@@ -117,7 +117,7 @@ def gcmc_input_builder(inputs: dict[str, Any]) -> str:
         f"group adsorbate type {_format_type_ids(inputs['adsorbate_atom_types'])}",
         f"# pressure_bar metadata: {inputs.get('pressure_bar', 'not_set')}",
         gcmc_fix,
-        "thermo 100",
+        f"thermo {int(inputs.get('thermo_every_steps', 100))}",
         (
             "thermo_style custom step atoms temp pe etotal press "
             f"f_gcmc_{molecule_id}[3] f_gcmc_{molecule_id}[4] "
@@ -230,7 +230,7 @@ def _mixture_gcmc_input_builder(
         *variable_lines,
         f"# pressure_bar metadata: {inputs.get('pressure_bar', 'not_set')}",
         *gcmc_fixes,
-        "thermo 100",
+        f"thermo {int(inputs.get('thermo_every_steps', 100))}",
         (
             "thermo_style custom step atoms temp pe etotal press "
             f"{thermo_component_variables} " + " ".join(f"f_gcmc_{_component_id(c)}[{i}]" for c in components if mixture[c] > 0 for i in range(1, 9))

@@ -10,6 +10,7 @@ from pathlib import Path
 import random
 import subprocess
 import sys
+import time
 from typing import Any
 
 import numpy as np
@@ -20,6 +21,8 @@ from pipeline.config import save_benchmark_data
 DEFAULT_DATA_DIRECTORY = Path("external/umof_data")
 DEFAULT_CHECKPOINT = Path("external/umof_models/uMOF-MH.model")
 DEFAULT_OUTPUT_DIRECTORY = Path("outputs/module_C_umof_finetuning")
+DEFAULT_TRAIN_FRACTIONS = (0.10, 0.25, 0.50, 1.00)
+DEFAULT_REPLAY_DATASET = "matpes_r2scan"
 DEFAULT_VALIDATION_MOFS = {
     "HKUST-1-adsorbates",
     "MIL-53-Al-adsorbates",
@@ -126,8 +129,11 @@ def prepare_adsorption_datasets(
             prepared = [frame for frame in prepared if frame is not None]
             if not prepared:
                 raise ValueError(f"No CO2/N2/CH4 frames found in {path}.")
-            selected_count = max(1, math.ceil(len(prepared) * train_fraction))
-            indices = sorted(rng.sample(range(len(prepared)), selected_count))
+            indices = _stratified_nested_indices(
+                prepared,
+                train_fraction=train_fraction,
+                rng=rng,
+            )
             selected = [prepared[index] for index in indices]
             write(train_handle, selected, format="extxyz")
             source_counts[path.name] = {
@@ -184,6 +190,7 @@ def prepare_adsorption_datasets(
         "train_file": str(train_output),
         "valid_file": str(valid_output),
         "test_file": str(test_output),
+        "replay_dataset": DEFAULT_REPLAY_DATASET,
         "train_configuration_count": total_train,
         "validation_configuration_count": total_valid,
         "test_configuration_count": total_test,
@@ -191,6 +198,7 @@ def prepare_adsorption_datasets(
         "validation_mofs": sorted(validation_mofs),
         "test_mofs": sorted(test_mofs),
         "test_files_used_for_training": False,
+        "replay_source": "MACE MatPES r2SCAN training-only replay set",
         "source_file_counts": source_counts,
         "label_mapping": {
             "dft_energy": "REF_energy",
@@ -207,6 +215,12 @@ def build_umof_mh_training_command(
     output_directory: str | Path = DEFAULT_OUTPUT_DIRECTORY,
     *,
     max_epochs: int = 1000,
+    learning_rate: float = 1.0e-4,
+    replay_weight: float = 0.25,
+    replay_sample_count: int = 1000,
+    replay_dataset: str = DEFAULT_REPLAY_DATASET,
+    device: str = "cpu",
+    seed: int = 12345,
 ) -> list[str]:
     """Build a single-model CPU fine-tuning command from the uMOF-MH head."""
     checkpoint_path = Path(checkpoint).expanduser()
@@ -214,6 +228,16 @@ def build_umof_mh_training_command(
         raise FileNotFoundError(f"uMOF-MH checkpoint not found: {checkpoint_path}")
     if max_epochs <= 0:
         raise ValueError("max_epochs must be positive.")
+    if not math.isfinite(learning_rate) or learning_rate <= 0.0:
+        raise ValueError("learning_rate must be positive and finite.")
+    if not math.isfinite(replay_weight) or replay_weight <= 0.0:
+        raise ValueError("replay_weight must be positive and finite.")
+    if replay_sample_count <= 0:
+        raise ValueError("replay_sample_count must be positive.")
+    if device not in {"cpu", "cuda", "mps"}:
+        raise ValueError("device must be one of: cpu, cuda, mps.")
+    if replay_dataset not in {"matpes_r2scan", "matpes_pbe", "mp", "omat"}:
+        raise ValueError("Unsupported MACE replay dataset.")
     output = Path(output_directory).expanduser()
     return [
         sys.executable,
@@ -221,6 +245,8 @@ def build_umof_mh_training_command(
         "mace.cli.run_train",
         "--name",
         "umof_mh_adsorption_finetuned",
+        "--restart_latest",
+        "--save_all_checkpoints",
         "--train_file",
         str(manifest["train_file"]),
         "--valid_file",
@@ -232,17 +258,33 @@ def build_umof_mh_training_command(
         "--foundation_model_elements",
         "True",
         "--multiheads_finetuning",
-        "False",
+        "True",
+        "--E0s",
+        "foundation",
+        "--pt_train_file",
+        replay_dataset,
+        "--num_samples_pt",
+        str(replay_sample_count),
+        "--weight_pt_head",
+        str(replay_weight),
+        "--subselect_pt",
+        "random",
+        "--filter_type_pt",
+        "none",
+        "--force_mh_ft_lr",
+        "True",
+        "--seed",
+        str(seed),
         "--lr",
-        "0.0001",
+        str(learning_rate),
+        "--swa_lr",
+        str(learning_rate),
         "--energy_key",
         "REF_energy",
         "--forces_key",
         "REF_forces",
-        "--E0s",
-        "average",
         "--device",
-        "cpu",
+        device,
         "--default_dtype",
         "float64",
         "--batch_size",
@@ -251,6 +293,11 @@ def build_umof_mh_training_command(
         "1",
         "--max_num_epochs",
         str(max_epochs),
+        "--patience",
+        str(max(5, min(20, max_epochs // 2))),
+        "--swa",
+        "--start_swa",
+        str(max(1, int(max_epochs * 0.8))),
         "--model_dir",
         str(output / "models"),
         "--checkpoints_dir",
@@ -297,6 +344,14 @@ def evaluate_umof_mh_models(
     )
     grouped: dict[str, dict[str, list[float]]] = {}
     gas_counts: dict[str, dict[str, int]] = {}
+    by_gas: dict[str, dict[str, list[float]]] = {
+        gas: {
+            f"{label}_{kind}": []
+            for label in ("baseline", "finetuned")
+            for kind in ("energy", "forces")
+        }
+        for gas in sorted(TARGET_GASES)
+    }
     for atoms in frames:
         gas_composition = _target_gas_composition(atoms)
         if not gas_composition:
@@ -319,9 +374,14 @@ def evaluate_umof_mh_models(
             grouped[mof][f"{label}_energy"].append(
                 (predicted_energy - reference_energy) / len(atoms)
             )
-            grouped[mof][f"{label}_forces"].extend(
-                (predicted_forces - reference_forces).reshape(-1).tolist()
-            )
+            component_errors = (predicted_forces - reference_forces).reshape(-1)
+            grouped[mof][f"{label}_forces"].extend(component_errors.tolist())
+            present_gases = [gas for gas, count in gas_composition.items() if count]
+            for gas in present_gases:
+                by_gas[gas][f"{label}_energy"].append(
+                    (predicted_energy - reference_energy) / len(atoms)
+                )
+                by_gas[gas][f"{label}_forces"].extend(component_errors.tolist())
 
     results = {
         mof: {
@@ -348,6 +408,16 @@ def evaluate_umof_mh_models(
             [value for metrics in grouped.values() for value in metrics["finetuned_forces"]],
         ),
     }
+    gas_results = {
+        gas: {
+            label: _error_metrics(
+                metrics[f"{label}_energy"], metrics[f"{label}_forces"]
+            )
+            for label in ("baseline", "finetuned")
+        }
+        for gas, metrics in by_gas.items()
+        if by_gas[gas]["baseline_energy"]
+    }
     return {
         "status": "completed",
         "test_file": str(test_path),
@@ -361,6 +431,7 @@ def evaluate_umof_mh_models(
         "force_metric": "MAE/RMSE over Cartesian force-component errors (eV/A)",
         "aggregate": aggregate,
         "by_mof": results,
+        "by_gas": gas_results,
     }
 
 
@@ -369,6 +440,41 @@ def _target_gas_composition(atoms: Any) -> dict[str, int]:
     if not counts or set(counts) - TARGET_GASES:
         return {}
     return dict(counts)
+
+
+def _stratified_nested_indices(
+    frames: Sequence[Any],
+    *,
+    train_fraction: float,
+    rng: random.Random,
+) -> list[int]:
+    """Select a nested fraction while representing gas identity and loading."""
+    strata: dict[tuple[tuple[str, ...], str], list[int]] = {}
+    for index, atoms in enumerate(frames):
+        gas_counts = _target_gas_composition(atoms)
+        gas_key = tuple(sorted(gas_counts))
+        loading = sum(gas_counts.values())
+        loading_bin = "1" if loading == 1 else "2-3" if loading <= 3 else "4+"
+        strata.setdefault((gas_key, loading_bin), []).append(index)
+    selected: list[int] = []
+    for key in sorted(strata):
+        indices = list(strata[key])
+        rng.shuffle(indices)
+        count = max(1, math.ceil(len(indices) * train_fraction))
+        selected.extend(indices[:count])
+    return sorted(selected)
+
+
+def _is_replay_training_file(filename: str) -> bool:
+    if not filename.endswith("-train.extxyz"):
+        return False
+    excluded_markers = (
+        "adsorbate",
+        "isolated_atoms",
+        "mofgen",
+    )
+    normalized = filename.casefold()
+    return not any(marker in normalized for marker in excluded_markers)
 
 
 def _error_metrics(energy_errors: Sequence[float], force_errors: Sequence[float]) -> dict[str, float]:
@@ -411,6 +517,191 @@ def _prepare_frame(atoms: Any, source: Path, split: str) -> Any | None:
     return prepared
 
 
+def prepare_finetuning_matrix(
+    data_directory: str | Path = DEFAULT_DATA_DIRECTORY,
+    output_directory: str | Path = DEFAULT_OUTPUT_DIRECTORY,
+    *,
+    fractions: Sequence[float] = DEFAULT_TRAIN_FRACTIONS,
+    seeds: Sequence[int] = (12345,),
+    seed: int = 12345,
+    validation_mofs: set[str] | None = None,
+    test_mofs: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Prepare reproducible, nested 10/25/50/100% datasets with shared splits."""
+    if not fractions or any(
+        not math.isfinite(float(fraction)) or not 0.0 < float(fraction) <= 1.0
+        for fraction in fractions
+    ):
+        raise ValueError("All training fractions must be in (0, 1].")
+    normalized_fractions = sorted({float(value) for value in fractions})
+    normalized_seeds = sorted({int(value) for value in seeds})
+    if not normalized_seeds:
+        raise ValueError("At least one random seed is required.")
+    manifests = []
+    for current_seed in normalized_seeds:
+        for fraction in normalized_fractions:
+            manifests.append(
+                prepare_adsorption_datasets(
+                    data_directory,
+                    Path(output_directory)
+                    / f"{int(round(fraction * 100)):03d}pct"
+                    / f"seed-{current_seed}"
+                    / "datasets",
+                    train_fraction=fraction,
+                    seed=current_seed,
+                    validation_mofs=validation_mofs,
+                    test_mofs=test_mofs,
+                )
+            )
+    return manifests
+
+
+def run_finetuning_matrix(
+    data_directory: str | Path = DEFAULT_DATA_DIRECTORY,
+    checkpoint: str | Path = DEFAULT_CHECKPOINT,
+    output_directory: str | Path = DEFAULT_OUTPUT_DIRECTORY,
+    *,
+    fractions: Sequence[float] = DEFAULT_TRAIN_FRACTIONS,
+    seeds: Sequence[int] = (12345,),
+    max_epochs: int = 50,
+    learning_rate: float = 1.0e-4,
+    replay_weight: float = 0.25,
+    replay_sample_count: int = 1000,
+    seed: int = 12345,
+    device: str = "cpu",
+) -> dict[str, Any]:
+    """Prepare, train, and test all configured data-fraction runs sequentially."""
+    data_root = Path(data_directory).expanduser()
+    base_output = Path(output_directory).expanduser()
+    if not Path(checkpoint).expanduser().is_file():
+        raise FileNotFoundError(f"uMOF-MH checkpoint not found: {checkpoint}")
+    prepared = prepare_finetuning_matrix(
+        data_root,
+        base_output,
+        fractions=fractions,
+        seeds=seeds,
+        seed=seed,
+    )
+    rows = []
+    base_output.mkdir(parents=True, exist_ok=True)
+    summary_path = base_output / "fine_tuning_matrix_summary.json"
+    save_benchmark_data(
+        summary_path,
+        {
+            "status": "running",
+            "foundation_model": str(checkpoint),
+            "device": device,
+            "completed_runs": rows,
+            "total_runs": len(prepared),
+        },
+    )
+    for manifest in prepared:
+        run_directory = Path(manifest["train_file"]).parent.parent
+        percentage = int(round(float(manifest["training_data_fraction"]) * 100))
+        command = build_umof_mh_training_command(
+            manifest,
+            checkpoint,
+            run_directory,
+            max_epochs=max_epochs,
+            learning_rate=learning_rate,
+            replay_weight=replay_weight,
+            replay_sample_count=replay_sample_count,
+            replay_dataset=DEFAULT_REPLAY_DATASET,
+            device=device,
+            seed=int(manifest["seed"]),
+        )
+        save_benchmark_data(
+            run_directory / "training_command.json",
+            {
+                "command": command,
+                "device": device,
+                "seed": manifest["seed"],
+                "train_fraction": manifest["training_data_fraction"],
+                "replay_dataset": DEFAULT_REPLAY_DATASET,
+            },
+        )
+        results_path = run_directory / "results" / "held_out_test_comparison.json"
+        model_path = (
+            run_directory
+            / "models"
+            / "umof_mh_adsorption_finetuned_compiled.model"
+        )
+        if not model_path.is_file():
+            model_path = run_directory / "models" / "umof_mh_adsorption_finetuned.model"
+        if results_path.is_file() and model_path.is_file():
+            previous = json.loads(results_path.read_text(encoding="utf-8"))
+            if (
+                float(previous.get("training_data_fraction", -1.0))
+                == float(manifest["training_data_fraction"])
+                and int(previous.get("seed", -1)) == int(manifest["seed"])
+                and previous.get("replay_dataset") == DEFAULT_REPLAY_DATASET
+            ):
+                rows.append(previous)
+                save_benchmark_data(
+                    summary_path,
+                    {
+                        "status": "running",
+                        "foundation_model": str(checkpoint),
+                        "device": device,
+                        "completed_runs": rows,
+                        "total_runs": len(prepared),
+                    },
+                )
+                continue
+        started = time.perf_counter()
+        completed = subprocess.run(command, check=False)
+        runtime_seconds = time.perf_counter() - started
+        if completed.returncode != 0:
+            raise RuntimeError(
+                f"uMOF-MH fine-tuning failed at {percentage}% data "
+                f"(exit {completed.returncode}); inspect {run_directory / 'logs'}."
+            )
+        model_path = run_directory / "models" / "umof_mh_adsorption_finetuned_compiled.model"
+        if not model_path.is_file():
+            model_path = run_directory / "models" / "umof_mh_adsorption_finetuned.model"
+        evaluation = evaluate_umof_mh_models(
+            manifest["test_file"],
+            model_path,
+            baseline_checkpoint=checkpoint,
+            device=device,
+        )
+        evaluation.update(
+            {
+                "training_data_fraction": manifest["training_data_fraction"],
+                "training_configuration_count": manifest["train_configuration_count"],
+                "replay_dataset": DEFAULT_REPLAY_DATASET,
+                "runtime_seconds": runtime_seconds,
+                "seed": manifest["seed"],
+            }
+        )
+        save_benchmark_data(results_path, evaluation)
+        rows.append(evaluation)
+        save_benchmark_data(
+            summary_path,
+            {
+                "status": "running",
+                "foundation_model": str(checkpoint),
+                "device": device,
+                "completed_runs": rows,
+                "total_runs": len(prepared),
+                "next_fraction": (
+                    prepared[len(rows)]["training_data_fraction"]
+                    if len(rows) < len(prepared)
+                    else None
+                ),
+            },
+        )
+    summary = {
+        "status": "completed",
+        "foundation_model": str(checkpoint),
+        "device": device,
+        "runs": rows,
+    }
+    summary["completed_runs"] = rows
+    save_benchmark_data(summary_path, summary)
+    return summary
+
+
 def _guest_molecule_counts(atoms: Any) -> dict[str, int]:
     from collections import Counter
 
@@ -449,9 +740,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--data-directory", type=Path, default=DEFAULT_DATA_DIRECTORY)
     parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
     parser.add_argument("--output-directory", type=Path, default=DEFAULT_OUTPUT_DIRECTORY)
+    parser.add_argument("--matrix", action="store_true")
+    parser.add_argument(
+        "--fractions",
+        default=",".join(str(value) for value in DEFAULT_TRAIN_FRACTIONS),
+        help="Comma-separated training fractions used with --matrix.",
+    )
+    parser.add_argument("--seeds", default="12345", help="Comma-separated run seeds.")
     parser.add_argument("--train-fraction", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=12345)
-    parser.add_argument("--max-epochs", type=int, default=1000)
+    parser.add_argument("--max-epochs", type=int, default=50)
+    parser.add_argument("--learning-rate", type=float, default=1.0e-4)
+    parser.add_argument("--replay-weight", type=float, default=0.25)
+    parser.add_argument("--replay-samples", type=int, default=1000)
+    parser.add_argument("--device", choices=("cpu", "cuda", "mps"), default="cpu")
     parser.add_argument(
         "--validation-mofs",
         default=",".join(sorted(DEFAULT_VALIDATION_MOFS)),
@@ -460,23 +762,96 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--train", action="store_true")
     args = parser.parse_args(argv)
 
+    validation_mofs = set(filter(None, args.validation_mofs.split(",")))
+    test_mofs = set(filter(None, args.test_mofs.split(",")))
+    if args.matrix:
+        fractions = [float(value) for value in args.fractions.split(",") if value]
+        seeds = [int(value) for value in args.seeds.split(",") if value]
+        if not args.train:
+            manifests = prepare_finetuning_matrix(
+                args.data_directory,
+                args.output_directory,
+                fractions=fractions,
+                seeds=seeds,
+                seed=args.seed,
+                validation_mofs=validation_mofs,
+                test_mofs=test_mofs,
+            )
+            for manifest in manifests:
+                run_directory = Path(manifest["train_file"]).parent.parent
+                command = build_umof_mh_training_command(
+                    manifest,
+                    args.checkpoint,
+                    run_directory,
+                    max_epochs=args.max_epochs,
+                    learning_rate=args.learning_rate,
+                    replay_weight=args.replay_weight,
+                    replay_sample_count=args.replay_samples,
+                    device=args.device,
+                    seed=int(manifest["seed"]),
+                )
+                save_benchmark_data(
+                    run_directory / "training_command.json",
+                    {
+                        "command": command,
+                        "device": args.device,
+                        "seed": manifest["seed"],
+                        "train_fraction": manifest["training_data_fraction"],
+                        "replay_dataset": DEFAULT_REPLAY_DATASET,
+                        "training_configuration_count": manifest[
+                            "train_configuration_count"
+                        ],
+                    },
+                )
+            print(json.dumps(manifests, indent=2))
+            print(
+                f"Prepared {len(manifests)} dataset/command pairs. "
+                "Add --train to launch the matrix."
+            )
+            return 0
+        summary = run_finetuning_matrix(
+            args.data_directory,
+            args.checkpoint,
+            args.output_directory,
+            fractions=fractions,
+            seeds=seeds,
+            max_epochs=args.max_epochs,
+            learning_rate=args.learning_rate,
+            replay_weight=args.replay_weight,
+            replay_sample_count=args.replay_samples,
+            seed=args.seed,
+            device=args.device,
+        )
+        print(json.dumps(summary, indent=2))
+        return 0
+
     manifest = prepare_adsorption_datasets(
         args.data_directory,
         args.output_directory / "datasets",
         train_fraction=args.train_fraction,
         seed=args.seed,
-        validation_mofs=set(args.validation_mofs.split(",")),
-        test_mofs=set(args.test_mofs.split(",")),
+        validation_mofs=validation_mofs,
+        test_mofs=test_mofs,
     )
     command = build_umof_mh_training_command(
         manifest,
         args.checkpoint,
         args.output_directory,
         max_epochs=args.max_epochs,
+        learning_rate=args.learning_rate,
+        replay_weight=args.replay_weight,
+        replay_sample_count=args.replay_samples,
+        device=args.device,
+        seed=args.seed,
     )
     save_benchmark_data(
         args.output_directory / "training_command.json",
-        {"command": command, "device": "cpu", "foundation_head": "r2scan+d4"},
+        {
+            "command": command,
+            "device": args.device,
+            "foundation_head": "r2scan+d4",
+            "replay_dataset": DEFAULT_REPLAY_DATASET,
+        },
     )
     print(json.dumps(manifest, indent=2))
     print("Training command:", json.dumps(command))
@@ -491,6 +866,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             manifest["test_file"],
             model_path,
             baseline_checkpoint=args.checkpoint,
+            device=args.device,
         )
         report_path = args.output_directory / "results" / "held_out_test_comparison.json"
         save_benchmark_data(report_path, report)

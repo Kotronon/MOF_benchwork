@@ -15,8 +15,33 @@ if str(PROJECT_ROOT) not in sys.path:
 
 REFERENCE_FILES = {
     "10/90 NIST simulation; excess": "10.1039b807470d.Isotherm14.json",
-    "~50/50 NIST experiment; basis unspecified": "10.1016j.seppur.2018.01.013.Isotherm4.json",
 }
+
+
+
+def absolute_to_excess(
+        n_absolute,
+        pressure_bar,
+        temperature_K,
+        gas_fraction,
+        pore_volume_cm3_g,
+        compressibility=1.0,
+    ):
+        R = 0.083144626  # L bar / (mol K)
+
+        # mol/L entspricht mmol/cm³
+        rho_bulk = (
+            pressure_bar
+            / (compressibility * R * temperature_K)
+        )
+
+        correction = (
+            gas_fraction
+            * rho_bulk
+            * pore_volume_cm3_g
+        )
+
+        return n_absolute - correction
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -42,6 +67,7 @@ def _simulation_series(run_dir: Path) -> list[dict[str, Any]]:
     framework_mass = _framework_mass(framework_data)
 
     rows = []
+    simulation_label = None
     for point in summary.get("results", []):
         pressure = float(point["pressure_bar"])
         components = point["summary"]["components"]
@@ -49,12 +75,16 @@ def _simulation_series(run_dir: Path) -> list[dict[str, Any]]:
             name: float(values["gas_phase_mole_fraction"])
             for name, values in components.items()
         }
+        simulation_label = (
+            f"Simulation {mixture['CO2'] * 100:g}/{mixture['N2'] * 100:g}; "
+            "excess (converted)"
+        )
         component_values = {
             name: float(values["mean_molecules"])
             for name, values in components.items()
         }
         row: dict[str, Any] = {
-            "source": "Simulation 15/85; absolute",
+            "source": simulation_label,
             "pressure_bar": pressure,
             "co2_mole_fraction": mixture["CO2"],
             "n2_mole_fraction": mixture["N2"],
@@ -85,6 +115,34 @@ def _simulation_series(run_dir: Path) -> list[dict[str, Any]]:
         selectivity_result = convergence_index.get((pressure, "CO2/N2"), {})
         row["selectivity_ci95_lower"] = selectivity_result.get("ci95_lower")
         row["selectivity_ci95_upper"] = selectivity_result.get("ci95_upper")
+                
+        pore_volume = 0.845545  # cm³/g
+
+        row["co2_excess_mmol_g"] = absolute_to_excess(
+            n_absolute=row["co2_mmol_g"],
+            pressure_bar=pressure,
+            temperature_K=298.15,
+            gas_fraction=mixture["CO2"],
+            pore_volume_cm3_g=pore_volume,
+        )
+
+        row["n2_excess_mmol_g"] = absolute_to_excess(
+            n_absolute=row["n2_mmol_g"],
+            pressure_bar=pressure,
+            temperature_K=298.15,
+            gas_fraction=mixture["N2"],
+            pore_volume_cm3_g=pore_volume,
+        )
+
+        co2_ex = row["co2_excess_mmol_g"]
+        n2_ex = row["n2_excess_mmol_g"]
+
+        row["selectivity_excess"] = (
+            (co2_ex / n2_ex)
+            * (mixture["N2"] / mixture["CO2"])
+            if n2_ex > 0
+            else None
+        )
         rows.append(row)
     return sorted(rows, key=lambda row: row["pressure_bar"])
 
@@ -156,15 +214,22 @@ def _write_plot(rows: list[dict[str, Any]], path: Path) -> None:
     from matplotlib.lines import Line2D
     import matplotlib.pyplot as plt
 
+    sources = list(dict.fromkeys(row["source"] for row in rows))
     colors = {
-        "Simulation 15/85; absolute": "#146b62",
-        "10/90 NIST simulation; excess": "#cf5b32",
-        "~50/50 NIST experiment; basis unspecified": "#4267a5",
+        label: (
+            "#146b62" if label.startswith("Simulation")
+            else "#cf5b32" if "NIST simulation" in label
+            else "#4267a5"
+        )
+        for label in sources
     }
     markers = {
-        "Simulation 15/85; absolute": "o",
-        "10/90 NIST simulation; excess": "s",
-        "~50/50 NIST experiment; basis unspecified": "D",
+        label: (
+            "o" if label.startswith("Simulation")
+            else "s" if "NIST simulation" in label
+            else "D"
+        )
+        for label in sources
     }
     figure, axes = plt.subplots(
         1, 2, figsize=(12.8, 5.2), gridspec_kw={"width_ratios": [1.2, 1]}
@@ -180,23 +245,43 @@ def _write_plot(rows: list[dict[str, Any]], path: Path) -> None:
         color = colors[label]
         marker = markers[label]
         pressures = [row["pressure_bar"] for row in positive]
-        for axis, component in zip(axes[:1], ("co2", "n2")):
-            values = [row[f"{component}_mmol_g"] for row in positive]
-            axis.plot(
+        for component, linestyle in (
+            ("co2", "-"),
+            ("n2", "--"),
+        ):
+            key = (
+                f"{component}_excess_mmol_g"
+                if label.startswith("Simulation")
+                else f"{component}_mmol_g"
+            )
+
+            values = [row[key] for row in positive]
+
+            axes[0].plot(
                 pressures,
                 values,
                 marker=marker,
                 markersize=5.5,
                 linewidth=1.8,
+                linestyle=linestyle,
                 color=color,
                 label="_nolegend_",
             )
-            if label == "Simulation 15/85; absolute":
+            if label.startswith("Simulation"):
                 lower = [row.get(f"{component}_ci95_lower_mmol_g") for row in positive]
                 upper = [row.get(f"{component}_ci95_upper_mmol_g") for row in positive]
                 if all(value is not None for value in [*lower, *upper]):
-                    axis.fill_between(pressures, lower, upper, color=color, alpha=0.12)
-        selectivities = [row["selectivity"] for row in positive]
+                    axes[0].fill_between(
+                            pressures, lower, upper,
+                            color=color, alpha=0.12
+                        )
+        selectivity_key = (
+            "selectivity_excess"
+            if label.startswith("Simulation")
+            else "selectivity"
+        )
+
+        selectivities = [row[selectivity_key] for row in positive]
         if all(value is not None for value in selectivities):
             axes[1].plot(
                 pressures,
@@ -210,38 +295,43 @@ def _write_plot(rows: list[dict[str, Any]], path: Path) -> None:
 
     axes[0].set_title("Component uptake")
     axes[0].set_ylabel("Uptake (mmol/g)")
-    for label in colors:
-        series = sorted(
-            (row for row in rows if row["source"] == label and row["pressure_bar"] > 0),
-            key=lambda row: row["pressure_bar"],
-        )
-        if series:
-            axes[0].plot(
-                [row["pressure_bar"] for row in series],
-                [row["n2_mmol_g"] for row in series],
-                marker=markers[label],
-                markersize=4.5,
-                linewidth=1.5,
-                linestyle="--",
-                color=colors[label],
-                label="_nolegend_",
-            )
-    source_handles = [
+    
+    uptake_handles = [
         Line2D(
-            [0], [0], color=colors[label], marker=markers[label], linewidth=1.8,
-            markersize=5.5, label=label,
+            [0], [0],
+            color=colors[label],
+            marker=markers[label],
+            linestyle=linestyle,
+            linewidth=2,
+            markersize=5,
+            label=f"{label} | {component}",
         )
-        for label in colors
+        for label in sources
+        for component, linestyle in (
+            ("CO2", "-"),
+            ("N2", (0, (5, 3))),
+        )
     ]
-    component_handles = [
-        Line2D([0], [0], color="#444444", linewidth=1.8, linestyle="-", label="CO2"),
-        Line2D([0], [0], color="#444444", linewidth=1.8, linestyle="--", label="N2"),
-    ]
+    source_handles = [
+            Line2D(
+                [0], [0],
+                color=colors[label],
+                marker=markers[label],
+                linewidth=1.8,
+                markersize=5.5,
+                label=label,
+                linestyle="-",
+            )
+            for label in sources
+        ] 
     axes[0].legend(
-        handles=[*source_handles, *component_handles],
+        handles=uptake_handles,
         frameon=False,
         fontsize=8,
         loc="upper left",
+        handlelength=4.5,   # längere Linien in der Legende
+        handletextpad=1.0,
+        numpoints=1,
     )
     axes[1].set_title("Selectivity calculated from each dataset")
     axes[1].set_ylabel("CO2/N2 selectivity")
@@ -255,9 +345,21 @@ def _write_plot(rows: list[dict[str, Any]], path: Path) -> None:
         axis.grid(True, which="major", color="#d7d9d6", linewidth=0.8)
         axis.grid(True, which="minor", color="#eceeeb", linewidth=0.5)
         axis.spines[["top", "right"]].set_visible(False)
+    simulation = next(row for row in rows if row["source"].startswith("Simulation"))
+    matching_feed = all(
+        abs(row["co2_mole_fraction"] - simulation["co2_mole_fraction"]) < 1e-6
+        and abs(row["n2_mole_fraction"] - simulation["n2_mole_fraction"]) < 1e-6
+        for row in rows
+        if "NIST" in row["source"]
+    )
+    comparison_scope = (
+        "Same feed composition; different adsorption bases; not a quantitative validation"
+        if matching_feed
+        else "Different gas compositions and/or adsorption bases; not a quantitative validation"
+    )
     figure.suptitle(
-        "IRMOF-1 CO2/N2: qualitative trend comparison\n"
-        "Different gas compositions and adsorption bases; not a quantitative validation",
+        f"IRMOF-1 CO2/N2: qualitative trend comparison ({', '.join(sources)})\n"
+        f"{comparison_scope}",
         fontsize=13,
         y=1.03,
     )
@@ -267,10 +369,28 @@ def _write_plot(rows: list[dict[str, Any]], path: Path) -> None:
 
 
 def create_reference_trend_plot(
-    run_dir: str | Path, output_dir: str | Path | None = None
+    run_dir: str | Path,
+    output_dir: str | Path | None = None,
+    *,
+    matching_composition_only: bool = False,
 ) -> dict[str, str]:
     run_path = Path(run_dir).resolve()
-    rows = _simulation_series(run_path) + _reference_series(run_path)
+    simulation_rows = _simulation_series(run_path)
+    simulation = simulation_rows[0]
+    reference_rows = _reference_series(run_path)
+    if matching_composition_only:
+        reference_rows = [
+            row
+            for row in reference_rows
+            if abs(row["co2_mole_fraction"] - simulation["co2_mole_fraction"]) < 1e-6
+            and abs(row["n2_mole_fraction"] - simulation["n2_mole_fraction"]) < 1e-6
+        ]
+        if not reference_rows:
+            raise ValueError("No NIST series found at the simulation gas composition.")
+    rows = simulation_rows + reference_rows
+    simulation_row = next(row for row in rows if row["source"].startswith("Simulation"))
+    co2_percent = simulation_row["co2_mole_fraction"] * 100
+    n2_percent = simulation_row["n2_mole_fraction"] * 100
     target = Path(output_dir).resolve() if output_dir else run_path / "analysis" / "reference_trend"
     target.mkdir(parents=True, exist_ok=True)
     plot_path = target / "reference_trend_comparison.png"
@@ -291,22 +411,39 @@ def create_reference_trend_plot(
         "n2_ci95_upper_mmol_g",
         "selectivity_ci95_lower",
         "selectivity_ci95_upper",
+        "co2_excess_mmol_g",
+        "n2_excess_mmol_g",
+        "selectivity_excess",
     ]
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
+    source_notes = {
+        "10/90 NIST simulation; excess": "10/90 NIST simulation, reported as excess adsorption (DOI 10.1039/b807470d)",
+        "~50/50 NIST experiment; basis unspecified": "approximately 50/50 NIST experiment with unspecified adsorption basis (DOI 10.1016/j.seppur.2018.01.013)",
+    }
+    plotted_references = list(
+        dict.fromkeys(
+            source_notes[row["source"]]
+            for row in reference_rows
+            if row["source"] in source_notes
+        )
+    )
+    uncertainty_note = (
+        "Simulation bands show the local convergence report's 95% intervals. "
+        "No uncertainty was available for the digitized/reference points."
+        if any(row.get("co2_ci95_lower_mmol_g") is not None for row in simulation_rows)
+        else "The simulation has only one independent seed, so no seed-level 95% confidence interval is available."
+    )
     note_path.write_text(
         "# Qualitative reference trend comparison\n\n"
-        "The figure overlays the local 15/85 absolute-uptake simulation with two NIST datasets: "
-        "a 10/90 simulation reported as excess adsorption (DOI 10.1039/b807470d) and an "
-        "approximately 50/50 experimental series with unspecified adsorption basis "
-        "(DOI 10.1016/j.seppur.2018.01.013). NIST points are shown as tabulated, without "
-        "composition correction, basis conversion or interpolation. The selectivity values "
-        "are computed from each dataset's own component uptake and gas composition. Use the "
-        "figure only to inspect broad trends; it is not a quantitative validation.\n\n"
-        "Simulation bands show the local convergence report's 95% intervals. No uncertainty "
-        "was available for the digitized/reference points.\n",
+        f"The figure overlays the local {co2_percent:g}/{n2_percent:g} absolute-uptake simulation with "
+        f"{'; '.join(plotted_references)}. NIST points are shown as tabulated, without "
+        "composition correction, basis conversion or interpolation. Selectivity values "
+        "are computed from each dataset's own component uptake and gas composition. "
+        "Use the figure only to inspect broad trends; it is not a quantitative validation.\n\n"
+        f"{uncertainty_note}\n",
         encoding="utf-8",
     )
     return {"plot": str(plot_path), "data": str(csv_path), "notes": str(note_path)}
@@ -319,7 +456,7 @@ def main(argv: list[str] | None = None) -> int:
         / "outputs"
         / "module_B_mixture_selectivity"
         / "runs"
-        / "mof5_co2_n2_validation_pilot_2_longer"
+        / "mof5_co2_n2_validation_10_90_nist_matched_3seeds"
     )
     parser.add_argument(
         "run_dir",
@@ -328,8 +465,17 @@ def main(argv: list[str] | None = None) -> int:
         help=f"Module-B run directory (default: {default_run})",
     )
     parser.add_argument("--output-dir")
+    parser.add_argument(
+        "--matching-composition-only",
+        action="store_true",
+        help="Plot only NIST mixture series with the same gas composition as the simulation.",
+    )
     args = parser.parse_args(argv)
-    outputs = create_reference_trend_plot(args.run_dir, args.output_dir)
+    outputs = create_reference_trend_plot(
+        args.run_dir,
+        args.output_dir,
+        matching_composition_only=args.matching_composition_only,
+    )
     print(json.dumps(outputs, indent=2))
     return 0
 

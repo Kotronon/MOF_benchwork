@@ -26,9 +26,15 @@ CONTEXT_KEYS = ("material_id", "charge_scheme", "temperature_K", "unit_cells", "
 def _save(path: str | Path, data: dict[str, Any]) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(data, indent=2, allow_nan=False) + "\n")
-    temporary.replace(path)
+    import tempfile
+    payload = json.dumps(data, indent=2, allow_nan=False) + "\n"
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, prefix=path.name + ".", suffix=".tmp", delete=False) as handle:
+        temporary = Path(handle.name)
+        handle.write(payload)
+    try:
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _context(summary_path: str | Path) -> dict[str, Any]:

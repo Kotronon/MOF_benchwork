@@ -313,6 +313,9 @@ class ConvertersAndLammpsTests(unittest.TestCase):
     def test_lammps_can_run_materialized_gcmc_smoke_input(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = benchmark.load_benchmark_data("benchmark.json")
+            # Keep this technical test independent of production campaign lengths.
+            config["simulation"].update(cycles=100, initialization_cycles=100)
+            config["conditions"]["pressures_bar"] = [1.0]
             config["output"]["directory"] = str(Path(tmpdir) / "module_a")
             run_plan = benchmark.build_run_plan(config)
             prepare_plan = benchmark.prepare_benchmark(run_plan)

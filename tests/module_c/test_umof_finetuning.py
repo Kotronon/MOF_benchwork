@@ -11,6 +11,8 @@ import numpy as np
 from modules.module_c_mlips.umof_finetuning import (
     build_umof_mh_training_command,
     prepare_adsorption_datasets,
+    _target_gas_composition,
+    _stratified_nested_indices,
 )
 
 
@@ -60,7 +62,7 @@ class UmofFinetuningTests(unittest.TestCase):
                 {atoms.info["umof_source_split"] for atoms in test}, {"test"}
             )
 
-    def test_training_command_uses_umof_mh_head_and_cpu(self) -> None:
+    def test_training_command_uses_foundation_replay_and_cpu(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             checkpoint = root / "umof.model"
@@ -69,6 +71,7 @@ class UmofFinetuningTests(unittest.TestCase):
                 {
                     "train_file": str(root / "train.extxyz"),
                     "valid_file": str(root / "valid.extxyz"),
+                    "replay_dataset": "matpes_r2scan",
                 },
                 checkpoint,
                 root / "output",
@@ -83,8 +86,48 @@ class UmofFinetuningTests(unittest.TestCase):
         )
         self.assertEqual(command[command.index("--device") + 1], "cpu")
         self.assertEqual(command[command.index("--lr") + 1], "0.0001")
-        self.assertEqual(command[command.index("--multiheads_finetuning") + 1], "False")
+        self.assertEqual(command[command.index("--swa_lr") + 1], "0.0001")
+        self.assertEqual(command[command.index("--multiheads_finetuning") + 1], "True")
+        self.assertEqual(command[command.index("--E0s") + 1], "foundation")
+        self.assertEqual(command[command.index("--pt_train_file") + 1], "matpes_r2scan")
+        self.assertIn("--swa", command)
         self.assertEqual(command[command.index("--max_num_epochs") + 1], "2")
+        self.assertIn("--restart_latest", command)
+        self.assertIn("--save_all_checkpoints", command)
+        self.assertEqual(command[command.index("--seed") + 1], "12345")
+        self.assertEqual(command[command.index("--pt_train_file") + 1], "matpes_r2scan")
+
+    def test_stratified_fraction_is_nested_and_covers_each_stratum(self) -> None:
+        frames = [
+            _frame("CO2"),
+            _frame("CO2"),
+            _frame("N2"),
+            _frame("N2"),
+            _frame("CH4"),
+            _frame("CH4"),
+        ]
+
+        selected_ten = _stratified_nested_indices(
+            frames,
+            train_fraction=0.5,
+            rng=__import__("random").Random(17),
+        )
+        selected_full = _stratified_nested_indices(
+            frames,
+            train_fraction=1.0,
+            rng=__import__("random").Random(17),
+        )
+
+        self.assertEqual(len(selected_ten), 3)
+        self.assertTrue(set(selected_ten) <= set(selected_full))
+        self.assertEqual(
+            {
+                gas
+                for index in selected_ten
+                for gas in _target_gas_composition(frames[index])
+            },
+            {"CO2", "N2", "CH4"},
+        )
 
 
 def _frame(gas: str) -> Atoms:
