@@ -23,16 +23,14 @@ class UmofFinetuningTests(unittest.TestCase):
             data = root / "data"
             output = root / "prepared"
             data.mkdir()
-            for mof in ("TrainMOF", "ValidMOF", "TestMOF"):
+            for mof_index, mof in enumerate(("TrainMOF", "ValidMOF", "TestMOF")):
                 for split in ("train", "valid", "test"):
+                    frames = [_frame(gas) for gas in ("CO2", "N2", "CH4", "H2O")]
+                    for frame in frames:
+                        frame.positions[:, 2] += mof_index * 0.1
                     write(
                         data / f"{mof}-adsorbates-{split}.extxyz",
-                        [
-                            _frame("CO2"),
-                            _frame("N2"),
-                            _frame("CH4"),
-                            _frame("H2O"),
-                        ],
+                        frames,
                         format="extxyz",
                     )
 
@@ -67,6 +65,10 @@ class UmofFinetuningTests(unittest.TestCase):
             root = Path(temporary)
             checkpoint = root / "umof.model"
             checkpoint.write_bytes(b"checkpoint")
+            replay = root / "replay.extxyz"
+            replay.write_text("fixture")
+            replay_valid = root / "valid.extxyz"
+            replay_valid.write_text("fixture")
             command = build_umof_mh_training_command(
                 {
                     "train_file": str(root / "train.extxyz"),
@@ -76,6 +78,9 @@ class UmofFinetuningTests(unittest.TestCase):
                 checkpoint,
                 root / "output",
                 max_epochs=2,
+                replay_dataset=str(replay),
+                replay_valid_file=replay_valid,
+                start_swa=1,
             )
 
         self.assertIn("--foundation_head", command)
@@ -85,17 +90,24 @@ class UmofFinetuningTests(unittest.TestCase):
             command[command.index("--foundation_model_elements") + 1], "True"
         )
         self.assertEqual(command[command.index("--device") + 1], "cpu")
+        self.assertEqual(command[command.index("--default_dtype") + 1], "float64")
+        self.assertEqual(command[command.index("--batch_size") + 1], "1")
+        self.assertEqual(command[command.index("--real_pt_data_ratio_threshold") + 1], "0.0")
+        self.assertEqual(command[command.index("--weight_pt_head") + 1], "0.25")
+        self.assertEqual(command[command.index("--pt_valid_file") + 1], str(replay_valid.resolve()))
+        self.assertEqual(command[command.index("--compute_stress") + 1], "False")
+        self.assertNotIn("--test_file", command)
         self.assertEqual(command[command.index("--lr") + 1], "0.0001")
         self.assertEqual(command[command.index("--swa_lr") + 1], "0.0001")
         self.assertEqual(command[command.index("--multiheads_finetuning") + 1], "True")
         self.assertEqual(command[command.index("--E0s") + 1], "foundation")
-        self.assertEqual(command[command.index("--pt_train_file") + 1], "matpes_r2scan")
+        self.assertEqual(command[command.index("--pt_train_file") + 1], str(replay.resolve()))
         self.assertIn("--swa", command)
         self.assertEqual(command[command.index("--max_num_epochs") + 1], "2")
         self.assertIn("--restart_latest", command)
         self.assertIn("--save_all_checkpoints", command)
         self.assertEqual(command[command.index("--seed") + 1], "12345")
-        self.assertEqual(command[command.index("--pt_train_file") + 1], "matpes_r2scan")
+        self.assertEqual(command[command.index("--pt_train_file") + 1], str(replay.resolve()))
 
     def test_stratified_fraction_is_nested_and_covers_each_stratum(self) -> None:
         frames = [

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 from collections.abc import Sequence
 import json
 import math
@@ -20,7 +21,7 @@ from pipeline.config import save_benchmark_data
 
 DEFAULT_DATA_DIRECTORY = Path("external/umof_data")
 DEFAULT_CHECKPOINT = Path("external/umof_models/uMOF-MH.model")
-DEFAULT_OUTPUT_DIRECTORY = Path("outputs/module_C_umof_finetuning")
+DEFAULT_OUTPUT_DIRECTORY = Path("outputs/module_C_umof_finetuning_matrix_v2")
 DEFAULT_TRAIN_FRACTIONS = (0.10, 0.25, 0.50, 1.00)
 DEFAULT_REPLAY_DATASET = "matpes_r2scan"
 DEFAULT_VALIDATION_MOFS = {
@@ -42,171 +43,155 @@ KNOWN_GAS_FORMULAS = {
 }
 
 
+def sha256_file(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def geometry_id(atoms: Any) -> str:
+    digest = hashlib.sha256()
+    for values in (atoms.numbers, atoms.positions, atoms.cell.array, atoms.pbc):
+        digest.update(np.asarray(values).tobytes())
+    return digest.hexdigest()
+
+
 def prepare_adsorption_datasets(
     data_directory: str | Path = DEFAULT_DATA_DIRECTORY,
     output_directory: str | Path = DEFAULT_OUTPUT_DIRECTORY,
-    *,
-    train_fraction: float = 1.0,
-    seed: int = 12345,
+    *, train_fraction: float = 1.0, seed: int = 12345,
     validation_mofs: set[str] | None = None,
     test_mofs: set[str] | None = None,
+    gases: set[str] | None = None,
+    gas_definitions: dict[str, dict[str, int]] | None = None,
+    supported_elements: set[int] | None = None,
 ) -> dict[str, Any]:
-    """Build gas-filtered, MOF-disjoint uMOF training/evaluation datasets.
-
-    The official per-MOF train, validation, and test files are assigned to
-    distinct framework groups. Test frames are written separately and never
-    passed to the training command.
-    """
-    if not math.isfinite(train_fraction) or not 0.0 < train_fraction <= 1.0:
-        raise ValueError("train_fraction must be in the interval (0, 1].")
-    try:
-        from ase.io import read, write
-    except ImportError as exc:
-        raise ImportError("ASE is required to prepare uMOF datasets.") from exc
-
-    data_root = Path(data_directory).expanduser()
-    output_root = Path(output_directory).expanduser()
-    train_paths = sorted(data_root.glob("*-adsorbates-train.extxyz"))
-    valid_paths = sorted(data_root.glob("*-adsorbates-valid.extxyz"))
-    test_paths = sorted(data_root.glob("*-adsorbates-test.extxyz"))
-    if not train_paths or not valid_paths or not test_paths:
-        raise FileNotFoundError(
-            f"uMOF adsorption train/valid/test files are incomplete in {data_root}."
-        )
-    train_by_mof = {
-        path.name.removesuffix("-train.extxyz"): path for path in train_paths
-    }
-    valid_by_mof = {
-        path.name.removesuffix("-valid.extxyz"): path for path in valid_paths
-    }
-    test_by_mof = {
-        path.name.removesuffix("-test.extxyz"): path for path in test_paths
-    }
-    if set(train_by_mof) != set(valid_by_mof):
-        raise ValueError(
-            "uMOF adsorption train/valid MOF groups differ: "
-            f"train-only-valid={sorted(set(train_by_mof) - set(valid_by_mof))}, "
-        )
-    all_mofs = set(train_by_mof)
-    validation_mofs = set(validation_mofs or DEFAULT_VALIDATION_MOFS)
-    test_mofs = set(test_mofs or DEFAULT_TEST_MOFS)
-    if not validation_mofs or not test_mofs:
-        raise ValueError("Validation and test MOF groups must be non-empty.")
-    if validation_mofs & test_mofs:
-        raise ValueError("Validation and test MOF groups must be disjoint.")
-    unknown_mofs = (validation_mofs | test_mofs) - all_mofs
-    if unknown_mofs:
-        raise ValueError(f"Unknown uMOF adsorption MOFs: {sorted(unknown_mofs)}")
-    missing_test_files = test_mofs - set(test_by_mof)
-    if missing_test_files:
-        raise ValueError(
-            f"Held-out test MOFs have no official test files: {sorted(missing_test_files)}"
-        )
-    training_mofs = all_mofs - validation_mofs - test_mofs
-    if not training_mofs:
-        raise ValueError("At least one uMOF must remain in the training group.")
-
-    output_root.mkdir(parents=True, exist_ok=True)
-    train_output = output_root / "train.extxyz"
-    valid_output = output_root / "valid.extxyz"
-    test_output = output_root / "test.extxyz"
+    """Prepare released labels, retaining full adsorbed composition and provenance."""
+    from ase.io import read, write
+    if not math.isfinite(train_fraction) or not 0 < train_fraction <= 1:
+        raise ValueError("train_fraction must be in (0, 1].")
+    gases, definitions = validate_gases(gases, gas_definitions)
+    if supported_elements is not None:
+        from ase.data import atomic_numbers
+        if {atomic_numbers[e] for gas in gases for e in definitions[gas]} - supported_elements:
+            raise ValueError("Selected gas definition uses elements unsupported by the checkpoint")
+    root, output = Path(data_directory).expanduser(), Path(output_directory).expanduser()
+    files = {split: {p.name.removesuffix(f"-{split}.extxyz"): p
+                    for p in sorted(root.glob(f"*-adsorbates-{split}.extxyz"))}
+             for split in ("train", "valid", "test")}
+    if any(not group for group in files.values()):
+        raise FileNotFoundError(f"Incomplete adsorption train/valid/test files in {root}")
+    if set(files["train"]) != set(files["valid"]):
+        raise ValueError("uMOF train/valid MOF groups differ")
+    valid_mofs = set(DEFAULT_VALIDATION_MOFS if validation_mofs is None else validation_mofs)
+    held_mofs = set(DEFAULT_TEST_MOFS if test_mofs is None else test_mofs)
+    if not valid_mofs or not held_mofs or valid_mofs & held_mofs:
+        raise ValueError("Validation and test MOF groups must be nonempty and disjoint")
+    all_mofs = set(files["train"])
+    if (valid_mofs | held_mofs) - all_mofs or held_mofs - set(files["test"]):
+        raise ValueError("Unknown MOFs or missing official test files")
+    groups = {"train": all_mofs - valid_mofs - held_mofs,
+              "valid": valid_mofs, "test": held_mofs}
+    if not groups["train"]:
+        raise ValueError("At least one training MOF is required")
     rng = random.Random(seed)
-    source_counts: dict[str, dict[str, Any]] = {}
-    total_train = 0
-    total_valid = 0
-    total_test = 0
-
-    with train_output.open("w", encoding="utf-8") as train_handle:
-        for mof in sorted(training_mofs):
-            path = train_by_mof[mof]
+    datasets, source_counts, exclusions, seen = {}, {}, [], {}
+    for split, mofs in groups.items():
+        selected_frames = []
+        for mof in sorted(mofs):
+            path = files[split][mof]
             frames = read(path, index=":", format="extxyz")
-            if not frames:
-                raise ValueError(f"uMOF file is empty: {path}")
-            prepared = [
-                _prepare_frame(frame, path, "train")
-                for frame in frames
-            ]
-            prepared = [frame for frame in prepared if frame is not None]
+            prepared, source_indices = [], []
+            for index, atoms in enumerate(frames):
+                if atoms.info.get("umof_mof_id", mof) != mof:
+                    raise ValueError(f"Contradictory MOF identity in {path}:{index}")
+                try:
+                    current = _prepare_frame(atoms, path, split, gases=gases,
+                                             gas_definitions=definitions)
+                except GuestAssignmentError as exc:
+                    exclusions.append({"source": path.name, "index": index, "reason": str(exc)})
+                    continue
+                if current is None:
+                    exclusions.append({"source": path.name, "index": index,
+                                       "reason": "No allowed guests or excluded component present"})
+                    continue
+                if supported_elements is not None and set(current.numbers) - supported_elements:
+                    raise ValueError(f"Checkpoint does not support elements in {path}:{index}")
+                frame_id = geometry_id(current)
+                if frame_id in seen and seen[frame_id] != split:
+                    raise ValueError(f"Duplicate configuration across splits: {path}:{index}")
+                seen[frame_id] = split
+                current.info.update(umof_frame_id=frame_id, umof_source_index=index,
+                                    umof_mof_id=mof)
+                prepared.append(current)
+                source_indices.append(index)
             if not prepared:
-                raise ValueError(f"No CO2/N2/CH4 frames found in {path}.")
-            indices = _stratified_nested_indices(
-                prepared,
-                train_fraction=train_fraction,
-                rng=rng,
-            )
-            selected = [prepared[index] for index in indices]
-            write(train_handle, selected, format="extxyz")
-            source_counts[path.name] = {
-                "available": len(prepared),
-                "selected": len(selected),
-            }
-            total_train += len(selected)
-
-    with valid_output.open("w", encoding="utf-8") as valid_handle:
-        for mof in sorted(validation_mofs):
-            path = valid_by_mof[mof]
-            frames = read(path, index=":", format="extxyz")
-            if not frames:
-                raise ValueError(f"uMOF file is empty: {path}")
-            prepared = [
-                _prepare_frame(frame, path, "valid")
-                for frame in frames
-            ]
-            prepared = [frame for frame in prepared if frame is not None]
-            if not prepared:
-                raise ValueError(f"No CO2/N2/CH4 frames found in {path}.")
-            write(valid_handle, prepared, format="extxyz")
-            source_counts[path.name] = {
-                "available": len(prepared),
-                "selected": len(prepared),
-            }
-            total_valid += len(prepared)
-
-    with test_output.open("w", encoding="utf-8") as test_handle:
-        for mof in sorted(test_mofs):
-            path = test_by_mof[mof]
-            frames = read(path, index=":", format="extxyz")
-            prepared = [
-                _prepare_frame(frame, path, "test")
-                for frame in frames
-            ]
-            prepared = [frame for frame in prepared if frame is not None]
-            if not prepared:
-                raise ValueError(f"No CO2/N2/CH4 frames found in {path}.")
-            write(test_handle, prepared, format="extxyz")
-            source_counts[path.name] = {
-                "available": len(prepared),
-                "selected": len(prepared),
-            }
-            total_test += len(prepared)
-
+                raise ValueError(f"No unambiguously assigned allowed gas frames in {path}")
+            indices = (_stratified_nested_indices(prepared, train_fraction=train_fraction, rng=rng,
+                        gases=gases, gas_definitions=definitions)
+                       if split == "train" else list(range(len(prepared))))
+            selected_frames.extend(prepared[i] for i in indices)
+            source_counts[path.name] = {"sha256": sha256_file(path), "available": len(prepared),
+                "selected": len(indices), "source_indices": [source_indices[i] for i in indices],
+                "selection_indices": indices,
+                "frame_ids": [prepared[i].info["umof_frame_id"] for i in indices]}
+        datasets[split] = selected_frames
+    output.mkdir(parents=True, exist_ok=True)
+    for split, frames in datasets.items():
+        write(output / f"{split}.extxyz", frames, format="extxyz")
     manifest = {
-        "status": "prepared",
-        "dataset": "uMOF released adsorbate-loaded frameworks",
-        "energy_reference": "r2SCAN-D4",
-        "target_gases": sorted(TARGET_GASES),
-        "training_data_fraction": train_fraction,
-        "seed": seed,
-        "train_file": str(train_output),
-        "valid_file": str(valid_output),
-        "test_file": str(test_output),
+        "schema_version": 2, "status": "prepared", "dataset": "uMOF released adsorbate-loaded frameworks",
+        "energy_reference": "r2SCAN-D4", "target_gases": sorted(gases), "gas_definitions": definitions,
+        "training_data_fraction": train_fraction, "seed": seed,
+        **{f"{split}_file": str(output / f"{split}.extxyz") for split in datasets},
+        "file_sha256": {split: sha256_file(output / f"{split}.extxyz") for split in datasets},
+        "train_configuration_count": len(datasets["train"]),
+        "validation_configuration_count": len(datasets["valid"]),
+        "test_configuration_count": len(datasets["test"]),
+        "actual_training_fraction": len(datasets["train"]) / sum(
+            row["available"] for name, row in source_counts.items() if name.endswith("-train.extxyz")),
+        "training_mofs": sorted(groups["train"]), "validation_mofs": sorted(valid_mofs),
+        "test_mofs": sorted(held_mofs), "test_files_used_for_training": False,
+        "source_file_counts": source_counts, "exclusions": exclusions,
         "replay_dataset": DEFAULT_REPLAY_DATASET,
-        "train_configuration_count": total_train,
-        "validation_configuration_count": total_valid,
-        "test_configuration_count": total_test,
-        "training_mofs": sorted(training_mofs),
-        "validation_mofs": sorted(validation_mofs),
-        "test_mofs": sorted(test_mofs),
-        "test_files_used_for_training": False,
-        "replay_source": "MACE MatPES r2SCAN training-only replay set",
-        "source_file_counts": source_counts,
-        "label_mapping": {
-            "dft_energy": "REF_energy",
-            "dft_forces": "REF_forces",
-        },
+        "label_mapping": {"dft_energy": "REF_energy", "dft_forces": "REF_forces"},
+        "units": {"energy": "eV", "forces": "eV/Angstrom"},
+        "stress": "Original dft_stress retained; source convention not inferred; unused in training",
+        "coverage": coverage_report(datasets),
     }
-    save_benchmark_data(output_root / "dataset_manifest.json", manifest)
+    save_benchmark_data(output / "dataset_manifest.json", manifest)
     return manifest
+
+
+def coverage_report(datasets: dict[str, list[Any]]) -> dict[str, Any]:
+    from collections import Counter
+    report = {}
+    for split, frames in datasets.items():
+        combinations, loadings, variations = Counter(), Counter(), Counter()
+        structures = {}
+        for atoms in frames:
+            counts = json.loads(atoms.info["umof_guest_counts"])
+            combinations["+".join(sorted(counts))] += 1
+            loadings[str(sum(counts.values()))] += 1
+            variations[str(atoms.info.get("config_type", "unspecified"))] += 1
+            mof = atoms.info.get("umof_mof_id", "unknown")
+            structures.setdefault(mof, set()).add(tuple(np.round(atoms.cell.array.ravel(), 6)))
+        report[split] = {"component_sets": dict(combinations), "loading_counts": dict(loadings),
+                         "source_config_types": dict(variations),
+                         "distinct_cells_by_mof": {m: len(c) for m, c in structures.items()},
+                         "framework_deformation_labels": "not established by source config_type or cell count",
+                         "mixture_configuration_count": sum(v for k, v in combinations.items() if "+" in k)}
+    report.update(composition_basis="adsorbed molecule counts, not gas-phase fractions",
+                  available_gases=sorted({g for frames in datasets.values() for a in frames
+                                          for g in json.loads(a.info["umof_guest_counts"])}),
+                  configuration_scope="pure_gas_only" if all(
+                      len(json.loads(a.info["umof_guest_counts"])) == 1
+                      for frames in datasets.values() for a in frames) else "includes_real_coloaded_mixtures",
+                  mixture_validation="open", flexible_framework_validation="open",
+                  interpretation="Configuration coverage does not establish adsorption or flexibility accuracy")
+    return report
 
 
 def build_umof_mh_training_command(
@@ -214,13 +199,15 @@ def build_umof_mh_training_command(
     checkpoint: str | Path = DEFAULT_CHECKPOINT,
     output_directory: str | Path = DEFAULT_OUTPUT_DIRECTORY,
     *,
-    max_epochs: int = 1000,
+    max_epochs: int = 50,
     learning_rate: float = 1.0e-4,
     replay_weight: float = 0.25,
     replay_sample_count: int = 1000,
     replay_dataset: str = DEFAULT_REPLAY_DATASET,
     device: str = "cpu",
     seed: int = 12345,
+    replay_valid_file: str | Path | None = None,
+    start_swa: int = 40,
 ) -> list[str]:
     """Build a single-model CPU fine-tuning command from the uMOF-MH head."""
     checkpoint_path = Path(checkpoint).expanduser()
@@ -236,23 +223,25 @@ def build_umof_mh_training_command(
         raise ValueError("replay_sample_count must be positive.")
     if device not in {"cpu", "cuda", "mps"}:
         raise ValueError("device must be one of: cpu, cuda, mps.")
-    if replay_dataset not in {"matpes_r2scan", "matpes_pbe", "mp", "omat"}:
-        raise ValueError("Unsupported MACE replay dataset.")
-    output = Path(output_directory).expanduser()
+    replay_path = Path(manifest.get("replay_train_file", replay_dataset)).expanduser()
+    valid_replay = Path(replay_valid_file or manifest.get("replay_valid_file", replay_path.with_name("valid.extxyz")))
+    if not replay_path.is_file() or not valid_replay.is_file():
+        raise FileNotFoundError("Explicit local MatPES replay train/valid files required; run setup and prepare first")
+    output = Path(output_directory).expanduser().resolve()
     return [
         sys.executable,
         "-m",
-        "mace.cli.run_train",
+        "modules.module_c_mlips.umof_mace_train",
         "--name",
         "umof_mh_adsorption_finetuned",
         "--restart_latest",
         "--save_all_checkpoints",
         "--train_file",
-        str(manifest["train_file"]),
+        str(Path(manifest["train_file"]).resolve()),
         "--valid_file",
-        str(manifest["valid_file"]),
+        str(Path(manifest["valid_file"]).resolve()),
         "--foundation_model",
-        str(checkpoint_path),
+        str(checkpoint_path.resolve()),
         "--foundation_head",
         "r2scan+d4",
         "--foundation_model_elements",
@@ -262,7 +251,11 @@ def build_umof_mh_training_command(
         "--E0s",
         "foundation",
         "--pt_train_file",
-        replay_dataset,
+        str(replay_path.resolve()),
+        "--pt_valid_file",
+        str(valid_replay.resolve()),
+        "--real_pt_data_ratio_threshold",
+        "0.0",
         "--num_samples_pt",
         str(replay_sample_count),
         "--weight_pt_head",
@@ -283,6 +276,12 @@ def build_umof_mh_training_command(
         "REF_energy",
         "--forces_key",
         "REF_forces",
+        "--stress_key", "UNUSED_stress",
+        "--virials_key", "UNUSED_virials",
+        "--compute_stress", "False",
+        "--scheduler", "ReduceLROnPlateau",
+        "--lr_factor", "0.8",
+        "--scheduler_patience", "50",
         "--device",
         device,
         "--default_dtype",
@@ -294,10 +293,10 @@ def build_umof_mh_training_command(
         "--max_num_epochs",
         str(max_epochs),
         "--patience",
-        str(max(5, min(20, max_epochs // 2))),
+        "20",
         "--swa",
         "--start_swa",
-        str(max(1, int(max_epochs * 0.8))),
+        str(start_swa),
         "--model_dir",
         str(output / "models"),
         "--checkpoints_dir",
@@ -309,159 +308,80 @@ def build_umof_mh_training_command(
     ]
 
 
-def evaluate_umof_mh_models(
-    test_file: str | Path,
-    finetuned_checkpoint: str | Path,
-    *,
-    baseline_checkpoint: str | Path = DEFAULT_CHECKPOINT,
-    device: str = "cpu",
-) -> dict[str, Any]:
-    """Compare zero-shot and fine-tuned uMOF-MH on the held-out test MOFs."""
-    try:
-        from ase.io import read
-        from mace.calculators import MACECalculator
-    except ImportError as exc:
-        raise ImportError("ASE and MACE are required for uMOF evaluation.") from exc
-
-    test_path = Path(test_file).expanduser()
-    baseline_path = Path(baseline_checkpoint).expanduser()
-    finetuned_path = Path(finetuned_checkpoint).expanduser()
-    for path in (test_path, baseline_path, finetuned_path):
-        if not path.is_file():
-            raise FileNotFoundError(f"Required uMOF evaluation file not found: {path}")
-    frames = read(test_path, index=":", format="extxyz")
-    baseline = MACECalculator(
-        model_paths=str(baseline_path),
-        device=device,
-        default_dtype="float64",
-        head="r2scan+d4",
-    )
-    finetuned = MACECalculator(
-        model_paths=str(finetuned_path),
-        device=device,
-        default_dtype="float64",
-        head="Default",
-    )
-    grouped: dict[str, dict[str, list[float]]] = {}
-    gas_counts: dict[str, dict[str, int]] = {}
-    by_gas: dict[str, dict[str, list[float]]] = {
-        gas: {
-            f"{label}_{kind}": []
-            for label in ("baseline", "finetuned")
-            for kind in ("energy", "forces")
-        }
-        for gas in sorted(TARGET_GASES)
-    }
+def evaluate_umof_mh_models(test_file, finetuned_checkpoint, *,
+        baseline_checkpoint=DEFAULT_CHECKPOINT, device="cpu"):
+    """Compatibility evaluator; gas groups refer to complete component sets."""
+    from ase.io import read, write
+    import tempfile
+    from .umof_workflow import predict, grouped_metrics, model_info
+    frames = read(test_file, index=":")
+    if not frames:
+        raise ValueError("Empty evaluation dataset")
     for atoms in frames:
-        gas_composition = _target_gas_composition(atoms)
-        if not gas_composition:
-            continue
-        mof = str(atoms.info.get("umof_source_file", "unknown")).split(
-            "-adsorbates-", maxsplit=1
-        )[0]
-        if mof not in grouped:
-            grouped[mof] = {"baseline_energy": [], "baseline_forces": [], "finetuned_energy": [], "finetuned_forces": []}
-            gas_counts[mof] = {gas: 0 for gas in sorted(TARGET_GASES)}
-        for gas, count in gas_composition.items():
-            gas_counts[mof][gas] += count
-        reference_energy = float(atoms.info["dft_energy"])
-        reference_forces = np.asarray(atoms.arrays["dft_forces"], dtype=float)
-        for label, calculator in (("baseline", baseline), ("finetuned", finetuned)):
-            current = atoms.copy()
-            current.calc = calculator
-            predicted_energy = float(current.get_potential_energy())
-            predicted_forces = np.asarray(current.get_forces(), dtype=float)
-            grouped[mof][f"{label}_energy"].append(
-                (predicted_energy - reference_energy) / len(atoms)
-            )
-            component_errors = (predicted_forces - reference_forces).reshape(-1)
-            grouped[mof][f"{label}_forces"].extend(component_errors.tolist())
-            present_gases = [gas for gas, count in gas_composition.items() if count]
-            for gas in present_gases:
-                by_gas[gas][f"{label}_energy"].append(
-                    (predicted_energy - reference_energy) / len(atoms)
-                )
-                by_gas[gas][f"{label}_forces"].extend(component_errors.tolist())
-
-    results = {
-        mof: {
-            "configuration_count": len(metrics["baseline_energy"]),
-            "gas_molecule_counts": gas_counts[mof],
-            "baseline": _error_metrics(
-                metrics["baseline_energy"], metrics["baseline_forces"]
-            ),
-            "finetuned": _error_metrics(
-                metrics["finetuned_energy"], metrics["finetuned_forces"]
-            ),
-        }
-        for mof, metrics in sorted(grouped.items())
-    }
-    if not results:
-        raise ValueError(f"No CO2/N2/CH4 configurations found in {test_path}.")
-    aggregate = {
-        "baseline": _error_metrics(
-            [value for metrics in grouped.values() for value in metrics["baseline_energy"]],
-            [value for metrics in grouped.values() for value in metrics["baseline_forces"]],
-        ),
-        "finetuned": _error_metrics(
-            [value for metrics in grouped.values() for value in metrics["finetuned_energy"]],
-            [value for metrics in grouped.values() for value in metrics["finetuned_forces"]],
-        ),
-    }
-    gas_results = {
-        gas: {
-            label: _error_metrics(
-                metrics[f"{label}_energy"], metrics[f"{label}_forces"]
-            )
-            for label in ("baseline", "finetuned")
-        }
-        for gas, metrics in by_gas.items()
-        if by_gas[gas]["baseline_energy"]
-    }
-    return {
-        "status": "completed",
-        "test_file": str(test_path),
-        "baseline_checkpoint": str(baseline_path),
-        "finetuned_checkpoint": str(finetuned_path),
-        "test_configuration_count": sum(
-            int(value["configuration_count"]) for value in results.values()
-        ),
-        "test_mof_count": len(results),
-        "energy_metric": "MAE/RMSE of total-energy error divided by atom count (eV/atom)",
-        "force_metric": "MAE/RMSE over Cartesian force-component errors (eV/A)",
-        "aggregate": aggregate,
-        "by_mof": results,
-        "by_gas": gas_results,
-    }
+        counts = _guest_molecule_counts(atoms)
+        atoms.info.setdefault("umof_guest_counts", json.dumps(counts, sort_keys=True))
+        atoms.info.setdefault("umof_mof_id", str(atoms.info.get("umof_source_file", "unknown")).split("-adsorbates-")[0])
+        atoms.info.setdefault("REF_energy", atoms.info.get("dft_energy"))
+        if "REF_forces" not in atoms.arrays:
+            atoms.set_array("REF_forces", atoms.arrays["dft_forces"])
+    heads = model_info(finetuned_checkpoint)["heads"]
+    if "Default" not in heads:
+        raise ValueError("Finetuned checkpoint lacks Default head")
+    with tempfile.TemporaryDirectory() as temporary:
+        path = Path(temporary) / "evaluation.extxyz"
+        write(path, frames, format="extxyz")
+        metrics = {label: grouped_metrics(frames, predict(path, model, head, Path(temporary)/"cache", device))
+            for label, model, head in (("baseline", baseline_checkpoint, "r2scan+d4"),
+                                      ("finetuned", finetuned_checkpoint, "Default"))}
+    return {"status": "completed", "test_configuration_count": len(frames),
+            "test_mof_count": len({a.info["umof_mof_id"] for a in frames}),
+            "test_file": str(test_file), "baseline_checkpoint": str(baseline_checkpoint),
+            "finetuned_checkpoint": str(finetuned_checkpoint),
+            "aggregate": {label: values["all"] for label, values in metrics.items()},
+            "by_mof": {key[4:]: {label: values[key] for label, values in metrics.items()}
+                       for key in metrics["baseline"] if key.startswith("mof:")},
+            "by_gas": {key[11:]: {label: values[key] for label, values in metrics.items()}
+                       for key in metrics["baseline"] if key.startswith("components:")},
+            "grouping": "Whole configurations by component set, not isolated guest forces"}
 
 
-def _target_gas_composition(atoms: Any) -> dict[str, int]:
-    counts = _guest_molecule_counts(atoms)
-    if not counts or set(counts) - TARGET_GASES:
-        return {}
-    return dict(counts)
+class GuestAssignmentError(ValueError):
+    """A frame cannot be safely assigned to gas components."""
 
 
-def _stratified_nested_indices(
-    frames: Sequence[Any],
-    *,
-    train_fraction: float,
-    rng: random.Random,
-) -> list[int]:
-    """Select a nested fraction while representing gas identity and loading."""
-    strata: dict[tuple[tuple[str, ...], str], list[int]] = {}
+def validate_gases(gases=None, gas_definitions=None):
+    from ase.data import atomic_numbers
+    selected = set(TARGET_GASES if gases is None else gases)
+    definitions = {k: dict(v) for k, v in KNOWN_GAS_FORMULAS.items()}
+    definitions.update(gas_definitions or {})
+    if not selected or selected - set(definitions):
+        raise ValueError("Every selected gas requires a component/formula definition")
+    for name, formula in definitions.items():
+        if not name or not formula or any(e not in atomic_numbers or isinstance(n, bool)
+                or not isinstance(n, int) or n <= 0 for e, n in formula.items()):
+            raise ValueError(f"Invalid gas definition: {name}")
+    return selected, definitions
+
+
+def _target_gas_composition(atoms: Any, gases=None, gas_definitions=None) -> dict[str, int]:
+    gases, definitions = validate_gases(gases, gas_definitions)
+    counts = _guest_molecule_counts(atoms, definitions)
+    return {} if not counts or set(counts) - gases else counts
+
+
+def _stratified_nested_indices(frames: Sequence[Any], *, train_fraction: float,
+        rng: random.Random, gases=None, gas_definitions=None) -> list[int]:
+    strata = {}
     for index, atoms in enumerate(frames):
-        gas_counts = _target_gas_composition(atoms)
-        gas_key = tuple(sorted(gas_counts))
-        loading = sum(gas_counts.values())
-        loading_bin = "1" if loading == 1 else "2-3" if loading <= 3 else "4+"
-        strata.setdefault((gas_key, loading_bin), []).append(index)
-    selected: list[int] = []
+        counts = _target_gas_composition(atoms, gases, gas_definitions)
+        names, total = tuple(sorted(counts)), sum(counts.values())
+        bins = tuple(min(4, (5 * counts[g]) // total) for g in names) if len(names) > 1 else ()
+        key = (names, "1" if total == 1 else "2-3" if total <= 3 else "4+", bins)
+        strata.setdefault(key, []).append(index)
+    selected = []
     for key in sorted(strata):
-        indices = list(strata[key])
-        rng.shuffle(indices)
-        count = max(1, math.ceil(len(indices) * train_fraction))
-        selected.extend(indices[:count])
+        indices = list(strata[key]); rng.shuffle(indices)
+        selected.extend(indices[:max(1, math.ceil(len(indices) * train_fraction))])
     return sorted(selected)
 
 
@@ -488,7 +408,7 @@ def _error_metrics(energy_errors: Sequence[float], force_errors: Sequence[float]
     }
 
 
-def _prepare_frame(atoms: Any, source: Path, split: str) -> Any | None:
+def _prepare_frame(atoms: Any, source: Path, split: str, *, gases=None, gas_definitions=None) -> Any | None:
     if "dft_energy" not in atoms.info or "dft_forces" not in atoms.arrays:
         raise ValueError(
             f"uMOF frame in {source} lacks dft_energy or dft_forces labels."
@@ -499,14 +419,40 @@ def _prepare_frame(atoms: Any, source: Path, split: str) -> Any | None:
         raise ValueError(f"Invalid uMOF energy/force labels in {source}.")
     if not np.isfinite(forces).all():
         raise ValueError(f"Non-finite uMOF force labels in {source}.")
-    guest_counts = _target_gas_composition(atoms)
+    guest_counts = _target_gas_composition(atoms, gases, gas_definitions)
     if not guest_counts:
         return None
     prepared = atoms.copy()
+    kind = "mixture" if len(guest_counts) > 1 else "pure_gas"
+    if atoms.info.get("umof_configuration_kind", kind) != kind:
+        raise ValueError("Stored configuration kind contradicts component identities")
+    components = atoms.info.get("umof_component_ids")
+    if components is not None and sorted(json.loads(components) if isinstance(components, str) else components) != sorted(guest_counts):
+        raise ValueError("Stored component identities contradict atom assignments")
+    composition = {gas: count / sum(guest_counts.values()) for gas, count in guest_counts.items()}
+    stored = atoms.info.get("umof_gas_composition")
+    if stored is not None:
+        stored = json.loads(stored) if isinstance(stored, str) else stored
+        if set(stored) != set(composition) or any(not math.isclose(stored[g], composition[g], abs_tol=1e-12) for g in stored):
+            raise ValueError("Stored adsorbed composition contradicts molecule counts")
+    if atoms.info.get("umof_composition_basis", "adsorbed_molecule_counts") != "adsorbed_molecule_counts":
+        raise ValueError("Composition metadata must describe adsorbed molecule counts")
     prepared.info["REF_energy"] = energy
-    prepared.new_array("REF_forces", forces.copy())
+    if "REF_energy" in atoms.info and not math.isclose(atoms.info["REF_energy"], energy, abs_tol=1e-12):
+        raise ValueError("Conflicting energy labels")
+    if "REF_forces" in atoms.arrays and not np.array_equal(atoms.arrays["REF_forces"], forces):
+        raise ValueError("Conflicting force labels")
+    prepared.set_array("REF_forces", forces.copy())
+    prepared.info.update(config_weight=1.0, config_energy_weight=1.0, config_forces_weight=1.0,
+                         config_stress_weight=0.0, config_virials_weight=0.0)
     prepared.info["umof_source_file"] = source.name
     prepared.info["umof_source_split"] = split
+    prepared.info["umof_guest_counts"] = json.dumps(guest_counts, sort_keys=True)
+    prepared.info["umof_component_ids"] = json.dumps(sorted(guest_counts))
+    prepared.info["umof_configuration_kind"] = kind
+    prepared.info["umof_composition_basis"] = "adsorbed_molecule_counts"
+    prepared.info["umof_assignment_source"] = "explicit_atom_assignment" if "umof_guest_assignments" in atoms.info else "legacy_connectivity_heuristic"
+    prepared.info["head"] = "Default"
     prepared.info["umof_gas_composition"] = json.dumps(
         {
             gas: count / sum(guest_counts.values())
@@ -526,6 +472,7 @@ def prepare_finetuning_matrix(
     seed: int = 12345,
     validation_mofs: set[str] | None = None,
     test_mofs: set[str] | None = None,
+    gases=None, gas_definitions=None, supported_elements=None,
 ) -> list[dict[str, Any]]:
     """Prepare reproducible, nested 10/25/50/100% datasets with shared splits."""
     if not fractions or any(
@@ -551,327 +498,102 @@ def prepare_finetuning_matrix(
                     seed=current_seed,
                     validation_mofs=validation_mofs,
                     test_mofs=test_mofs,
+                    gases=gases, gas_definitions=gas_definitions, supported_elements=supported_elements,
                 )
             )
     return manifests
 
 
-def run_finetuning_matrix(
-    data_directory: str | Path = DEFAULT_DATA_DIRECTORY,
-    checkpoint: str | Path = DEFAULT_CHECKPOINT,
-    output_directory: str | Path = DEFAULT_OUTPUT_DIRECTORY,
-    *,
-    fractions: Sequence[float] = DEFAULT_TRAIN_FRACTIONS,
-    seeds: Sequence[int] = (12345,),
-    max_epochs: int = 50,
-    learning_rate: float = 1.0e-4,
-    replay_weight: float = 0.25,
-    replay_sample_count: int = 1000,
-    seed: int = 12345,
-    device: str = "cpu",
-) -> dict[str, Any]:
-    """Prepare, train, and test all configured data-fraction runs sequentially."""
-    data_root = Path(data_directory).expanduser()
-    base_output = Path(output_directory).expanduser()
-    if not Path(checkpoint).expanduser().is_file():
-        raise FileNotFoundError(f"uMOF-MH checkpoint not found: {checkpoint}")
-    prepared = prepare_finetuning_matrix(
-        data_root,
-        base_output,
-        fractions=fractions,
-        seeds=seeds,
-        seed=seed,
-    )
-    rows = []
-    base_output.mkdir(parents=True, exist_ok=True)
-    summary_path = base_output / "fine_tuning_matrix_summary.json"
-    save_benchmark_data(
-        summary_path,
-        {
-            "status": "running",
-            "foundation_model": str(checkpoint),
-            "device": device,
-            "completed_runs": rows,
-            "total_runs": len(prepared),
-        },
-    )
-    for manifest in prepared:
-        run_directory = Path(manifest["train_file"]).parent.parent
-        percentage = int(round(float(manifest["training_data_fraction"]) * 100))
-        command = build_umof_mh_training_command(
-            manifest,
-            checkpoint,
-            run_directory,
-            max_epochs=max_epochs,
-            learning_rate=learning_rate,
-            replay_weight=replay_weight,
-            replay_sample_count=replay_sample_count,
-            replay_dataset=DEFAULT_REPLAY_DATASET,
-            device=device,
-            seed=int(manifest["seed"]),
-        )
-        save_benchmark_data(
-            run_directory / "training_command.json",
-            {
-                "command": command,
-                "device": device,
-                "seed": manifest["seed"],
-                "train_fraction": manifest["training_data_fraction"],
-                "replay_dataset": DEFAULT_REPLAY_DATASET,
-            },
-        )
-        results_path = run_directory / "results" / "held_out_test_comparison.json"
-        model_path = (
-            run_directory
-            / "models"
-            / "umof_mh_adsorption_finetuned_compiled.model"
-        )
-        if not model_path.is_file():
-            model_path = run_directory / "models" / "umof_mh_adsorption_finetuned.model"
-        if results_path.is_file() and model_path.is_file():
-            previous = json.loads(results_path.read_text(encoding="utf-8"))
-            if (
-                float(previous.get("training_data_fraction", -1.0))
-                == float(manifest["training_data_fraction"])
-                and int(previous.get("seed", -1)) == int(manifest["seed"])
-                and previous.get("replay_dataset") == DEFAULT_REPLAY_DATASET
-            ):
-                rows.append(previous)
-                save_benchmark_data(
-                    summary_path,
-                    {
-                        "status": "running",
-                        "foundation_model": str(checkpoint),
-                        "device": device,
-                        "completed_runs": rows,
-                        "total_runs": len(prepared),
-                    },
-                )
-                continue
-        started = time.perf_counter()
-        completed = subprocess.run(command, check=False)
-        runtime_seconds = time.perf_counter() - started
-        if completed.returncode != 0:
-            raise RuntimeError(
-                f"uMOF-MH fine-tuning failed at {percentage}% data "
-                f"(exit {completed.returncode}); inspect {run_directory / 'logs'}."
-            )
-        model_path = run_directory / "models" / "umof_mh_adsorption_finetuned_compiled.model"
-        if not model_path.is_file():
-            model_path = run_directory / "models" / "umof_mh_adsorption_finetuned.model"
-        evaluation = evaluate_umof_mh_models(
-            manifest["test_file"],
-            model_path,
-            baseline_checkpoint=checkpoint,
-            device=device,
-        )
-        evaluation.update(
-            {
-                "training_data_fraction": manifest["training_data_fraction"],
-                "training_configuration_count": manifest["train_configuration_count"],
-                "replay_dataset": DEFAULT_REPLAY_DATASET,
-                "runtime_seconds": runtime_seconds,
-                "seed": manifest["seed"],
-            }
-        )
-        save_benchmark_data(results_path, evaluation)
-        rows.append(evaluation)
-        save_benchmark_data(
-            summary_path,
-            {
-                "status": "running",
-                "foundation_model": str(checkpoint),
-                "device": device,
-                "completed_runs": rows,
-                "total_runs": len(prepared),
-                "next_fraction": (
-                    prepared[len(rows)]["training_data_fraction"]
-                    if len(rows) < len(prepared)
-                    else None
-                ),
-            },
-        )
-    summary = {
-        "status": "completed",
-        "foundation_model": str(checkpoint),
-        "device": device,
-        "runs": rows,
-    }
-    summary["completed_runs"] = rows
-    save_benchmark_data(summary_path, summary)
-    return summary
+def run_finetuning_matrix(data_directory=DEFAULT_DATA_DIRECTORY, checkpoint=DEFAULT_CHECKPOINT,
+        output_directory=DEFAULT_OUTPUT_DIRECTORY, *, fractions=DEFAULT_TRAIN_FRACTIONS,
+        seeds=(12345,), max_epochs=50, learning_rate=1e-4, replay_weight=.25,
+        replay_sample_count=1000, seed=12345, device="cpu", validation_mofs=None,
+        test_mofs=None, gases=None, gas_definitions=None, replay_source=None,
+        replay_valid_sample_count=100):
+    """Compatibility API routed through the manifest-checked offline lifecycle."""
+    from .umof_workflow import prepare_campaign, execute_campaign, REPLAY_SOURCE
+    prepare_campaign(data_directory, checkpoint, output_directory, fractions=fractions,
+        seeds=seeds, max_epochs=max_epochs, learning_rate=learning_rate,
+        replay_weight=replay_weight, replay_samples=replay_sample_count, device=device,
+        validation_mofs=validation_mofs, test_mofs=test_mofs, gases=gases,
+        gas_definitions=gas_definitions, replay_source=replay_source or REPLAY_SOURCE,
+        replay_valid_count=replay_valid_sample_count)
+    return execute_campaign(output_directory, "train")
 
 
-def _guest_molecule_counts(atoms: Any) -> dict[str, int]:
+def _guest_molecule_counts(atoms: Any, definitions=None) -> dict[str, int]:
     from collections import Counter
-
-    from ase.neighborlist import natural_cutoffs, neighbor_list
-    from scipy.sparse import coo_matrix
-    from scipy.sparse.csgraph import connected_components
-
-    atom_count = len(atoms)
-    neighbor_i, neighbor_j = neighbor_list(
-        "ij",
-        atoms,
-        natural_cutoffs(atoms, mult=1.15),
-        self_interaction=False,
-    )
-    adjacency = coo_matrix(
-        (np.ones(len(neighbor_i), dtype=np.int8), (neighbor_i, neighbor_j)),
-        shape=(atom_count, atom_count),
-    ).tocsr()
-    component_count, component_ids = connected_components(
-        adjacency,
-        directed=False,
-    )
-    species = np.asarray(atoms.get_chemical_symbols())
-    gas_counts: Counter[str] = Counter()
-    for component_id in range(component_count):
-        formula = Counter(species[component_ids == component_id].tolist())
-        for gas, expected_formula in KNOWN_GAS_FORMULAS.items():
-            if formula == expected_formula:
-                gas_counts[gas] += 1
-                break
-    return dict(gas_counts)
+    definitions = definitions or KNOWN_GAS_FORMULAS
+    explicit = atoms.info.get("umof_guest_assignments")
+    if explicit is not None:
+        try:
+            assignments = json.loads(explicit) if isinstance(explicit, str) else explicit
+        except json.JSONDecodeError as exc:
+            raise GuestAssignmentError("Malformed explicit molecule assignments") from exc
+        if not isinstance(assignments, list) or any(not isinstance(row, dict) or
+                set(row) != {"component_id", "atom_indices"} or not isinstance(row["atom_indices"], list)
+                for row in assignments):
+            raise GuestAssignmentError("Explicit assignments require component_id and atom_indices for each molecule")
+        framework = atoms.info.get("umof_framework_indices")
+        framework = json.loads(framework) if isinstance(framework, str) else framework
+        if not isinstance(framework, list) or not framework:
+            raise GuestAssignmentError("Explicit guests require framework atom indices")
+        seen = set()
+        for i in framework:
+            if isinstance(i, bool) or not isinstance(i, int) or not 0 <= i < len(atoms) or i in seen:
+                raise GuestAssignmentError("Invalid or duplicate framework atom assignment")
+            seen.add(i)
+        counts = Counter()
+        for row in assignments:
+            gas, indices = row["component_id"], row["atom_indices"]
+            if gas not in definitions or not indices:
+                raise GuestAssignmentError("Unknown or empty explicit component")
+            for i in indices:
+                if isinstance(i, bool) or not isinstance(i, int) or not 0 <= i < len(atoms) or i in seen:
+                    raise GuestAssignmentError("Overlapping or invalid guest atom assignment")
+                seen.add(i)
+            if Counter(atoms[i].symbol for i in indices) != definitions[gas]:
+                raise GuestAssignmentError("Explicit component formula disagrees with assigned atoms")
+            counts[gas] += 1
+        if seen != set(range(len(atoms))):
+            raise GuestAssignmentError("Unassigned atoms in explicit component metadata")
+    else:
+        from ase.neighborlist import natural_cutoffs, neighbor_list
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import connected_components
+        i, j = neighbor_list("ij", atoms, natural_cutoffs(atoms, mult=1.15), self_interaction=False)
+        graph = coo_matrix((np.ones(len(i)), (i, j)), shape=(len(atoms), len(atoms))).tocsr()
+        n, labels = connected_components(graph, directed=False)
+        counts = Counter()
+        # Legacy MOF data: unmatched fragments must contain a metal framework atom.
+        nonmetals = {"H", "He", "B", "C", "N", "O", "F", "Ne", "Si", "P", "S", "Cl", "Ar", "Ge", "As", "Se", "Br", "Kr", "Te", "I", "Xe", "At", "Rn"}
+        symbols = np.asarray(atoms.get_chemical_symbols())
+        framework_fragments = []
+        for label in range(n):
+            formula = Counter(symbols[labels == label].tolist())
+            matching = [gas for gas, expected in definitions.items() if formula == expected]
+            if len(matching) > 1:
+                raise GuestAssignmentError("Ambiguous gas formula; supply explicit atom assignments")
+            if matching:
+                counts[matching[0]] += 1
+            elif not set(formula) - nonmetals:
+                raise GuestAssignmentError(f"Unrecognized guest or disconnected organic fragment: {dict(formula)}")
+            else:
+                framework_fragments.append(formula)
+        if len(framework_fragments) != 1:
+            raise GuestAssignmentError("Ambiguous framework/metal-containing guest assignment; provide explicit atom assignments")
+    stored = atoms.info.get("umof_guest_counts")
+    if stored is not None:
+        stored = json.loads(stored) if isinstance(stored, str) else stored
+        if (not isinstance(stored, dict) or any(type(n) is not int or n <= 0 for n in stored.values())
+                or stored != dict(counts)):
+            raise ValueError("Stored molecule counts contradict atom assignments or are not positive integers")
+    return dict(counts)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data-directory", type=Path, default=DEFAULT_DATA_DIRECTORY)
-    parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
-    parser.add_argument("--output-directory", type=Path, default=DEFAULT_OUTPUT_DIRECTORY)
-    parser.add_argument("--matrix", action="store_true")
-    parser.add_argument(
-        "--fractions",
-        default=",".join(str(value) for value in DEFAULT_TRAIN_FRACTIONS),
-        help="Comma-separated training fractions used with --matrix.",
-    )
-    parser.add_argument("--seeds", default="12345", help="Comma-separated run seeds.")
-    parser.add_argument("--train-fraction", type=float, default=1.0)
-    parser.add_argument("--seed", type=int, default=12345)
-    parser.add_argument("--max-epochs", type=int, default=50)
-    parser.add_argument("--learning-rate", type=float, default=1.0e-4)
-    parser.add_argument("--replay-weight", type=float, default=0.25)
-    parser.add_argument("--replay-samples", type=int, default=1000)
-    parser.add_argument("--device", choices=("cpu", "cuda", "mps"), default="cpu")
-    parser.add_argument(
-        "--validation-mofs",
-        default=",".join(sorted(DEFAULT_VALIDATION_MOFS)),
-    )
-    parser.add_argument("--test-mofs", default=",".join(sorted(DEFAULT_TEST_MOFS)))
-    parser.add_argument("--train", action="store_true")
-    args = parser.parse_args(argv)
-
-    validation_mofs = set(filter(None, args.validation_mofs.split(",")))
-    test_mofs = set(filter(None, args.test_mofs.split(",")))
-    if args.matrix:
-        fractions = [float(value) for value in args.fractions.split(",") if value]
-        seeds = [int(value) for value in args.seeds.split(",") if value]
-        if not args.train:
-            manifests = prepare_finetuning_matrix(
-                args.data_directory,
-                args.output_directory,
-                fractions=fractions,
-                seeds=seeds,
-                seed=args.seed,
-                validation_mofs=validation_mofs,
-                test_mofs=test_mofs,
-            )
-            for manifest in manifests:
-                run_directory = Path(manifest["train_file"]).parent.parent
-                command = build_umof_mh_training_command(
-                    manifest,
-                    args.checkpoint,
-                    run_directory,
-                    max_epochs=args.max_epochs,
-                    learning_rate=args.learning_rate,
-                    replay_weight=args.replay_weight,
-                    replay_sample_count=args.replay_samples,
-                    device=args.device,
-                    seed=int(manifest["seed"]),
-                )
-                save_benchmark_data(
-                    run_directory / "training_command.json",
-                    {
-                        "command": command,
-                        "device": args.device,
-                        "seed": manifest["seed"],
-                        "train_fraction": manifest["training_data_fraction"],
-                        "replay_dataset": DEFAULT_REPLAY_DATASET,
-                        "training_configuration_count": manifest[
-                            "train_configuration_count"
-                        ],
-                    },
-                )
-            print(json.dumps(manifests, indent=2))
-            print(
-                f"Prepared {len(manifests)} dataset/command pairs. "
-                "Add --train to launch the matrix."
-            )
-            return 0
-        summary = run_finetuning_matrix(
-            args.data_directory,
-            args.checkpoint,
-            args.output_directory,
-            fractions=fractions,
-            seeds=seeds,
-            max_epochs=args.max_epochs,
-            learning_rate=args.learning_rate,
-            replay_weight=args.replay_weight,
-            replay_sample_count=args.replay_samples,
-            seed=args.seed,
-            device=args.device,
-        )
-        print(json.dumps(summary, indent=2))
-        return 0
-
-    manifest = prepare_adsorption_datasets(
-        args.data_directory,
-        args.output_directory / "datasets",
-        train_fraction=args.train_fraction,
-        seed=args.seed,
-        validation_mofs=validation_mofs,
-        test_mofs=test_mofs,
-    )
-    command = build_umof_mh_training_command(
-        manifest,
-        args.checkpoint,
-        args.output_directory,
-        max_epochs=args.max_epochs,
-        learning_rate=args.learning_rate,
-        replay_weight=args.replay_weight,
-        replay_sample_count=args.replay_samples,
-        device=args.device,
-        seed=args.seed,
-    )
-    save_benchmark_data(
-        args.output_directory / "training_command.json",
-        {
-            "command": command,
-            "device": args.device,
-            "foundation_head": "r2scan+d4",
-            "replay_dataset": DEFAULT_REPLAY_DATASET,
-        },
-    )
-    print(json.dumps(manifest, indent=2))
-    print("Training command:", json.dumps(command))
-    if args.train:
-        completed = subprocess.run(command, check=False)
-        if completed.returncode != 0:
-            return completed.returncode
-        model_path = args.output_directory / "models" / "umof_mh_adsorption_finetuned_compiled.model"
-        if not model_path.is_file():
-            model_path = args.output_directory / "models" / "umof_mh_adsorption_finetuned.model"
-        report = evaluate_umof_mh_models(
-            manifest["test_file"],
-            model_path,
-            baseline_checkpoint=args.checkpoint,
-            device=args.device,
-        )
-        report_path = args.output_directory / "results" / "held_out_test_comparison.json"
-        save_benchmark_data(report_path, report)
-        print(json.dumps(report, indent=2))
-    return 0
+    from .umof_workflow import main as workflow_main
+    return workflow_main(argv)
 
 
 if __name__ == "__main__":
