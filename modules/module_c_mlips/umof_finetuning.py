@@ -1,4 +1,4 @@
-"""Prepare and run CPU fine-tuning of uMOF-MH on released adsorption data."""
+"""Prepare and run uMOF MH/POLAR fine-tuning on released adsorption data."""
 
 from __future__ import annotations
 
@@ -208,11 +208,14 @@ def build_umof_mh_training_command(
     seed: int = 12345,
     replay_valid_file: str | Path | None = None,
     start_swa: int = 40,
+    model: str = "mh",
 ) -> list[str]:
-    """Build a single-model CPU fine-tuning command from the uMOF-MH head."""
+    """Build a local multihead training command; MH remains the default profile."""
+    from .umof_profiles import profile
+    selected_profile = profile(model)
     checkpoint_path = Path(checkpoint).expanduser()
     if not checkpoint_path.is_file():
-        raise FileNotFoundError(f"uMOF-MH checkpoint not found: {checkpoint_path}")
+        raise FileNotFoundError(f"uMOF checkpoint not found: {checkpoint_path}")
     if max_epochs <= 0:
         raise ValueError("max_epochs must be positive.")
     if not math.isfinite(learning_rate) or learning_rate <= 0.0:
@@ -226,20 +229,21 @@ def build_umof_mh_training_command(
     replay_path = Path(manifest.get("replay_train_file", replay_dataset)).expanduser()
     valid_replay = Path(replay_valid_file or manifest.get("replay_valid_file", replay_path.with_name("valid.extxyz")))
     if not replay_path.is_file() or not valid_replay.is_file():
-        raise FileNotFoundError("Explicit local MatPES replay train/valid files required; run setup and prepare first")
+        raise FileNotFoundError("Explicit local replay train/valid files required; run setup and prepare first")
     output = Path(output_directory).expanduser().resolve()
     return [
         sys.executable,
         "-m",
         "modules.module_c_mlips.umof_mace_train",
         "--name",
-        "umof_mh_adsorption_finetuned",
+        selected_profile.name,
         "--restart_latest",
         "--save_all_checkpoints",
         "--train_file",
         str(Path(manifest["train_file"]).resolve()),
         "--valid_file",
         str(Path(manifest["valid_file"]).resolve()),
+        "--model", selected_profile.model_type,
         "--foundation_model",
         str(checkpoint_path.resolve()),
         "--foundation_head",
@@ -306,6 +310,15 @@ def build_umof_mh_training_command(
         "--log_dir",
         str(output / "logs"),
     ]
+
+
+def build_umof_training_command(manifest, checkpoint=None, output_directory=None, *, model="mh", **kwargs):
+    from .umof_profiles import profile
+    selected = profile(model)
+    return build_umof_mh_training_command(manifest,
+        checkpoint if checkpoint is not None else selected.checkpoint,
+        output_directory if output_directory is not None else selected.output_directory,
+        model=model, **kwargs)
 
 
 def evaluate_umof_mh_models(test_file, finetuned_checkpoint, *,
@@ -504,20 +517,24 @@ def prepare_finetuning_matrix(
     return manifests
 
 
-def run_finetuning_matrix(data_directory=DEFAULT_DATA_DIRECTORY, checkpoint=DEFAULT_CHECKPOINT,
-        output_directory=DEFAULT_OUTPUT_DIRECTORY, *, fractions=DEFAULT_TRAIN_FRACTIONS,
+def run_finetuning_matrix(data_directory=DEFAULT_DATA_DIRECTORY, checkpoint=None,
+        output_directory=None, *, fractions=DEFAULT_TRAIN_FRACTIONS,
         seeds=(12345,), max_epochs=50, learning_rate=1e-4, replay_weight=.25,
         replay_sample_count=1000, seed=12345, device="cpu", validation_mofs=None,
         test_mofs=None, gases=None, gas_definitions=None, replay_source=None,
-        replay_valid_sample_count=100):
+        replay_valid_sample_count=100, model="mh"):
     """Compatibility API routed through the manifest-checked offline lifecycle."""
-    from .umof_workflow import prepare_campaign, execute_campaign, REPLAY_SOURCE
+    from .umof_workflow import prepare_campaign, execute_campaign
+    from .umof_profiles import profile
+    selected = profile(model)
+    checkpoint = checkpoint if checkpoint is not None else selected.checkpoint
+    output_directory = output_directory if output_directory is not None else selected.output_directory
     prepare_campaign(data_directory, checkpoint, output_directory, fractions=fractions,
         seeds=seeds, max_epochs=max_epochs, learning_rate=learning_rate,
         replay_weight=replay_weight, replay_samples=replay_sample_count, device=device,
         validation_mofs=validation_mofs, test_mofs=test_mofs, gases=gases,
-        gas_definitions=gas_definitions, replay_source=replay_source or REPLAY_SOURCE,
-        replay_valid_count=replay_valid_sample_count)
+        gas_definitions=gas_definitions, replay_source=replay_source,
+        replay_valid_count=replay_valid_sample_count, model=model)
     return execute_campaign(output_directory, "train")
 
 

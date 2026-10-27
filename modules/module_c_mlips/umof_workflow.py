@@ -29,6 +29,9 @@ import zipfile
 import numpy as np
 
 from . import umof_finetuning as data
+from .umof_profiles import (profile, campaign_profile, calculator, POLAR_REPLAY_FILENAME,
+    POLAR_REPLAY_SHA256, POLAR_REPLAY_URL, reduced_composition, adsorption_framework_compositions,
+    polar_conditioning, prepare_polar_datasets)
 
 REPLAY_URL = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_matpes_0/matpes-r2scan-replay-data.extxyz"
 REPLAY_SOURCE = Path("external/umof_replay/matpes-r2scan-replay-data.extxyz")
@@ -67,9 +70,14 @@ def campaign_lock(root):
 
 
 def environment():
+    packages = {p: importlib.metadata.version(p) for p in
+                ("torch", "mace-torch", "ase", "numpy", "scipy", "matplotlib")}
+    try:
+        packages["graph_longrange"] = importlib.metadata.version("graph_longrange")
+    except importlib.metadata.PackageNotFoundError:
+        pass
     return {"python": platform.python_version(), "platform": platform.platform(),
-            "packages": {p: importlib.metadata.version(p) for p in
-                         ("torch", "mace-torch", "ase", "numpy", "scipy", "matplotlib")},
+            "packages": packages,
             "installed_packages": {dist.metadata["Name"]: dist.version
                                    for dist in importlib.metadata.distributions() if dist.metadata["Name"]},
             "threads": {p: os.environ.get(p, "1") for p in
@@ -85,13 +93,19 @@ def model_info(checkpoint):
             "class": type(model).__name__}
 
 
-def setup(checkpoint, replay_source=REPLAY_SOURCE, download=False, *,
-          data_directory=data.DEFAULT_DATA_DIRECTORY, output_directory=None):
+def setup(checkpoint, replay_source=None, download=False, *,
+          data_directory=data.DEFAULT_DATA_DIRECTORY, output_directory=None, model="mh"):
+    selected_profile = profile(model)
+    if model == "polar":
+        from .dependencies import ensure_mace_polar_dependencies
+        ensure_mace_polar_dependencies()
     checkpoint, directory = Path(checkpoint), Path(data_directory)
+    replay_source = Path(replay_source) if replay_source is not None else (
+        REPLAY_SOURCE if model == "mh" else directory / POLAR_REPLAY_FILENAME)
     needed = {}
     if not checkpoint.is_file():
-        needed["umof_models.zip"] = [("umof_models/uMOF-MH.model", checkpoint)]
-    if not list(directory.glob("*-adsorbates-train.extxyz")):
+        needed["umof_models.zip"] = [("umof_models/" + selected_profile.filename, checkpoint)]
+    if not list(directory.glob("*-adsorbates-train.extxyz")) or (model == "polar" and not Path(replay_source).is_file()):
         needed["umof_data.zip"] = None
     for archive_name, members in needed.items():
         archive = directory.parent / archive_name
@@ -111,18 +125,20 @@ def setup(checkpoint, replay_source=REPLAY_SOURCE, download=False, *,
         with zipfile.ZipFile(archive) as bundle:
             if members is None:
                 members = [(n, directory / Path(n).name) for n in bundle.namelist()
-                           if re.fullmatch(r"[^/]+-adsorbates-(train|valid|test)\.extxyz", Path(n).name)]
+                           if re.fullmatch(r"[^/]+-adsorbates-(train|valid|test)\.extxyz", Path(n).name)
+                           or (model == "polar" and Path(n).name == POLAR_REPLAY_FILENAME)]
             if not members:
                 raise ValueError(f"No expected adsorption assets in {archive}")
             for member, destination in members:
+                if model == "polar" and Path(member).name == POLAR_REPLAY_FILENAME:
+                    destination = replay_source
                 if destination.exists():
                     continue
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 with bundle.open(member) as src, destination.open("wb") as dst:
                     shutil.copyfileobj(src, dst)
     info = model_info(checkpoint)
-    if "r2scan+d4" not in info["heads"]:
-        raise ValueError("Foundation checkpoint lacks r2scan+d4 head")
+    selected_profile.validate(info)
     source = Path(replay_source)
     provenance = source.with_suffix(".provenance.json")
     if provenance.exists() and source.exists():
@@ -130,6 +146,8 @@ def setup(checkpoint, replay_source=REPLAY_SOURCE, download=False, *,
         if previous["replay_source"]["sha256"] != data.sha256_file(source):
             raise ValueError("Replay source differs from its recorded checksum")
     if not source.is_file():
+        if model == "polar":
+            raise FileNotFoundError(f"Missing published POLAR replay source: {source}")
         if not download:
             raise FileNotFoundError(f"Missing {source}; use setup --download-missing")
         source.parent.mkdir(parents=True, exist_ok=True)
@@ -140,16 +158,17 @@ def setup(checkpoint, replay_source=REPLAY_SOURCE, download=False, *,
         finally:
             temporary.unlink(missing_ok=True)
     digest = data.sha256_file(source)
-    if digest != REPLAY_SHA256:
-        raise ValueError("Replay source is not the audited official MatPES-r2SCAN release")
+    expected = REPLAY_SHA256 if model == "mh" else POLAR_REPLAY_SHA256
+    if digest != expected:
+        raise ValueError(f"Replay source is not the audited {model} release")
     for split in ("train", "valid", "test"):
         if not list(directory.glob(f"*-adsorbates-{split}.extxyz")):
             raise FileNotFoundError(f"Missing released adsorption {split} files in {directory}")
     result = {"status": "ready", "model": info, "environment": environment(),
               "adsorption_source": {p.name: data.sha256_file(p) for p in sorted(directory.glob("*-adsorbates-*.extxyz"))},
-              "replay_source": {"url": REPLAY_URL, "sha256": data.sha256_file(source),
+              "replay_source": {"model": model, "url": REPLAY_URL if model == "mh" else POLAR_REPLAY_URL, "sha256": data.sha256_file(source),
                                 "label_mapping": {"dft_energy": "REF_energy", "dft_forces": "REF_forces"},
-                                "note": "DFT labels; source also contains MACE predictions, which are not used"}}
+                                "note": "DFT labels only; stored predictor outputs are ignored"}}
     atomic_json(provenance, result)
     if output_directory is not None:
         atomic_json(Path(output_directory) / "offline_assets.json", result)
@@ -157,7 +176,7 @@ def setup(checkpoint, replay_source=REPLAY_SOURCE, download=False, *,
 
 
 def prepare_replay(source, output, *, seed, count=1000, valid_count=100, weight=.25,
-                   supported_elements=None, max_atoms=None):
+                   supported_elements=None, max_atoms=None, model="mh", excluded_compositions=()):
     """Index raw extxyz without loading a gigabyte of ASE frames into memory."""
     from ase.io import read, write
     if count < 1 or valid_count < 1 or not math.isfinite(weight) or weight <= 0:
@@ -180,22 +199,30 @@ def prepare_replay(source, output, *, seed, count=1000, valid_count=100, weight=
                 offsets.append((offset, handle.tell() - offset))
     random.Random(seed).shuffle(offsets)
     frames, identities, selected = [], set(), []
+    excluded = 0
     with source.open("rb") as handle:
         for offset, length in offsets:
             handle.seek(offset)
             atoms = read(io.StringIO(handle.read(length).decode()), format="extxyz")
             if supported_elements is not None and set(atoms.numbers) - supported_elements:
                 continue
+            if model == "polar":
+                from collections import Counter
+                if reduced_composition(Counter(atoms.get_chemical_symbols())) in excluded_compositions:
+                    excluded += 1
+                    continue
             identity = data.geometry_id(atoms)
             if identity in identities:
                 continue
             energy = float(atoms.info["dft_energy"])
             forces = np.asarray(atoms.arrays["dft_forces"])
             if not np.isfinite(energy) or forces.shape != (len(atoms), 3) or not np.isfinite(forces).all():
-                raise ValueError("Invalid MatPES DFT labels")
+                raise ValueError("Invalid replay DFT labels")
             # Do not accidentally replay the predictor outputs stored as energy/forces.
             current = atoms.copy()
             current.calc = None
+            if model == "polar":
+                polar_conditioning(current)
             current.info.update(REF_energy=energy, head="pt_head", config_weight=weight,
                                 replay_geometry_id=identity, replay_source_offset=offset)
             current.set_array("REF_forces", forces.copy())
@@ -207,11 +234,16 @@ def prepare_replay(source, output, *, seed, count=1000, valid_count=100, weight=
     output.mkdir(parents=True, exist_ok=True)
     for split, subset in (("train", frames[:count]), ("valid", frames[count:])):
         write(output / f"{split}.extxyz", subset, format="extxyz")
-    result = {"source_url": REPLAY_URL, "source_sha256": data.sha256_file(source),
+    result = {"source_url": REPLAY_URL if model == "mh" else POLAR_REPLAY_URL, "source_sha256": data.sha256_file(source),
               "seed": seed, "train_count": count, "valid_count": valid_count, "weight": weight,
               "head": "pt_head", "reference": "MatPES r2SCAN DFT (not source MACE predictions)",
               "source_offsets": selected, "geometry_ids": [a.info["replay_geometry_id"] for a in frames],
               "file_sha256": {s: data.sha256_file(output / f"{s}.extxyz") for s in ("train", "valid")}}
+    if model == "polar":
+        result.update(model="polar", reference="uMOF r2SCAN-D4 DFT",
+            replay_kind="new uMOF retention head; not restored OMol replay",
+            excluded_framework_compositions=[list(c) for c in sorted(excluded_compositions)],
+            excluded_composition_frames=excluded)
     atomic_json(output / "manifest.json", result)
     return result
 
@@ -239,7 +271,10 @@ def prepare_campaign(data_directory, checkpoint, output_directory, *, fractions=
                      seeds=(12345,), max_epochs=50, learning_rate=1e-4, replay_weight=.25,
                      replay_samples=1000, replay_valid_count=100, device="cpu", gases=None,
                      gas_definitions=None, validation_mofs=None, test_mofs=None,
-                     replay_source=REPLAY_SOURCE, purpose="production"):
+                     replay_source=None, purpose="production", model="mh"):
+    selected_profile = profile(model)
+    replay_source = Path(replay_source) if replay_source is not None else (
+        REPLAY_SOURCE if model == "mh" else Path(data_directory) / POLAR_REPLAY_FILENAME)
     root = Path(output_directory).resolve()
     gases, definitions = data.validate_gases(gases, gas_definitions)
     if not fractions or len({f"{round(float(f)*100):03d}" for f in fractions}) != len(fractions):
@@ -252,6 +287,9 @@ def prepare_campaign(data_directory, checkpoint, output_directory, *, fractions=
                         gases=sorted(gases), gas_definitions=definitions,
                         validation_mofs=sorted(data.DEFAULT_VALIDATION_MOFS if validation_mofs is None else validation_mofs),
                         test_mofs=sorted(data.DEFAULT_TEST_MOFS if test_mofs is None else test_mofs), purpose=purpose)
+    if model != "mh":
+        settings.update(model=model, replay_recipe="umof_r2scan_d4",
+            polar_conditioning="source values where present; otherwise charge=0, spin=1 (MACE multiplicity default); not inferred spin labels")
     with campaign_lock(root):
         path = root / "campaign.json"
         if path.exists():
@@ -259,6 +297,9 @@ def prepare_campaign(data_directory, checkpoint, output_directory, *, fractions=
             compare_protocol(previous["protocol"], settings)
             if data.sha256_file(checkpoint) != previous["foundation"]["sha256"]:
                 raise ValueError("Foundation checkpoint changed")
+            if any(m["source_sha256"] != data.sha256_file(replay_source)
+                   for m in previous.get("replay", {}).values()):
+                raise ValueError("Replay source changed")
             verify_files(root, previous["files"])
             if previous["protocol"]["max_epochs"] != max_epochs:
                 previous["protocol"]["max_epochs"] = max_epochs
@@ -267,22 +308,25 @@ def prepare_campaign(data_directory, checkpoint, output_directory, *, fractions=
         if list(root.glob("*/seed-*/status.json")) or list(root.glob("*/seed-*/checkpoints/*.pt")):
             raise ValueError("Refusing to overwrite untracked prior training; choose a new campaign directory")
         info = model_info(checkpoint)
-        if "r2scan+d4" not in info["heads"]:
-            raise ValueError("Foundation checkpoint lacks r2scan+d4")
-        if purpose == "production" and data.sha256_file(replay_source) != REPLAY_SHA256:
-            raise ValueError("Production replay must be the audited official MatPES-r2SCAN release")
+        selected_profile.validate(info)
+        if purpose == "production" and data.sha256_file(replay_source) != (REPLAY_SHA256 if model == "mh" else POLAR_REPLAY_SHA256):
+            raise ValueError("Production replay must match the audited model-specific release")
         assets = root / "assets"
         assets.mkdir(exist_ok=True)
-        shutil.copy2(checkpoint, assets / "uMOF-MH.model")
+        shutil.copy2(checkpoint, assets / selected_profile.filename)
+        manifests = data.prepare_finetuning_matrix(data_directory, root, fractions=fractions, seeds=seeds,
+            validation_mofs=validation_mofs, test_mofs=test_mofs, gases=gases,
+            gas_definitions=definitions, supported_elements=set(info["atomic_numbers"]))
+        if model == "polar":
+            prepare_polar_datasets(manifests)
+        excluded_compositions = adsorption_framework_compositions(manifests) if model == "polar" else set()
         replay_manifests = {}
         for seed in sorted(seeds):
             replay_manifests[str(seed)] = prepare_replay(replay_source, assets / f"replay-{seed}",
                 seed=seed, count=replay_samples, valid_count=replay_valid_count,
-                weight=replay_weight, supported_elements=set(info["atomic_numbers"]))
-        manifests = data.prepare_finetuning_matrix(data_directory, root, fractions=fractions, seeds=seeds,
-            validation_mofs=validation_mofs, test_mofs=test_mofs, gases=gases,
-            gas_definitions=definitions, supported_elements=set(info["atomic_numbers"]))
-        runs, hashes = [], {"assets/uMOF-MH.model": info["sha256"]}
+                weight=replay_weight, supported_elements=set(info["atomic_numbers"]),
+                model=model, excluded_compositions=excluded_compositions)
+        runs, hashes = [], {selected_profile.asset: info["sha256"]}
         for manifest in manifests:
             run = Path(manifest["train_file"]).parent.parent
             for split in ("train", "valid", "test"):
@@ -312,14 +356,13 @@ def prepare_campaign(data_directory, checkpoint, output_directory, *, fractions=
             atomic_json(root / run["directory"] / "training_command.json",
                         {"command": ["python"] + [relative_token(t, root) for t in command[1:]],
                          "working_directory": run["directory"], "paths_relative_to": "campaign root"})
+        import shlex
+        location = relative(root, Path(__file__).resolve().parents[2])
         (root / "START.txt").write_text(
-            "From the transferred repository, activate its Python/MACE environment.\n"
-            "bash scripts/run_module_c_umof_finetuning.sh status\n"
-            "bash scripts/run_module_c_umof_finetuning.sh train\n"
-            "bash scripts/run_module_c_umof_finetuning.sh resume\n"
-            "bash scripts/run_module_c_umof_finetuning.sh evaluate\n"
-            "bash scripts/run_module_c_umof_finetuning.sh report\n"
-            "Set UMOF_OUTPUT_DIRECTORY to this campaign if using a non-default location.\n")
+            "From the transferred repository, activate its Python/MACE environment.\n" +
+            "".join(f"bash scripts/run_module_c_umof_finetuning.sh {action} --model {model} "
+                    f"--output-directory {shlex.quote(location)}\n"
+                    for action in ("status", "train", "resume", "evaluate", "report")))
         return campaign
 
 
@@ -340,7 +383,9 @@ def training_command(root, campaign, run, *, epochs=None):
     manifest = {f"{s}_file": str(folder / "datasets" / f"{s}.extxyz") for s in ("train", "valid")}
     manifest.update(replay_train_file=str(root / f"assets/replay-{run['seed']}/train.extxyz"),
                     replay_valid_file=str(root / f"assets/replay-{run['seed']}/valid.extxyz"))
-    return data.build_umof_mh_training_command(manifest, root / "assets/uMOF-MH.model", folder,
+    selected_profile = campaign_profile(campaign)
+    return data.build_umof_training_command(manifest, root / selected_profile.asset, folder,
+        model=selected_profile.key,
         max_epochs=epochs or p["max_epochs"], learning_rate=p["learning_rate"],
         replay_weight=p["replay_weight"], replay_sample_count=p["replay_samples"],
         device=p["device"], seed=run["seed"], start_swa=p["start_swa"])
@@ -350,7 +395,7 @@ def training_identity(campaign, run):
     p = dict(campaign["protocol"]); p.pop("max_epochs")
     # Test data never affect training/restart/checkpoint selection.
     relevant = {k: v for k, v in campaign["files"].items()
-                if k == "assets/uMOF-MH.model" or
+                if k == campaign_profile(campaign).asset or
                 k in {f"assets/replay-{run['seed']}/{s}.extxyz" for s in ("train", "valid")} or
                 k in {f"{run['directory']}/datasets/{s}.extxyz" for s in ("train", "valid")}}
     return hashlib.sha256(json.dumps([p, relevant], sort_keys=True).encode()).hexdigest()
@@ -373,6 +418,9 @@ def execute_campaign(output_directory, action="train", *, max_epochs=None):
     root = Path(output_directory).resolve()
     with campaign_lock(root):
         campaign = read_json(root / "campaign.json")
+        if campaign_profile(campaign).key == "polar":
+            from .dependencies import ensure_mace_polar_dependencies
+            ensure_mace_polar_dependencies()
         if campaign.get("environment") and importlib.metadata.version("mace-torch") != campaign["environment"]["packages"]["mace-torch"]:
             raise ValueError("MACE version differs from prepared campaign; use the archived environment")
         if max_epochs is not None:
@@ -456,20 +504,23 @@ def execute_campaign(output_directory, action="train", *, max_epochs=None):
         return report_campaign(root)
 
 
-def predict(dataset, checkpoint, head, cache, device="cpu"):
+def predict(dataset, checkpoint, head, cache, device="cpu", model="mh"):
     from ase.io import read
-    from mace.calculators import MACECalculator
-    key = hashlib.sha256(json.dumps([data.sha256_file(dataset), data.sha256_file(checkpoint),
-        head, "float64", device, importlib.metadata.version("mace-torch")]).encode()).hexdigest()
+    identity = [data.sha256_file(dataset), data.sha256_file(checkpoint),
+        head, "float64", device, importlib.metadata.version("mace-torch")]
+    # Preserve the cache identity of existing MH campaigns.
+    if model == "polar":
+        identity += [model, importlib.metadata.version("graph_longrange")]
+    key = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
     cache = Path(cache); cache.mkdir(parents=True, exist_ok=True)
     path = cache / f"{key}.npz"
     if path.exists():
         with np.load(path) as saved:
             return saved["energies"], saved["forces"]
-    calculator = MACECalculator(model_paths=str(checkpoint), device=device, default_dtype="float64", head=head)
+    calc = calculator(checkpoint, model=model, device=device, head=head)
     energies, forces = [], []
     for atoms in read(dataset, index=":"):
-        atoms.calc = calculator
+        atoms.calc = calc
         energies.append(float(atoms.get_potential_energy()))
         forces.append(np.asarray(atoms.get_forces()))
     energies, forces = np.asarray(energies), np.concatenate(forces)
@@ -495,13 +546,15 @@ def select_model(root, campaign, run):
     energy, force, sizes = reference_arrays(frames)
     candidates = []
     for stage, suffix in (("stage1", ""), ("stage2", "_stagetwo")):
-        path = folder / "models" / f"{NAME}{suffix}.model"
+        path = folder / "models" / f"{campaign_profile(campaign).name}{suffix}.model"
         if not path.exists():
             continue
         info = model_info(path)
+        if "class" in info and info["class"] != campaign_profile(campaign).model_type:
+            raise ValueError(f"Export architecture does not match campaign: {path}")
         if "Default" not in info["heads"] or "pt_head" not in info["heads"]:
             raise ValueError(f"Export missing actual adsorption/replay heads: {path}")
-        pe, pf = predict(valid, path, "Default", root / "prediction_cache", campaign["protocol"]["device"])
+        pe, pf = predict(valid, path, "Default", root / "prediction_cache", campaign["protocol"]["device"], model=campaign_profile(campaign).key)
         metrics = data._error_metrics((pe-energy)/sizes, (pf-force).ravel())
         candidates.append({"stage": stage, "path": relative(path, root), "sha256": info["sha256"],
                            "head": "Default", "validation": metrics})
@@ -511,7 +564,8 @@ def select_model(root, campaign, run):
                  c["validation"]["energy_rmse_ev_per_atom"], c["stage"] != "stage1"))
     atomic_json(folder / "results/selection.json", {"selected": chosen, "candidates": candidates,
                 "selection_split": "validation", "test_used": False})
-    atomic_json(folder / "module_c_model.json", {"backend": "mace-torch", "name": "umof_mh_finetuned",
+    atomic_json(folder / "module_c_model.json", {"backend": "mace-torch", "name": f"umof_{campaign_profile(campaign).key}_finetuned",
+        "model_type": campaign_profile(campaign).model_type,
         "model": relative(root / chosen["path"], folder), "path_base": "specification_directory",
         "sha256": chosen["sha256"], "head": chosen["head"], "device": campaign["protocol"]["device"],
         "default_dtype": "float64", "dispersion": False,
@@ -547,10 +601,12 @@ def load_model_specification(path):
     info = model_info(model)
     if spec["head"] not in info["heads"]:
         raise ValueError("Exported model head mismatch")
+    if spec.get("model_type", "ScaleShiftMACE") != info["class"]:
+        raise ValueError("Exported model architecture mismatch")
     if spec["default_dtype"] != info["dtype"]:
         raise ValueError("Exported model datatype mismatch")
     return {key: value for key, value in dict(spec, model=str(model)).items()
-            if key in {"backend", "name", "model", "head", "device", "default_dtype", "dispersion"}}
+            if key in {"backend", "name", "model", "head", "device", "default_dtype", "dispersion", "model_type"}}
 
 
 def write_csv(path, rows):
@@ -570,9 +626,9 @@ def evaluate_run(root, campaign, run, selected):
     if data.sha256_file(checkpoint) != selected["sha256"]:
         raise ValueError("Selected checkpoint changed after validation")
     predictions = {}
-    for label, model, head in (("baseline", root / "assets/uMOF-MH.model", "r2scan+d4"),
+    for label, model, head in (("baseline", root / campaign_profile(campaign).asset, "r2scan+d4"),
                               ("finetuned", checkpoint, selected["head"])):
-        predictions[label] = predict(path, model, head, root / "prediction_cache", campaign["protocol"]["device"])
+        predictions[label] = predict(path, model, head, root / "prediction_cache", campaign["protocol"]["device"], model=campaign_profile(campaign).key)
     metrics = {label: grouped_metrics(frames, pred) for label, pred in predictions.items()}
     result = {"metrics": metrics, "test_sha256": data.sha256_file(path), "selected_model": selected,
               "grouping": "Whole-configuration errors by component set; mixtures are not pure-gas observations",
@@ -623,7 +679,7 @@ def status_campaign(root):
     root = Path(root)
     campaign = read_json(root / "campaign.json")
     verify_files(root, campaign["files"])
-    return {"purpose": campaign["protocol"]["purpose"], "assets_verified": True, "runs": [dict(run,
+    return {"model": campaign_profile(campaign).key, "purpose": campaign["protocol"]["purpose"], "assets_verified": True, "runs": [dict(run,
         **(read_json(root / run["directory"] / "status.json") if
            (root / run["directory"] / "status.json").exists() else {"status": "prepared"}))
         for run in campaign["runs"]]}
@@ -713,13 +769,18 @@ def smoke_campaign(production_directory, smoke_directory):
     if root == production or production in root.parents:
         raise ValueError("Smoke must use a separate directory outside the production campaign")
     original = read_json(production / "campaign.json")
+    selected_profile = campaign_profile(original)
     if original["protocol"]["purpose"] != "production":
         raise ValueError("Smoke source must be a prepared production campaign")
     verify_files(production, original["files"])
     with campaign_lock(root):
         if (root / "campaign.json").exists():
-            if read_json(root / "campaign.json")["protocol"]["purpose"] != "smoke":
+            existing = read_json(root / "campaign.json")
+            if existing["protocol"]["purpose"] != "smoke":
                 raise ValueError("Refusing to use production directory for smoke")
+            if (campaign_profile(existing).key != selected_profile.key or
+                existing.get("production_source_sha256") != data.sha256_file(production / "campaign.json")):
+                raise ValueError("Smoke source/model changed; use a new smoke directory")
         else:
             full = max(original["runs"], key=lambda r: r["fraction"])
             folder = root / "100pct/seed-12345"
@@ -742,7 +803,7 @@ def smoke_campaign(production_directory, smoke_directory):
                 hashes[rel] = data.sha256_file(root / rel)
                 chosen[split] = selected
             assets = root / "assets"; assets.mkdir(exist_ok=True)
-            shutil.copy2(production / "assets/uMOF-MH.model", assets / "uMOF-MH.model")
+            shutil.copy2(production / selected_profile.asset, assets / selected_profile.filename)
             # Use the smallest real, already selected replay structures; train/valid remain disjoint.
             replay_original = production / f"assets/replay-{full['seed']}"
             for split, count in (("train", 8), ("valid", 2)):
@@ -753,7 +814,7 @@ def smoke_campaign(production_directory, smoke_directory):
                     a.info["umof_usage"] = "smoke_only"
                 write(replay_dir / f"{split}.extxyz", frames, format="extxyz")
                 hashes[relative(replay_dir / f"{split}.extxyz", root)] = data.sha256_file(replay_dir / f"{split}.extxyz")
-            hashes["assets/uMOF-MH.model"] = data.sha256_file(assets / "uMOF-MH.model")
+            hashes[selected_profile.asset] = data.sha256_file(assets / selected_profile.filename)
             settings = dict(original["protocol"], max_epochs=2, start_swa=1, fractions=[1.0],
                             seeds=[12345], purpose="smoke", replay_samples=8, replay_valid_count=2)
             campaign = {"schema_version": 2, "protocol": settings, "foundation": original["foundation"],
@@ -773,7 +834,7 @@ def smoke_campaign(production_directory, smoke_directory):
     folder = root / "100pct/seed-12345"
     model_path = root / read_json(folder / "status.json")["selected_model"]["path"]
     trained = torch.load(model_path, map_location="cpu", weights_only=False)
-    foundation = torch.load(root / "assets/uMOF-MH.model", map_location="cpu", weights_only=False)
+    foundation = torch.load(root / selected_profile.asset, map_location="cpu", weights_only=False)
     common = [(key, value, trained.state_dict()[key]) for key, value in foundation.state_dict().items()
               if key in trained.state_dict() and value.shape == trained.state_dict()[key].shape
               and key.startswith(("interactions.", "products.")) and value.is_floating_point()]
@@ -803,13 +864,13 @@ def smoke_campaign(production_directory, smoke_directory):
     atoms = read(folder / "datasets/test.extxyz", index=0)
     spec = load_model_specification(folder / "module_c_model.json")
     backend = MaceBackend(model=spec["model"], device=spec["device"],
-                          default_dtype=spec["default_dtype"], head=spec["head"])
+                          default_dtype=spec["default_dtype"], head=spec["head"], model_type=spec.get("model_type"))
     configuration = InteractionConfiguration(configuration_id="umof-smoke-backend", material=atoms.info["umof_mof_id"],
         adsorbate="whole_configuration", atoms=atoms, framework_indices=list(range(len(atoms))), adsorbate_indices=[])
     result = backend.evaluate(configuration)
     if not np.isfinite(result.energy_ev) or not np.isfinite(result.forces_ev_per_angstrom).all():
         raise AssertionError("Module-C backend smoke failed")
-    report = {"status": "passed", "purpose": "technical smoke only", "train": 9, "valid": 3, "test": 3,
+    report = {"status": "passed", "model": selected_profile.key, "purpose": "technical smoke only", "train": 9, "valid": 3, "test": 3,
               "replay_train": 8, "replay_valid": 2, "epochs": [2, 3], "resume_verified": True,
               "shared_weights_changed": changed, "heads": list(trained.heads), "finite_losses": len(losses),
               "completed_zero_based_epochs": completed_epochs,
@@ -827,9 +888,10 @@ def main(argv=None):
     parser.add_argument("--matrix", action="store_true", help="Compatibility flag: prepare/train a fraction matrix")
     parser.add_argument("--train", action="store_true", help="Compatibility alias for train")
     parser.add_argument("--data-directory", type=Path, default=data.DEFAULT_DATA_DIRECTORY)
-    parser.add_argument("--checkpoint", type=Path, default=data.DEFAULT_CHECKPOINT)
-    parser.add_argument("--output-directory", type=Path, default=data.DEFAULT_OUTPUT_DIRECTORY)
-    parser.add_argument("--replay-source", type=Path, default=REPLAY_SOURCE)
+    parser.add_argument("--model", choices=("mh", "polar"), help="Model profile; defaults to MH, or inherits an existing campaign")
+    parser.add_argument("--checkpoint", type=Path)
+    parser.add_argument("--output-directory", type=Path)
+    parser.add_argument("--replay-source", type=Path)
     parser.add_argument("--download-missing", action="store_true")
     parser.add_argument("--fractions", default="0.1,0.25,0.5,1.0")
     parser.add_argument("--seeds", default="12345")
@@ -845,15 +907,28 @@ def main(argv=None):
     parser.add_argument("--gas-definitions", type=Path, help="JSON mapping stable component IDs to elemental formulas; ambiguous isomers require explicit atom assignments")
     parser.add_argument("--validation-mofs", default=",".join(sorted(data.DEFAULT_VALIDATION_MOFS)))
     parser.add_argument("--test-mofs", default=",".join(sorted(data.DEFAULT_TEST_MOFS)))
-    parser.add_argument("--smoke-directory", type=Path, default=Path("outputs/module_C_umof_finetuning_smoke_v2"))
+    parser.add_argument("--smoke-directory", type=Path)
     args = parser.parse_args(argv)
     action = args.action or ("train" if args.train else "prepare")
+    selected_profile = profile(args.model or "mh")
+    args.output_directory = args.output_directory or selected_profile.output_directory
+    existing_path = args.output_directory / "campaign.json"
+    if existing_path.exists():
+        archived = campaign_profile(read_json(existing_path))
+        if args.model is not None and args.model != archived.key:
+            raise ValueError("--model conflicts with archived campaign; use a separate output directory")
+        selected_profile = archived
+    args.model = selected_profile.key
+    args.checkpoint = args.checkpoint or selected_profile.checkpoint
+    args.replay_source = args.replay_source or (REPLAY_SOURCE if args.model == "mh" else args.data_directory / POLAR_REPLAY_FILENAME)
+    suffix = "" if args.model == "mh" else "_polar"
+    args.smoke_directory = args.smoke_directory or Path(f"outputs/module_C_umof_finetuning_smoke{suffix}_v2")
     if args.download_missing and action != "setup":
         parser.error("Downloads are allowed only in setup")
     if action == "setup":
         with campaign_lock(args.output_directory):
             result = setup(args.checkpoint, args.replay_source, args.download_missing,
-                           data_directory=args.data_directory, output_directory=args.output_directory)
+                           data_directory=args.data_directory, output_directory=args.output_directory, model=args.model)
     elif action == "status":
         result = status_campaign(args.output_directory)
     elif action == "report":
@@ -872,7 +947,7 @@ def main(argv=None):
                 gases=set(filter(None, args.gases.split(","))),
                 gas_definitions=read_json(args.gas_definitions) if args.gas_definitions else None,
                 validation_mofs=set(filter(None, args.validation_mofs.split(","))),
-                test_mofs=set(filter(None, args.test_mofs.split(","))), replay_source=args.replay_source)
+                test_mofs=set(filter(None, args.test_mofs.split(","))), replay_source=args.replay_source, model=args.model)
         if action in ("train", "resume", "evaluate"):
             campaign = read_json(args.output_directory / "campaign.json")
             # Omitted options inherit the archived protocol; explicit overrides must agree.
@@ -898,6 +973,9 @@ def main(argv=None):
                     raise ValueError("Gas definitions conflict with archived campaign")
             if "--checkpoint" in explicit and data.sha256_file(args.checkpoint) != campaign["foundation"]["sha256"]:
                 raise ValueError("Explicit foundation checkpoint differs from archived campaign")
+            if "--replay-source" in explicit and any(m["source_sha256"] != data.sha256_file(args.replay_source)
+                                                       for m in campaign.get("replay", {}).values()):
+                raise ValueError("Explicit replay source differs from archived campaign")
             result = execute_campaign(args.output_directory, action, max_epochs=args.max_epochs)
     print(json.dumps(result, indent=2))
     return 0

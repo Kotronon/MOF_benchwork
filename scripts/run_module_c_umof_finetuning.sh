@@ -12,11 +12,14 @@ if ! [[ "${CPU_THREADS}" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 export OMP_NUM_THREADS="${CPU_THREADS}" MKL_NUM_THREADS="${CPU_THREADS}" OPENBLAS_NUM_THREADS="${CPU_THREADS}"
-ARGS=("${MODE}" --matrix --output-directory "${UMOF_OUTPUT_DIRECTORY:-outputs/module_C_umof_finetuning_matrix_v2}")
+ARGS=("${MODE}" --matrix)
 # Unspecified options inherit campaign.json during resume/evaluate, including custom splits.
 add_option() { if [[ -n "${!1:-}" ]]; then ARGS+=("$2" "${!1}"); fi; }
+add_option UMOF_MODEL --model
+add_option UMOF_OUTPUT_DIRECTORY --output-directory
 add_option UMOF_DATA_DIRECTORY --data-directory
 add_option UMOF_MH_CHECKPOINT --checkpoint
+add_option UMOF_CHECKPOINT --checkpoint
 add_option UMOF_REPLAY_SOURCE --replay-source
 add_option UMOF_TRAIN_FRACTIONS --fractions
 add_option UMOF_SEEDS --seeds

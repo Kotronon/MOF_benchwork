@@ -1,0 +1,8 @@
+# Audited MACE lifecycle and POLAR electrostatics API.
+# For exact smoke-test versions, see the campaign environment/requirements lock.
+mace-torch==0.3.16
+graph_longrange==0.4.0
+ase
+numpy
+scipy
+matplotlib

@@ -1,4 +1,106 @@
-# uMOF fine-tuning on the CPU cluster
+# uMOF MH / POLAR fine-tuning on the CPU cluster
+
+## Select the model
+
+Every lifecycle command accepts `--model mh` or `--model polar`. With no model
+option, existing MH commands keep their previous defaults. An explicit custom
+output directory with an existing campaign inherits its archived model; an
+explicit conflicting model is rejected, including for status/setup/report/smoke.
+`UMOF_MODEL=polar` is an alternative to the flag. `UMOF_CHECKPOINT` is the generic
+checkpoint override; the old `UMOF_MH_CHECKPOINT` remains supported. Prefer explicit
+flags when old `UMOF_*` shell variables are present.
+
+```bash
+export PYTHON_BIN=python
+export UMOF_CPU_THREADS="${SLURM_CPUS_PER_TASK:-1}"
+
+# On a network-enabled environment host, if dependencies are missing:
+python -m pip install -r requirements-module-c-umof.txt
+
+# Choose mh or polar. Only setup --download-missing may download workflow assets.
+bash scripts/run_module_c_umof_finetuning.sh setup --model polar --download-missing
+bash scripts/run_module_c_umof_finetuning.sh prepare --model polar
+bash scripts/run_module_c_umof_finetuning.sh status --model polar
+
+# Run production only inside the cluster allocation:
+bash scripts/run_module_c_umof_finetuning.sh train --model polar
+bash scripts/run_module_c_umof_finetuning.sh resume --model polar
+bash scripts/run_module_c_umof_finetuning.sh evaluate --model polar
+bash scripts/run_module_c_umof_finetuning.sh report --model polar
+```
+
+For MH, replace `polar` with `mh`. Both profiles use CPU/float64, batch size 1,
+learning rate 1e-4, seed 12345, a maximum of 50 epochs and SWA start 40. Each profile
+has four sequential runs. Running both profiles means eight training runs.
+
+| Profile | Default campaign directory | Replay reference |
+|---|---|---|
+| `mh` | `outputs/module_C_umof_finetuning_matrix_v2` | MatPES r2SCAN |
+| `polar` | `outputs/module_C_umof_finetuning_matrix_polar_v2` | Published uMOF r2SCAN-D4 |
+
+The adsorption geometries, labels, splits and nested selections are shared:
+109/211/398/774 training configurations, 46 validation and 38 test configurations.
+POLAR adds explicit charge/spin conditioning metadata without changing DFT labels.
+No new DFT calculations or mixture labels are generated. Model checkpoints,
+prediction caches, replay selections, training state and exports remain separate.
+Existing MH production results and checkpoint identities are preserved.
+
+## POLAR replay and conditioning
+
+The inspected released `uMOF-POLAR.model` is a `PolarMACE` with **one** head,
+`r2scan+d4`; it does not contain the original OMol replay head. The user-approved
+POLAR recipe therefore creates a new `pt_head` for retention of published uMOF
+knowledge. It does **not** claim to restore OMol replay or reproduce the original
+paper's complete training recipe.
+
+Its source is `qmof_r2scan_gaussian_noise_train.extxyz` from `umof_data.zip`, SHA-256
+`310d9267720430280f2cf2a9448ec96d87e9df970e1908fa23925971eb517463`, checked against
+the local published archive member. Both heads use r2SCAN-D4 energy/force labels
+and foundation atomic energy references. Select 1,000 distinct replay training
+configurations and 100 disjoint replay validation configurations, weight 0.25,
+once per seed for all fractions. Unsupported elements are excluded. Reduced
+framework compositions occurring in any prepared adsorption split are excluded
+conservatively, including supercells. This filter uses geometry/composition only,
+never test energy/force labels. It may exclude unrelated isomers too and does not
+establish independence from foundation pretraining. Replay manifests archive the
+source checksum, selected offsets, geometry IDs and excluded compositions.
+
+POLAR requires `graph_longrange==0.4.0`. Source `total_charge`/`charge` and
+`total_spin`/`spin` values must agree and be finite; spin denotes positive integer
+multiplicity. Missing values explicitly use MACE defaults: charge 0, multiplicity
+1. Their provenance is stored as an assumption, **not** inferred quantum-chemical
+spin labels. Charged/open-shell transfer accuracy remains unvalidated. Training
+and calculator aliases carry the same values. No dipole, charge, stress or virial
+targets are added to this energy/force training.
+
+Exports include `model_type`, actual adsorption head, dtype and checksum, so the
+Module-C backend automatically uses the appropriate calculator. Stage-1/SWA
+selection uses adsorption validation; final test predictions compare with the
+unchanged foundation of the **same** profile. Resume across profiles is forbidden.
+
+## Technical checks and transfer
+
+```bash
+bash scripts/run_module_c_umof_finetuning.sh smoke --model polar
+bash scripts/run_module_c_umof_finetuning.sh smoke --model mh \
+  --smoke-directory outputs/module_C_umof_finetuning_smoke_profiles_mh_v3
+```
+
+Each smoke uses 9/3/3 real adsorption configurations, 8/2 real replay
+configurations, two epochs followed by resume to three, with a fixed SWA schedule.
+It verifies both heads, weight changes, finite losses, exports, baseline evaluation
+and Module-C backend loading. `smoke_result.json` is written only after all checks
+pass. Use a new smoke directory when the source campaign changes.
+
+Transfer the full selected campaign directory, including `assets/`, plus the
+updated repository code. `START.txt` contains model-specific commands relative to
+the repository. An already prepared campaign can train/resume/evaluate offline
+without the full external data archives. Its environment and requirements lock
+include POLAR's electrostatics dependency when installed. Do not copy the local
+temporary test dependency path into cluster commands.
+
+The following sections document the original MH protocol and its compatibility
+behavior; MatPES-specific statements apply to **MH only**.
 
 The prepared v2 campaign fine-tunes uMOF-MH on published CO2, N2 and CH4 adsorption configurations. No CP2K calculations, classical mixture energies or flexible Module-D simulations are used. Production training is intentionally left for the cluster. Existing results are retained, including the previous v2 campaign in `outputs/module_C_umof_finetuning_matrix_v2_archive_20261023`.
 
