@@ -352,6 +352,17 @@ uMOF pretrained MOF-specific model without new CP2K labels
 The offline v2 campaign uses released CO2/N2/CH4 adsorption labels and a shared
 1000/100 MatPES-r2SCAN replay train/validation selection. It prepares four
 nested fractions (10/25/50/100%, seed 12345), separate heads and per-run manifests.
+Before first preparation, fetch and verify the required assets on a machine
+with network access, then prepare the campaign:
+
+```bash
+bash scripts/run_module_c_umof_finetuning.sh setup --download-missing
+bash scripts/run_module_c_umof_finetuning.sh prepare
+```
+
+For offline preparation, transfer the replay dataset to
+`external/umof_replay/matpes-r2scan-replay-data.extxyz`, or set
+`UMOF_REPLAY_SOURCE` to its existing path for both setup and preparation.
 Production training is started explicitly on the cluster:
 
 ```bash

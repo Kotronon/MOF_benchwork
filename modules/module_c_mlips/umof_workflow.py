@@ -414,7 +414,7 @@ def resume_checkpoint(folder, identity):
     return str(max(candidates)[1]) if candidates else None
 
 
-def execute_campaign(output_directory, action="train", *, max_epochs=None):
+def execute_campaign(output_directory, action="train", *, max_epochs=None, device=None):
     root = Path(output_directory).resolve()
     with campaign_lock(root):
         campaign = read_json(root / "campaign.json")
@@ -429,11 +429,17 @@ def execute_campaign(output_directory, action="train", *, max_epochs=None):
             campaign["protocol"] = changed
             atomic_json(root / "campaign.json", campaign)
         verify_files(root, campaign["files"])
+        # Keep archived identities intact when moving existing checkpoints between devices.
+        identity_campaign = campaign
+        if device is not None:
+            if device not in {"cpu", "cuda", "mps"}:
+                raise ValueError("device must be one of: cpu, cuda, mps")
+            campaign = dict(campaign, protocol=dict(campaign["protocol"], device=device))
         for run in campaign["runs"]:
             folder = root / run["directory"]
             status_path = folder / "status.json"
             state = read_json(status_path) if status_path.exists() else {}
-            identity = training_identity(campaign, run)
+            identity = training_identity(identity_campaign, run)
             if state and state.get("training_identity") != identity:
                 raise ValueError(f"Foreign or incompatible checkpoint state in {folder}")
             if not state and list((folder / "checkpoints").glob("*")):
@@ -956,7 +962,6 @@ def main(argv=None):
                 "--replay-weight": ("replay_weight", args.replay_weight),
                 "--replay-samples": ("replay_samples", args.replay_samples),
                 "--replay-valid-samples": ("replay_valid_count", args.replay_valid_samples),
-                "--device": ("device", args.device),
                 "--gases": ("gases", sorted(filter(None, args.gases.split(",")))),
                 "--fractions": ("fractions", sorted(float(x) for x in args.fractions.split(","))),
                 "--seeds": ("seeds", sorted(int(x) for x in args.seeds.split(","))),
@@ -976,7 +981,8 @@ def main(argv=None):
             if "--replay-source" in explicit and any(m["source_sha256"] != data.sha256_file(args.replay_source)
                                                        for m in campaign.get("replay", {}).values()):
                 raise ValueError("Explicit replay source differs from archived campaign")
-            result = execute_campaign(args.output_directory, action, max_epochs=args.max_epochs)
+            result = execute_campaign(args.output_directory, action, max_epochs=args.max_epochs,
+                device=args.device if "--device" in explicit else None)
     print(json.dumps(result, indent=2))
     return 0
 

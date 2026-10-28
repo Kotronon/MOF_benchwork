@@ -5,6 +5,8 @@ resume checkpoint must load strictly; each saved checkpoint has a hash/identity
 sidecar. The adapter also preserves SWA scheduler/averaging and RNG state.
 """
 from pathlib import Path
+from contextlib import nullcontext
+import logging
 import os
 import random
 
@@ -74,7 +76,12 @@ def main():
             if context["swa"] and runtime["swa_scheduler"] is not None:
                 context["swa"].scheduler.load_state_dict(runtime["swa_scheduler"])
                 context["swa"].model.load_state_dict(runtime["swa_model"])
-        return original_train(**kwargs)
+        # Offload tensors retained for backward without changing model precision.
+        offload = os.environ.get("UMOF_CPU_OFFLOAD") == "1"
+        if offload:
+            logging.info("CPU offload enabled for autograd saved tensors")
+        with torch.autograd.graph.save_on_cpu(pin_memory=True) if offload else nullcontext():
+            return original_train(**kwargs)
 
     CheckpointIO.save = save
     CheckpointHandler.load_latest = load

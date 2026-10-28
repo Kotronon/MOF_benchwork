@@ -38,7 +38,7 @@
       "preferred_sources": [
         "crafted"
       ],
-      "material": "ZIF-8",
+      "material": "MOF-5",
       "adsorbate": "CO2",
       "temperature_tolerance_K": 0.5,
       "allowed_reference_basis": [
@@ -55,24 +55,8 @@
         "mode": "screening"
       },
       "campaign": {
-        "id": "zif8_co2_mlip_isotherm_pilot",
+        "id": "mof5_co2_mlip_isotherm_pilot",
         "models": [
-          {
-            "backend": "mace-torch",
-            "name": "MACE-MP-0a-small",
-            "model": "small",
-            "device": "cuda",
-            "default_dtype": "float64",
-            "dispersion": false
-          },
-          {
-            "backend": "mace-torch",
-            "name": "MACE-CP2K-finetuned",
-            "model": "outputs/module_C_potential_benchmark/runs/zif8_co2_active_learning/zif_8__mace_mp_0a_active_learning__active_learning__seed12345/active_learning/iteration_04/training/mace_adsorption_committee_2/models/mace_adsorption_committee_2_compiled.model",
-            "device": "cuda",
-            "default_dtype": "float64",
-            "dispersion": false
-          },
           {
             "backend": "mace-torch",
             "name": "umof_mh",
@@ -116,15 +100,13 @@
     "units": "real",
     "unit_cells": "auto",
     "seeds": [
-      104729,
-      130363,
-      155921
+      104729
     ],
     "cycles": 20000,
     "initialization_cycles": 10000
   },
   "convergence": {
-    "minimum_replicates": 3,
+    "minimum_replicates": 1,
     "relative_ci95_target": 0.05
   },
   "evaluation": {

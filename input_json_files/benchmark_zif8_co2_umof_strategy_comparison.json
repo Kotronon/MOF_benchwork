@@ -1,6 +1,6 @@
 {
   "material": {
-    "name": "ZIF-8",
+    "name": "MOF-5",
     "charge_scheme": "DDEC",
     "source": "crafted"
   },
@@ -28,44 +28,13 @@
       "exclude_regions": [
         "technical_repulsive_probe"
       ],
-      "baseline_backend": "mace_mp_0a_small",
-      "backends": [
-        {
-          "type": "mace_mp",
-          "name": "mace_mp_0a_small",
-          "model": "small",
-          "device": "cpu",
-          "default_dtype": "float64",
-          "dispersion": false
-        }
-      ],
+      
       "comparison": {
         "strategies": [
           "cp2k_local_finetune",
           "umof_pretrained"
         ],
-        "cp2k_finetuned_backends": [
-          {
-            "backend": "mace-torch",
-            "name": "mace_zif8_cp2k_finetuned",
-            "model": "outputs/module_C_potential_benchmark/runs/zif8_co2_active_learning/zif_8__mace_mp_0a_active_learning__active_learning__seed12345/active_learning/iteration_04/training/mace_adsorption_committee_2/models/mace_adsorption_committee_2_compiled.model",
-            "device": "cuda",
-            "default_dtype": "float32",
-            "dispersion": false,
-            "strategy": "cp2k_local_finetune",
-            "reference_level": "CP2K"
-          }
-        ],
-        "baseline_backends": [
-          {
-            "type": "mace_mp",
-            "name": "mace_mp_0a_small",
-            "model": "small",
-            "device": "cpu",
-            "default_dtype": "float32",
-            "dispersion": false
-          }
-        ],
+        
         "umof_backends": [
           {
             "backend": "mace-torch",
