@@ -1,0 +1,84 @@
+{
+  "material": {
+    "name": "UiO-66(Zr)",
+    "cif_source": "external/RASPA2/structures/mofs/cif/UIO-66.cif",
+    "charge_scheme": "as_source",
+    "source": "raspa2",
+    "cif_path": "external/RASPA2/structures/mofs/cif/UIO-66.cif"
+  },
+  "adsorbates": {
+    "components": ["CO2", "CH4"],
+    "mixture": {"CO2": 0.5, "CH4": 0.5}
+  },
+  "conditions": {
+    "temperature_K": 303.0,
+    "pressures_bar": [0.5407, 1.2442, 2.1552, 2.6942, 3.1909, 4.1021, 6.2134, 8.1581, 10.2268, 12.1707]
+  },
+  "benchmark": {
+    "task": "auto",
+    "metrics": ["component_uptake", "selectivity", "runtime"],
+    "reference": {
+      "source": "nist_isodb",
+      "temperature_tolerance_K": 0.0,
+      "max_nist_candidates": 10,
+      "deduplicate_nist_by_doi": false,
+      "allowed_reference_basis": ["absolute"],
+      "allow_unknown_reference_basis": false,
+      "allow_excess_reference_basis": false,
+      "require_known_nist_article_source": true
+    },
+    "paper": {
+      "target_protocol": "Single-seed pressure screening for CO2/CH4 50/50 in UiO-66(Zr), 303 K. Compare pressure trends to the experimental absolute NIST curve with analysis/uio66_mixture_reference_comparison.py.",
+      "doi": "10.1021/jp202633t",
+      "reference_file": "isodb-library/Library/10.1021jp202633t/10.1021jp202633t.Isotherm25.json",
+      "reference_basis": "absolute",
+      "reference_units": "cm3(STP)/cm3",
+      "model_limitation": "The local RASPA2 UiO-66 CIF has zero framework charges and uses UFF; the paper used a dehydroxylated framework, DFT-derived charges, a bonded flexible forcefield, 14 A cutoff and much longer sampling. This is a trend screen, not an exact paper reproduction."
+    }
+  },
+  "simulation": {
+    "engine": "LAMMPS",
+    "method": "GCMC",
+    "forcefield": {
+      "framework": "UFF",
+      "adsorbate": "auto",
+      "cross_interactions": "auto"
+    },
+    "framework": "rigid",
+    "cell_representation": "source",
+    "minimum_image_policy": "error",
+    "units": "real",
+    "atom_style": "full",
+    "pair_style": "lj/cut/coul/long",
+    "cutoff_A": 12.8,
+    "kspace_style": "pppm",
+    "kspace_accuracy": 0.0001,
+    "unit_cells": [2, 2, 2],
+    "seeds": [12345],
+    "cycles": 50000,
+    "initialization_cycles": 10000
+  },
+  "convergence": {
+    "minimum_replicates": 3,
+    "relative_ci95_target": 0.2
+  },
+  "evaluation": {
+    "simulation_basis": "absolute",
+    "report_excess": false,
+    "pore_volume_cm3_g": "auto",
+    "gas_density_backend": "HEOS",
+    "reference_matching": "by_basis",
+    "temperature_tolerance_K": 0.0
+  },
+  "output": {
+    "directory": "outputs/module_B_mixture_selectivity",
+    "run_id": "uio66_co2_ch4_nist_303K_50_50_pressure_screen_seed12345",
+    "overwrite": false,
+    "save_logs": true,
+    "save_dumps": false,
+    "save_restarts": true,
+    "restart_every_steps": 50000,
+    "save_plots": true,
+    "save_csv": true
+  }
+}
