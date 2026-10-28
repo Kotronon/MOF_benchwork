@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "name": "H2",
+  "description": "Uncharged single-site Buch Lennard-Jones H2 model; no quadrupole or quantum correction. LJ provenance: https://doi.org/10.1021/acs.jpca.3c03212, section 2.1.1. Critical constants follow the local RASPA2 ReactionEnsembleAmmonia/H2.def.",
+  "critical_temperature_K": 33.19,
+  "critical_pressure_Pa": 1315000.0,
+  "acentric_factor": -0.214,
+  "rigid": true,
+  "atoms": [
+    {"type": "H2_BUCH", "position": [0.0, 0.0, 0.0]}
+  ],
+  "bonds": []
+}
