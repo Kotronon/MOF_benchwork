@@ -55,8 +55,8 @@
     "kspace_accuracy": 0.0001,
     "unit_cells": [2, 2, 2],
     "seeds": [12345],
-    "cycles": 50000,
-    "initialization_cycles": 10000
+    "cycles": 5000,
+    "initialization_cycles": 1000
   },
   "convergence": {
     "minimum_replicates": 3,

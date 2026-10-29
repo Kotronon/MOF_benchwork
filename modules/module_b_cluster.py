@@ -26,13 +26,13 @@ def read(path):
     return json.loads(Path(path).read_text())
 
 
-def base_config(name, folder, smoke=False):
+def base_config(name, folder, smoke=False, pressure_min=.1, pressure_max=10.):
     cfg = read(f'input_json_files/benchmark_module_b_al_{name}.json')
     cfg['benchmark']['reference'] = {'source': 'none'}
     cfg['benchmark']['paper'] = {'target_protocol': 'Technical AL readiness; external validation open.'}
     cfg['output'].update(directory=str(folder / 'simulation'), run_id='prepared_model', resume=True,
                          save_dumps=True, save_restarts=True)
-    cfg['conditions']['pressures_bar'] = [.1, 10.0]
+    cfg['conditions']['pressures_bar'] = [pressure_min, pressure_max]
     cfg['simulation']['seeds'] = [12345, 23456, 34567]
     cfg['simulation'].update(cycles=50000, initialization_cycles=5000)
     if name == 'zif8':
@@ -202,12 +202,16 @@ def archive_prepared_manifest(folder, prepared):
     _save(folder / 'model_manifest.json',manifest)
 
 
-def prepare(name, root=DEFAULT_ROOT, smoke=False):
+def prepare(name, root=DEFAULT_ROOT, smoke=False, pressure_min=.1, pressure_max=10.):
+    from modules.module_b_extension import validate_bounds
+    validate_bounds(pressure_min, pressure_max)
     folder = Path(root) / ('smoke' if smoke else 'production') / name
     path = folder / 'campaign.json'
     with campaign_lock(path):
         if path.exists():
             state = read(path)
+            if state['base_config']['conditions']['pressures_bar'] != [pressure_min, pressure_max]:
+                raise ValueError('Existing campaign pressure bounds differ; use a separate root.')
             expected_kind = 'technical_smoke' if smoke else 'production'
             if state.get('campaign_kind') != expected_kind or state.get('material_key') != name:
                 raise ValueError('Campaign material or smoke/production role mismatch.')
@@ -215,7 +219,7 @@ def prepare(name, root=DEFAULT_ROOT, smoke=False):
                 raise ValueError('Prepared model has changed.')
             if not (folder / 'readiness.json').exists():
                 materialize_benchmark(prepare_benchmark(build_run_plan(state['base_config'])))
-                if name == 'mof5' and not smoke:
+                if name == 'mof5' and not smoke and pressure_min <= .1 and pressure_max >= 10:
                     import_pilot(path)
                 _save(folder / 'readiness.json', {'status':'prepared','production_started':False,
                       'physical_validation':'open','campaign_kind':state['campaign_kind']})
@@ -223,17 +227,22 @@ def prepare(name, root=DEFAULT_ROOT, smoke=False):
             if model_run.exists():
                 archive_prepared_manifest(folder, read(model_run)['result'])
             return path
-        cfg = freeze_config(base_config(name,folder,smoke),folder)
+        cfg = freeze_config(base_config(name,folder,smoke,pressure_min,pressure_max),folder)
         _save(folder / 'config.json', cfg)
         t = cfg['conditions']['temperature_K']
         make = lambda p,y: point(p,t,{'CO2':y,'N2':1-y})
-        candidates = simplex_candidates(['CO2','N2'],[.1,10],[t])
-        candidates += [make(p,y) for p in (.1,1,10) for y in (0.,1.)]
-        pilot = [make(p,.15) for p in (.1,1,5,10)] if name == 'mof5' and not smoke else []
+        candidates = simplex_candidates(['CO2','N2'],[pressure_min,pressure_max],[t])
+        candidates += [make(p,y) for p in sorted({pressure_min, pressure_max, *([1.] if pressure_min <= 1 <= pressure_max else [])}) for y in (0.,1.)]
+        pilot = [make(p,.15) for p in (.1,1,5,10)] if name == 'mof5' and not smoke and pressure_min <= .1 and pressure_max >= 10 else []
         if smoke:
             initial = [make(.1,.1),make(10,.1),make(1,.9)]
             holdout = [make(5,.5)]
             candidates = initial + holdout + [make(.5,.3),make(3,.7),make(.1,0),make(10,1)]
+            if (pressure_min, pressure_max) != (.1, 10.):
+                mid = (pressure_min*pressure_max)**.5
+                initial = [make(pressure_min,.1),make(pressure_max,.1),make(mid,.9)]
+                holdout = [make((mid*pressure_max)**.5,.5)]
+                candidates = initial + holdout + [make(mid,.3),make(mid,.7),make(pressure_min,0),make(pressure_max,1)]
         else:
             candidates += pilot
             candidates = list({p['candidate_id']:p for p in candidates}.values())
@@ -258,8 +267,8 @@ def prepare(name, root=DEFAULT_ROOT, smoke=False):
         return path
 
 
-def smoke_test(name,root,jobs):
-    path = prepare(name,root,smoke=True)
+def smoke_test(name,root,jobs,pressure_min=.1,pressure_max=10.):
+    path = prepare(name,root,smoke=True,pressure_min=pressure_min,pressure_max=pressure_max)
     with campaign_lock(path):
         state = read(path)
         if not (Path(path).parent / 'smoke_result.json').exists():
@@ -341,8 +350,22 @@ def main(argv=None):
     parser.add_argument('material',choices=[*MATERIALS,'all'])
     parser.add_argument('--root',type=Path,default=DEFAULT_ROOT)
     parser.add_argument('--max-requests',type=int)
+    parser.add_argument('--pressure-min',type=float)
+    parser.add_argument('--pressure-max',type=float)
+    parser.add_argument('--import-from',type=Path)
     parser.add_argument('--jobs',type=int,choices=[1,2,3],default=1)
     args=parser.parse_args(argv)
+    if args.command != 'prepare' and any(v is not None for v in (args.pressure_min, args.pressure_max, args.import_from)):
+        parser.error('Pressure bounds and --import-from are only accepted by prepare.')
+    if args.import_from and args.material != 'mof5':
+        parser.error('--import-from requires material mof5.')
+    from modules.module_b_extension import validate_bounds
+    lower = args.pressure_min if args.pressure_min is not None else .1
+    upper = args.pressure_max if args.pressure_max is not None else 10.
+    try:
+        validate_bounds(lower, upper)
+    except ValueError as exc:
+        parser.error(str(exc))
     if args.root.is_absolute():
         parser.error('--root must be repository-relative for portable campaigns.')
     if args.command in ('start','resume','holdout') and (args.max_requests is None or args.max_requests<1):
@@ -354,7 +377,12 @@ def main(argv=None):
             shutil.copyfile('data/module_b/CLUSTER_AL.md',args.root/'START_HERE.md')
     for name in MATERIALS if args.material=='all' else [args.material]:
         path=args.root/'production'/name/'campaign.json'
-        if args.command=='prepare': prepare(name,args.root)
+        if args.command=='prepare':
+            if args.import_from:
+                from modules.module_b_extension import prepare_extension
+                prepare_extension(args.root,args.import_from,lower,upper)
+            else:
+                prepare(name,args.root,pressure_min=lower,pressure_max=upper)
         elif args.command=='smoke': smoke_test(name,args.root,args.jobs)
         elif args.command in ('start','resume','holdout'):
             if not path.exists(): raise FileNotFoundError(f'Run prepare first: {path}')

@@ -6,7 +6,7 @@ import random
 import shutil
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 from ase.io import read, write
@@ -244,6 +244,39 @@ class LifecycleTests(unittest.TestCase):
                 self.assertEqual(evaluate.call_args.args[1]['protocol']['device'], 'cuda')
             self.assertEqual(w.read_json(root/'campaign.json'), campaign)
             self.assertEqual(w.read_json(folder/'status.json')['training_identity'], identity)
+
+    def test_cuda_memory_release_collects_before_emptying_cache(self):
+        torch = MagicMock()
+        torch.cuda.is_initialized.return_value = True
+        events = []
+        torch.cuda.empty_cache.side_effect = lambda: events.append('empty')
+        with patch.dict(w.sys.modules, {'torch': torch}), \
+                patch.object(w.gc, 'collect', side_effect=lambda: events.append('collect')):
+            w.release_cuda_memory()
+        self.assertEqual(events, ['collect', 'empty'])
+
+    def test_cuda_memory_release_does_not_initialize_cuda(self):
+        torch = MagicMock()
+        torch.cuda.is_initialized.return_value = False
+        with patch.dict(w.sys.modules, {'torch': torch}), patch.object(w.gc, 'collect'):
+            w.release_cuda_memory()
+        torch.cuda.empty_cache.assert_not_called()
+
+    def test_gpu_training_releases_parent_memory_before_subprocess(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); (root/'run').mkdir()
+            campaign = {'protocol': w.protocol(max_epochs=3), 'files': {},
+                'runs': [{'directory': 'run', 'seed': 12345}]}
+            w.atomic_json(root/'campaign.json', campaign)
+            events = []
+            def start(*args, **kwargs):
+                self.assertEqual(events, ['released'])
+                raise RuntimeError('test stop before training')
+            with patch.object(w, 'training_command', return_value=['training']), \
+                    patch.object(w, 'release_cuda_memory', side_effect=lambda: events.append('released')), \
+                    patch.object(w.subprocess, 'run', side_effect=start):
+                with self.assertRaisesRegex(RuntimeError, 'test stop'):
+                    w.execute_campaign(root, 'resume', device='cuda')
 
     def test_resume_rejects_explicit_protocol_override(self):
         with tempfile.TemporaryDirectory() as tmp:

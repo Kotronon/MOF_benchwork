@@ -9,6 +9,7 @@ import argparse
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
 import csv
 import fcntl
+import gc
 import hashlib
 import importlib.metadata
 import io
@@ -414,6 +415,14 @@ def resume_checkpoint(folder, identity):
     return str(max(candidates)[1]) if candidates else None
 
 
+def release_cuda_memory():
+    """Release evaluation models and cached allocations before child training."""
+    gc.collect()
+    torch = sys.modules.get("torch")
+    if torch is not None and torch.cuda.is_initialized():
+        torch.cuda.empty_cache()
+
+
 def execute_campaign(output_directory, action="train", *, max_epochs=None, device=None):
     root = Path(output_directory).resolve()
     with campaign_lock(root):
@@ -471,6 +480,8 @@ def execute_campaign(output_directory, action="train", *, max_epochs=None, devic
                     env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2]) + os.pathsep + env.get("PYTHONPATH", "")
                     for key in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
                         env.setdefault(key, "1")
+                    if campaign["protocol"]["device"] == "cuda":
+                        release_cuda_memory()
                     with (folder / "training.log").open("a") as log:
                         completed = subprocess.run(command, cwd=folder, env=env, stdout=log, stderr=subprocess.STDOUT)
                     state["training_seconds"] = state.get("training_seconds", 0) + time.perf_counter() - before

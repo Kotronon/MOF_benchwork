@@ -323,6 +323,8 @@ def recommend(state):
 
     if state["pending_request"]:
         return {"status": "awaiting_simulation", "request": state["pending_request"]}
+    if state.get("comparison_role") == "holdouts":
+        raise ValueError("Holdout workers cannot acquire training states.")
     results, options = state["results"], state["options"]
     seen = {r["candidate_id"] for r in results}
     held = {r["candidate_id"] for r in state["holdout"]}
@@ -332,6 +334,8 @@ def recommend(state):
         if r["candidate_id"] not in seen | held
     ]
     initial = [r for r in state["initial_design"] if r["candidate_id"] not in seen]
+    if state.get("comparison_role") == "random" and not state.get("shared_initial_ready", False):
+        return {"status": "waiting_for_shared_initial_design"}
     retry = [
         r
         for r in results
@@ -366,6 +370,11 @@ def recommend(state):
                     )
                 )
             ]
+        return {"status": "request", "action": "sample", "candidate": selected}
+    if options.get("acquisition_strategy") == "random":
+        available = [p for p in state["candidates"] if p["candidate_id"] not in seen | held]
+        seed = options.get("random_acquisition_seed", 2026)
+        selected = min(available, key=lambda p: hashlib.sha256(f"{seed}:{p['candidate_id']}".encode()).digest())
         return {"status": "request", "action": "sample", "candidate": selected}
     prediction = predict(state, state["candidates"])
     components = prediction["components"]
@@ -446,6 +455,11 @@ def propose(path, *, holdout=False):
         from modules.module_b_active_learning import propose_campaign
 
         return propose_campaign(path)
+    role = state.get("comparison_role")
+    if role == "holdouts" and not holdout:
+        raise ValueError("Use holdout execution for this worker.")
+    if role == "random" and holdout:
+        raise ValueError("Use the separate shared holdout worker.")
     if identity(state["base_config"]) != state["model_identity"]:
         raise ValueError("Simulation assets changed since campaign initialization.")
     if state["pending_request"]:
@@ -458,6 +472,14 @@ def propose(path, *, holdout=False):
             if pending
             else {"status": "holdout_completed"}
         )
+        if not pending and role == "holdouts":
+            retry = [r for r in state["holdout_results"] if not r["precision_met"]
+                     and r.get("precision_retries", 0) < state["options"]["max_precision_retries"]]
+            if retry:
+                decision = {"status": "request", "action": "improve_holdout_precision", "candidate": retry[0]}
+            elif any(not r["precision_met"] for r in state["holdout_results"]):
+                decision = {"status": "holdout_precision_unmet"}
+
     else:
         decision = recommend(state)
     if decision["status"] == "request":
@@ -467,7 +489,7 @@ def propose(path, *, holdout=False):
             temperature_K=p["temperature_K"], pressures_bar=[p["pressure_bar"]]
         )
         cfg["adsorbates"]["mixture"] = p["mixture"]
-        if decision["action"] == "improve_precision":
+        if decision["action"] in ("improve_precision", "improve_holdout_precision"):
             factor = 4 ** (p.get("precision_retries", 0) + 1)
             cfg["simulation"]["cycles"] = (
                 int(cfg["simulation"].get("cycles", 10000)) * factor
@@ -579,7 +601,7 @@ def ingest(path, summary_path):
     ):
         raise ValueError("Expected one matching pressure point.")
     row = rows[0]
-    field = "holdout_results" if request["action"] == "holdout" else "results"
+    field = "holdout_results" if request["action"] in ("holdout", "improve_holdout_precision") else "results"
     previous = next(
         (x for x in state[field] if x["candidate_id"] == expected["candidate_id"]), None
     )
@@ -652,7 +674,7 @@ def execute(path, max_requests, *, holdout=False, jobs=1):
         if decision["status"] not in {"request", "awaiting_simulation"}:
             return decision
         request = decision["request"]
-        if (request["action"] == "holdout") != holdout:
+        if (request["action"] in ("holdout", "improve_holdout_precision")) != holdout:
             raise ValueError("Pending request has a different role; resume with the matching training/holdout command.")
         cfg = {}
         try:
@@ -674,28 +696,11 @@ def execute(path, max_requests, *, holdout=False, jobs=1):
     return {"status": "execution_budget_exhausted"}
 
 
-@locked
-def report(path):
+def validation_metrics(state, pred, test):
     import numpy as np
     from itertools import combinations
-    from modules.module_b_reporting import ratio, write_artifacts
-
-    state = json.loads(Path(path).read_text())
-    test = state["holdout_results"]
-    results = state["results"]
-    times = [r.get("total_wall_time_seconds") for r in results]
-    result = {
-        "physical_validation": "open",
-        "training_points": len(results),
-        "holdout_points": len(test),
-        "metrics": {},
-        "seed_runs": sum(r["replicate_count"] for r in results),
-        "training_wall_time_seconds": (
-            sum(times) if times and all(t is not None for t in times) else None
-        ),
-        "interpretation": "GP validation against independent LAMMPS labels; external paper agreement is a separate assessment.",
-    }
-    pred = predict(state, state["candidates"]) if len(results) >= 3 else None
+    from modules.module_b_reporting import ratio
+    result = {"metrics": {}}
     if pred and test:
         index = {p["candidate_id"]: i for i, p in enumerate(state["candidates"])}
         indices = [index[r["candidate_id"]] for r in test]
@@ -746,6 +751,53 @@ def report(path):
                 "undefined_points": len(test) - len(errors),
                 "gp_ratio_interval": "cross_component_covariance_not_modelled",
             }
+    return result["metrics"]
+
+
+@locked
+def report(path):
+    from modules.module_b_reporting import write_artifacts
+
+    state = json.loads(Path(path).read_text())
+    test = state["holdout_results"]
+    results = state["results"]
+    times = [r.get("total_wall_time_seconds") for r in results]
+    result = {
+        "physical_validation": "open",
+        "training_points": len(results),
+        "holdout_points": len(test),
+        "metrics": {},
+        "seed_runs": sum(r["replicate_count"] for r in results),
+        "training_wall_time_seconds": (
+            sum(times) if times and all(t is not None for t in times) else None
+        ),
+        "interpretation": "GP validation against independent LAMMPS labels; external paper agreement is a separate assessment.",
+    }
+    pred = predict(state, state["candidates"]) if len(results) >= 3 else None
+    result["metrics"] = validation_metrics(state, pred, test)
+    if state.get("extension"):
+        split = state["extension"]["previous_pressure_max"]
+        result["pressure_bounds_bar"] = state["base_config"]["conditions"]["pressures_bar"]
+        result["metrics_by_region"] = {}
+        for region, rows in (("overall", test),
+                             ("previous_domain", [r for r in test if r["pressure_bar"] <= split]),
+                             ("extended_domain", [r for r in test if r["pressure_bar"] > split])):
+            result["metrics_by_region"][region] = {
+                "holdout_points": len(rows),
+                "precision_unmet": sum(not r["precision_met"] for r in rows),
+                "status": "available" if rows and pred else "missing_holdout_data" if not rows else "insufficient_training_data",
+                "metrics": validation_metrics(state, pred, rows),
+            }
+        seen = {r["candidate_id"] for r in results}
+        initial = {p["candidate_id"] for p in state["initial_design"]}
+        result["acquisition_progress"] = {
+            "initial_design_completed": len(seen & initial),
+            "initial_design_remaining": len(initial - seen),
+            "adaptive_observations": len(seen - initial),
+            "precision_recalculations": sum(r.get("precision_retries", 0) for r in results),
+            "next_phase": "initial_design" if initial - seen else "adaptive_selection",
+        }
+        result["previously_inspected_holdouts"] = state["extension"]["previously_inspected_holdouts"]
     target = Path(path).parent / "report"
     result["artifacts"] = write_artifacts(state, pred, target)
     _save(target / "validation_report.json", result)
@@ -762,6 +814,13 @@ def report(path):
         "",
         "See observations.csv, surrogate_predictions.csv and validation_report.json for reproducible values.",
     ]
+    if state.get("extension"):
+        lines += ["", f"Pressure bounds / bar: {result['pressure_bounds_bar']}.",
+                  f"Acquisition progress: {result['acquisition_progress']}.",
+                  f"Previously inspected holdouts: {len(result['previously_inspected_holdouts'])}; these are not a fresh final test set.",
+                  "Archived source reports are provenance only; this learning curve starts at the extended domain."]
+        for region, values in result["metrics_by_region"].items():
+            lines.append(f"{region}: {values['holdout_points']} holdouts; {values['status']}.")
     (target / "report.md").write_text("\n".join(lines) + "\n")
     # Learning curves use holdouts for reporting only; acquisition never reads these metrics.
     curve = target / "learning_curve.json"
