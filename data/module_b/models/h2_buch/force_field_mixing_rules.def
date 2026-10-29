@@ -1,0 +1,11 @@
+# General rule for shifted vs truncated
+truncated
+# Tail corrections (not used in this benchmark)
+no
+# Number of defined interactions
+1
+# Buch single-site LJ model: epsilon/kB in K, sigma in Angstrom.
+# https://doi.org/10.1021/acs.jpca.3c03212, section 2.1.1.
+H2_BUCH lennard-jones 34.2 2.96
+# Mixing rule
+Lorentz-Berthelot

@@ -115,6 +115,16 @@ class CompositionTests(unittest.TestCase):
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_missing_replay_fails_before_model_loading_with_setup_guidance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(w, 'model_info') as model_info:
+                with self.assertRaisesRegex(FileNotFoundError, 'setup --download-missing'):
+                    w.prepare_campaign(root / 'data', root / 'model', root / 'campaign',
+                                       replay_source=root / 'missing.extxyz')
+                model_info.assert_not_called()
+            self.assertFalse((root / 'campaign' / 'assets').exists())
+
     def test_replay_own_labels_weights_disjoint_and_no_padding(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); source = root / 'replay.extxyz'
@@ -236,6 +246,25 @@ class LifecycleTests(unittest.TestCase):
                 w.execute_campaign(root, 'resume')
                 train.assert_not_called()
             self.assertEqual(w.read_json(folder/'status.json')['status'], 'completed')
+
+    def test_resume_device_override_preserves_archived_checkpoint_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); folder = root/'run'; folder.mkdir()
+            (root/'model').write_bytes(b'model')
+            run = {'directory': 'run', 'seed': 12345}
+            campaign = {'protocol': w.protocol(max_epochs=3), 'files': {}, 'runs': [run]}
+            identity = w.training_identity(campaign, run)
+            w.atomic_json(root/'campaign.json', campaign)
+            w.atomic_json(folder/'status.json', {'training_identity': identity,
+                'trained_to_limit': 3, 'selected_model': {'path': 'model',
+                'sha256': d.sha256_file(root/'model')}, 'status': 'failed'})
+            with patch.object(w, 'resume_checkpoint', return_value=None) as checkpoint, \
+                    patch.object(w, 'evaluate_run') as evaluate, patch.object(w, 'report_campaign', return_value={}):
+                w.main(['resume', '--output-directory', tmp, '--device', 'cuda'])
+                checkpoint.assert_called_with(folder, identity)
+                self.assertEqual(evaluate.call_args.args[1]['protocol']['device'], 'cuda')
+            self.assertEqual(w.read_json(root/'campaign.json'), campaign)
+            self.assertEqual(w.read_json(folder/'status.json')['training_identity'], identity)
 
     def test_resume_rejects_explicit_protocol_override(self):
         with tempfile.TemporaryDirectory() as tmp:

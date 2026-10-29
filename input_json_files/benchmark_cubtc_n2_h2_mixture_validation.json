@@ -1,0 +1,98 @@
+{
+  "material": {
+    "name": "Cu-BTC",
+    "cif_source": "auto",
+    "charge_scheme": "as_source",
+    "source": "crafted",
+    "cif_path": "external/RASPA2/structures/mofs/cif/Cu-BTC.cif"
+  },
+  "adsorbates": {
+    "components": ["N2", "H2"],
+    "mixture": {"N2": 0.500775, "H2": 0.499225}
+  },
+  "conditions": {
+    "temperature_K": 297.0,
+    "pressures_bar": [10.0]
+  },
+  "benchmark": {
+    "task": "auto",
+    "metrics": ["component_uptake", "selectivity", "runtime", "uncertainty"],
+    "reference": {
+      "source": "nist_isodb",
+      "temperature_tolerance_K": 0.0,
+      "max_nist_candidates": 10,
+      "deduplicate_nist_by_doi": false,
+      "allowed_reference_basis": ["absolute"],
+      "allow_unknown_reference_basis": false,
+      "allow_excess_reference_basis": false,
+      "require_known_nist_article_source": true
+    },
+    "paper": {
+      "target_protocol": "Experimental validation point for rigid Cu-BTC N2/H2 mixture adsorption; not an exact reproduction of a published simulation forcefield.",
+      "doi": "10.1007/s10450-019-00124-3",
+      "reference_file": "isodb-library/Library/10.1007s10450019001243/10.1007s10450019001243.Isotherm11.json",
+      "article_source": "Figure 9",
+      "reference_basis": "absolute",
+      "reference_loadings_mmol_g": {"N2": 1.25137, "H2": 0.311111},
+      "reference_selectivity_N2_H2": 4.009812435199598,
+      "model_notes": "Local RASPA2 Cu-BTC structure and its supplied charges, UFF framework, CRAFTED N2, uncharged single-site Buch H2, Lorentz-Berthelot mixing, mixture Peng-Robinson reservoir. Experimental agreement remains to be assessed."
+    }
+  },
+  "simulation": {
+    "engine": "LAMMPS",
+    "method": "GCMC",
+    "forcefield": {
+      "framework": "UFF",
+      "adsorbate": "auto",
+      "cross_interactions": "auto",
+      "definitions": {"H2": "data/module_b/models/h2_buch/definition.json"},
+      "parameter_files": [
+        {
+          "source": "buch_h2_single_site_10.1021_acs.jpca.3c03212",
+          "atom_types": ["H2_BUCH"],
+          "files": {
+            "pseudo_atoms": "data/module_b/models/h2_buch/pseudo_atoms.def",
+            "mixing_rules": "data/module_b/models/h2_buch/force_field_mixing_rules.def"
+          }
+        }
+      ]
+    },
+    "framework": "rigid",
+    "cell_representation": "conventional",
+    "minimum_image_policy": "error",
+    "units": "real",
+    "atom_style": "full",
+    "pair_style": "lj/cut/coul/long",
+    "cutoff_A": 12.8,
+    "kspace_style": "pppm",
+    "kspace_accuracy": 0.0001,
+    "unit_cells": [1, 1, 1],
+    "seeds": [12345, 23456, 34567],
+    "cycles": 50000,
+    "initialization_cycles": 10000
+  },
+  "convergence": {
+    "minimum_replicates": 3,
+    "relative_ci95_target": 0.2
+  },
+  "evaluation": {
+    "simulation_basis": "absolute",
+    "report_excess": false,
+    "pore_volume_cm3_g": "auto",
+    "gas_density_backend": "HEOS",
+    "reference_matching": "by_basis",
+    "temperature_tolerance_K": 0.0
+  },
+  "output": {
+    "directory": "outputs/module_B_mixture_selectivity",
+    "run_id": "cubtc_n2_h2_nist_297K_10bar_3seeds",
+    "overwrite": false,
+    "save_logs": true,
+    "save_dumps": true,
+    "dump_every_steps": 5000,
+    "save_restarts": true,
+    "restart_every_steps": 50000,
+    "save_plots": true,
+    "save_csv": true
+  }
+}

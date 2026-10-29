@@ -14,7 +14,7 @@
   },
   "conditions": {
     "temperature_K": 298.15,
-    "pressures_bar": [1.0, 5.0, 10.0, 20.0]
+    "pressures_bar": [0.995979, 3.03459, 4.95678, 9.97999, 20.0129]
   },
   "benchmark": {
     "task": "auto",
@@ -47,7 +47,7 @@
     "kspace_style": "pppm",
     "kspace_accuracy": 1e-4,
     "unit_cells": [1, 1, 1],
-    "seeds": [12345],
+    "seeds": [23456, 34567, 45678],
     "cycles": 50000,
     "initialization_cycles": 5000
   },
@@ -64,7 +64,7 @@
   },
   "output": {
     "directory": "outputs/module_B_mixture_selectivity",
-    "run_id": "mof5_co2_n2_validation_pilot",
+    "run_id": "mof5_co2_n2_validation_10_90_nist_matched_3seeds",
     "overwrite": false,
     "save_logs": true,
     "save_dumps": true,

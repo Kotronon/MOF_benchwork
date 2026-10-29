@@ -133,6 +133,22 @@ Higher-dimensional projections do not represent complete adsorption surfaces.
 Cross-component GP covariance is not modeled; ratios of GP predictions have no
 claimed joint confidence interval.
 
+## NIST pressure screen in UiO-66
+
+For a one-seed pressure screen against a local experimental mixture curve, use
+`input_json_files/benchmark_uio66_co2_ch4_nist_pressure_screen.json` from the
+repository root. It runs CO2/CH4 = 50/50 in UiO-66(Zr) at 303 K at ten exact
+NIST pressures. After `--run-isotherm`, execute
+`python -m analysis.uio66_mixture_reference_comparison` to create a CSV and a
+two-panel uptake/selectivity plot in the run's `analysis/uio66_nist_reference/`
+directory. The reference is NIST ISODB `10.1021jp202633t.Isotherm25.json`,
+experimental absolute uptake in `cm3(STP)/cm3`. The plot converts simulated
+molecules per simulation cell using the local CIF cell volume. The local CIF has
+zero framework charges and the simulation uses a rigid UFF framework, unlike
+the paper's charged dehydroxylated flexible model. A single seed shows the
+pressure trend, but does not establish statistical precision or quantitative
+paper reproduction.
+
 ## Six paper cases
 
 The algorithm profiles are pinned to

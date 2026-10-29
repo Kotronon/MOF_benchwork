@@ -1,0 +1,5 @@
+# Number of pseudo atoms
+1
+# type print as chem oxidation mass charge polarization B-factor radii connectivity anisotropic anisotropic-type tinker-type
+# One site represents the entire H2 molecule, so its mass is 2.01588 u.
+H2_BUCH yes H H 0 2.01588 0.0 0.0 1.0 1.0 0 0 relative 0
