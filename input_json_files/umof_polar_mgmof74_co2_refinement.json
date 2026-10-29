@@ -1,0 +1,31 @@
+{
+  "gcmc": {
+    "checkpoint_interval": 1000,
+    "equilibration_steps": 5000,
+    "production_steps": 10000
+  },
+  "gpu_ids": [
+    0,
+    2
+  ],
+  "models": [
+    "baseline",
+    "stage1"
+  ],
+  "output_directory": "outputs/umof_polar_adsorption_refinement",
+  "pilot_summary": {
+    "path": "outputs/umof_polar_adsorption_comparison/report/isotherm_summary.csv",
+    "sha256": "239be54b826d9775e7e528d218b94735fd20a9a46d98223707f7ce0b17dfb894"
+  },
+  "pressures_bar": [
+    0.4655,
+    0.9905
+  ],
+  "seeds": [
+    12345
+  ],
+  "source_config": {
+    "path": "input_json_files/umof_polar_mgmof74_co2_adsorption.json",
+    "sha256": "73189ceb9b8d11e9ae17056b3f962e2029923a5fdeff02bff585db781e2f9a44"
+  }
+}
