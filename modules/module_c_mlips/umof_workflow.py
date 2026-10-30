@@ -9,6 +9,7 @@ import argparse
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
 import csv
 import fcntl
+import gc
 import hashlib
 import importlib.metadata
 import io
@@ -125,8 +126,9 @@ def setup(checkpoint, replay_source=None, download=False, *,
         with zipfile.ZipFile(archive) as bundle:
             if members is None:
                 members = [(n, directory / Path(n).name) for n in bundle.namelist()
-                           if re.fullmatch(r"[^/]+-adsorbates-(train|valid|test)\.extxyz", Path(n).name)
-                           or (model == "polar" and Path(n).name == POLAR_REPLAY_FILENAME)]
+                           if not Path(n).name.startswith("._") and "__MACOSX" not in Path(n).parts
+                           and (re.fullmatch(r"[^/]+-adsorbates-(train|valid|test)\.extxyz", Path(n).name)
+                                or (model == "polar" and Path(n).name == POLAR_REPLAY_FILENAME))]
             if not members:
                 raise ValueError(f"No expected adsorption assets in {archive}")
             for member, destination in members:
@@ -271,7 +273,7 @@ def prepare_campaign(data_directory, checkpoint, output_directory, *, fractions=
                      seeds=(12345,), max_epochs=50, learning_rate=1e-4, replay_weight=.25,
                      replay_samples=1000, replay_valid_count=100, device="cpu", gases=None,
                      gas_definitions=None, validation_mofs=None, test_mofs=None,
-                     replay_source=None, purpose="production", model="mh"):
+                     replay_source=None, purpose="production", model="mh", dtype="float64", start_swa=40):
     selected_profile = profile(model)
     replay_source = Path(replay_source) if replay_source is not None else (
         REPLAY_SOURCE if model == "mh" else Path(data_directory) / POLAR_REPLAY_FILENAME)
@@ -281,9 +283,12 @@ def prepare_campaign(data_directory, checkpoint, output_directory, *, fractions=
         raise ValueError("Fractions must have distinct percentage directory names")
     if max_epochs < 1 or learning_rate <= 0 or not math.isfinite(learning_rate):
         raise ValueError("Invalid epoch limit or learning rate")
+    if dtype not in ("float32", "float64") or start_swa < 1:
+        raise ValueError("dtype must be float32/float64 and start_swa must be positive")
     settings = protocol(max_epochs=max_epochs, learning_rate=learning_rate, replay_weight=replay_weight,
                         replay_samples=replay_samples, replay_valid_count=replay_valid_count,
-                        device=device, fractions=sorted(fractions), seeds=sorted(seeds),
+                        device=device, dtype=dtype, start_swa=start_swa,
+                        fractions=sorted(fractions), seeds=sorted(seeds),
                         gases=sorted(gases), gas_definitions=definitions,
                         validation_mofs=sorted(data.DEFAULT_VALIDATION_MOFS if validation_mofs is None else validation_mofs),
                         test_mofs=sorted(data.DEFAULT_TEST_MOFS if test_mofs is None else test_mofs), purpose=purpose)
@@ -307,6 +312,10 @@ def prepare_campaign(data_directory, checkpoint, output_directory, *, fractions=
             return previous
         if list(root.glob("*/seed-*/status.json")) or list(root.glob("*/seed-*/checkpoints/*.pt")):
             raise ValueError("Refusing to overwrite untracked prior training; choose a new campaign directory")
+        if not replay_source.is_file():
+            raise FileNotFoundError(
+                f"Missing replay source {replay_source}; run setup --download-missing first"
+            )
         info = model_info(checkpoint)
         selected_profile.validate(info)
         if purpose == "production" and data.sha256_file(replay_source) != (REPLAY_SHA256 if model == "mh" else POLAR_REPLAY_SHA256):
@@ -388,7 +397,7 @@ def training_command(root, campaign, run, *, epochs=None):
         model=selected_profile.key,
         max_epochs=epochs or p["max_epochs"], learning_rate=p["learning_rate"],
         replay_weight=p["replay_weight"], replay_sample_count=p["replay_samples"],
-        device=p["device"], seed=run["seed"], start_swa=p["start_swa"])
+        device=p["device"], seed=run["seed"], start_swa=p["start_swa"], dtype=p.get("dtype", "float64"))
 
 
 def training_identity(campaign, run):
@@ -412,6 +421,14 @@ def resume_checkpoint(folder, identity):
             raise ValueError(f"Incompatible or altered checkpoint: {path}")
         candidates.append((saved["epoch"], path))
     return str(max(candidates)[1]) if candidates else None
+
+
+def release_cuda_memory():
+    """Release evaluation models and cached allocations before child training."""
+    gc.collect()
+    torch = sys.modules.get("torch")
+    if torch is not None and torch.cuda.is_initialized():
+        torch.cuda.empty_cache()
 
 
 def execute_campaign(output_directory, action="train", *, max_epochs=None, device=None):
@@ -471,6 +488,8 @@ def execute_campaign(output_directory, action="train", *, max_epochs=None, devic
                     env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2]) + os.pathsep + env.get("PYTHONPATH", "")
                     for key in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
                         env.setdefault(key, "1")
+                    if campaign["protocol"]["device"] == "cuda":
+                        release_cuda_memory()
                     with (folder / "training.log").open("a") as log:
                         completed = subprocess.run(command, cwd=folder, env=env, stdout=log, stderr=subprocess.STDOUT)
                     state["training_seconds"] = state.get("training_seconds", 0) + time.perf_counter() - before
@@ -510,10 +529,10 @@ def execute_campaign(output_directory, action="train", *, max_epochs=None, devic
         return report_campaign(root)
 
 
-def predict(dataset, checkpoint, head, cache, device="cpu", model="mh"):
+def predict(dataset, checkpoint, head, cache, device="cpu", model="mh", dtype="float64"):
     from ase.io import read
     identity = [data.sha256_file(dataset), data.sha256_file(checkpoint),
-        head, "float64", device, importlib.metadata.version("mace-torch")]
+        head, dtype, device, importlib.metadata.version("mace-torch")]
     # Preserve the cache identity of existing MH campaigns.
     if model == "polar":
         identity += [model, importlib.metadata.version("graph_longrange")]
@@ -523,7 +542,7 @@ def predict(dataset, checkpoint, head, cache, device="cpu", model="mh"):
     if path.exists():
         with np.load(path) as saved:
             return saved["energies"], saved["forces"]
-    calc = calculator(checkpoint, model=model, device=device, head=head)
+    calc = calculator(checkpoint, model=model, device=device, head=head, dtype=dtype)
     energies, forces = [], []
     for atoms in read(dataset, index=":"):
         atoms.calc = calc
@@ -558,9 +577,12 @@ def select_model(root, campaign, run):
         info = model_info(path)
         if "class" in info and info["class"] != campaign_profile(campaign).model_type:
             raise ValueError(f"Export architecture does not match campaign: {path}")
+        if info.get("dtype", campaign["protocol"].get("dtype", "float64")) != campaign["protocol"].get("dtype", "float64"):
+            raise ValueError(f"Export datatype does not match campaign: {path}")
         if "Default" not in info["heads"] or "pt_head" not in info["heads"]:
             raise ValueError(f"Export missing actual adsorption/replay heads: {path}")
-        pe, pf = predict(valid, path, "Default", root / "prediction_cache", campaign["protocol"]["device"], model=campaign_profile(campaign).key)
+        pe, pf = predict(valid, path, "Default", root / "prediction_cache", campaign["protocol"]["device"],
+                         model=campaign_profile(campaign).key, dtype=campaign["protocol"].get("dtype", "float64"))
         metrics = data._error_metrics((pe-energy)/sizes, (pf-force).ravel())
         candidates.append({"stage": stage, "path": relative(path, root), "sha256": info["sha256"],
                            "head": "Default", "validation": metrics})
@@ -574,7 +596,7 @@ def select_model(root, campaign, run):
         "model_type": campaign_profile(campaign).model_type,
         "model": relative(root / chosen["path"], folder), "path_base": "specification_directory",
         "sha256": chosen["sha256"], "head": chosen["head"], "device": campaign["protocol"]["device"],
-        "default_dtype": "float64", "dispersion": False,
+        "default_dtype": campaign["protocol"].get("dtype", "float64"), "dispersion": False,
         "validated_scope": "selected on adsorption validation; test pending; mixtures and flexibility remain open"})
     return chosen
 
@@ -634,7 +656,8 @@ def evaluate_run(root, campaign, run, selected):
     predictions = {}
     for label, model, head in (("baseline", root / campaign_profile(campaign).asset, "r2scan+d4"),
                               ("finetuned", checkpoint, selected["head"])):
-        predictions[label] = predict(path, model, head, root / "prediction_cache", campaign["protocol"]["device"], model=campaign_profile(campaign).key)
+        predictions[label] = predict(path, model, head, root / "prediction_cache", campaign["protocol"]["device"],
+                                     model=campaign_profile(campaign).key, dtype=campaign["protocol"].get("dtype", "float64"))
     metrics = {label: grouped_metrics(frames, pred) for label, pred in predictions.items()}
     result = {"metrics": metrics, "test_sha256": data.sha256_file(path), "selected_model": selected,
               "grouping": "Whole-configuration errors by component set; mixtures are not pure-gas observations",
@@ -904,6 +927,8 @@ def main(argv=None):
     parser.add_argument("--train-fraction", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=12345)
     parser.add_argument("--max-epochs", type=int)
+    parser.add_argument("--dtype", choices=("float32", "float64"), default="float64")
+    parser.add_argument("--start-swa", type=int, default=40, help="Epoch at which stage two starts; archive for short pilot runs")
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--replay-weight", type=float, default=.25)
     parser.add_argument("--replay-samples", type=int, default=1000)
@@ -949,7 +974,7 @@ def main(argv=None):
                 seeds=[int(x) for x in args.seeds.split(",")] if args.matrix or args.action else [args.seed],
                 max_epochs=args.max_epochs or 50, learning_rate=args.learning_rate,
                 replay_weight=args.replay_weight, replay_samples=args.replay_samples,
-                replay_valid_count=args.replay_valid_samples, device=args.device,
+                replay_valid_count=args.replay_valid_samples, device=args.device, dtype=args.dtype, start_swa=args.start_swa,
                 gases=set(filter(None, args.gases.split(","))),
                 gas_definitions=read_json(args.gas_definitions) if args.gas_definitions else None,
                 validation_mofs=set(filter(None, args.validation_mofs.split(","))),
@@ -962,6 +987,8 @@ def main(argv=None):
                 "--replay-weight": ("replay_weight", args.replay_weight),
                 "--replay-samples": ("replay_samples", args.replay_samples),
                 "--replay-valid-samples": ("replay_valid_count", args.replay_valid_samples),
+                "--dtype": ("dtype", args.dtype),
+                "--start-swa": ("start_swa", args.start_swa),
                 "--gases": ("gases", sorted(filter(None, args.gases.split(",")))),
                 "--fractions": ("fractions", sorted(float(x) for x in args.fractions.split(","))),
                 "--seeds": ("seeds", sorted(int(x) for x in args.seeds.split(","))),

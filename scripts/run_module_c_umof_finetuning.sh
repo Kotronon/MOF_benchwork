@@ -28,6 +28,8 @@ add_option UMOF_REPLAY_SAMPLES --replay-samples
 add_option UMOF_REPLAY_VALID_SAMPLES --replay-valid-samples
 add_option UMOF_REPLAY_WEIGHT --replay-weight
 add_option UMOF_DEVICE --device
+add_option UMOF_DTYPE --dtype
+add_option UMOF_START_SWA --start-swa
 add_option UMOF_GASES --gases
 add_option UMOF_GAS_DEFINITIONS --gas-definitions
 add_option UMOF_VALIDATION_MOFS --validation-mofs

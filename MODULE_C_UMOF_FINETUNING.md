@@ -33,6 +33,53 @@ For MH, replace `polar` with `mh`. Both profiles use CPU/float64, batch size 1,
 learning rate 1e-4, seed 12345, a maximum of 50 epochs and SWA start 40. Each profile
 has four sequential runs. Running both profiles means eight training runs.
 
+### CUDA training with CPU RAM offload
+
+For a new GPU campaign use `--device cuda --output-directory outputs/umof_polar_cuda`.
+The adapter automatically offloads saved autograd tensors to CPU RAM during CUDA
+training, including the derivative graph required by force training. Model
+parameters and optimizer state stay on the GPU. Float64, labels and the training
+protocol are unchanged. This trades host RAM and CPU/GPU transfer time for lower
+GPU memory use; it is not disk swap and cannot guarantee that every structure fits.
+CPU training is unaffected. Set `UMOF_CPU_OFFLOAD=0` to disable offload when there
+is sufficient GPU memory. Offload activation is logged and recorded in checkpoints.
+For a measured small-graph fast path, `UMOF_GPU_ONLY_MAX_EDGES=8000` keeps batches
+with at most 128 atoms and 8000 edges entirely on the GPU; larger batches still
+offload. The default is zero (offload every CUDA training batch). This threshold
+is hardware/workload dependent; it is not a GPU memory reservation.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 UMOF_CPU_OFFLOAD=1 PYTHON_BIN=python \
+  bash scripts/run_module_c_umof_finetuning.sh resume --model polar \
+  --device cuda --output-directory outputs/umof_polar_cuda
+```
+
+### Short Float32 pilot
+
+`--dtype float32` is archived with the protocol and used consistently for
+training, candidate selection, both baseline and tuned test predictions, cache
+identities and the exported model specification. Existing campaigns default to
+Float64. A precision change requires a separate output directory. `--start-swa`
+sets the archived stage-two epoch for a short schedule; it cannot change on resume.
+
+For first results rather than a complete four-fraction convergence study:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 UMOF_CPU_OFFLOAD=1 UMOF_GPU_ONLY_MAX_EDGES=8000 PYTHON_BIN=python \
+  bash scripts/run_module_c_umof_finetuning.sh train --model polar \
+  --device cuda --dtype float32 --fractions 0.25 --max-epochs 5 --start-swa 3 \
+  --replay-samples 200 --output-directory outputs/umof_polar_24h_float32
+```
+
+This uses 211 adsorption training configurations, 200 replay configurations,
+and the original adsorption validation/test sets. It runs one seed and fraction.
+The smaller replay pool and shorter schedule change the training protocol;
+results are preliminary and do not establish convergence or retention on the
+full replay distribution. Baseline improvement is measured, not assumed.
+The workflow automatically writes selection, held-out baseline/tuned metrics,
+parity plots and the model specification after training. The actual wall time
+depends on graph sizes, offload transfers and concurrent GPU use.
+
 | Profile | Default campaign directory | Replay reference |
 |---|---|---|
 | `mh` | `outputs/module_C_umof_finetuning_matrix_v2` | MatPES r2SCAN |

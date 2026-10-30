@@ -6,7 +6,7 @@ import random
 import shutil
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 from ase.io import read, write
@@ -169,7 +169,8 @@ class LifecycleTests(unittest.TestCase):
     def test_epoch_increase_only_with_identical_schedule(self):
         a = w.protocol(max_epochs=2)
         w.compare_protocol(a, dict(a, max_epochs=3))
-        for changed in [dict(a, max_epochs=1), dict(a, max_epochs=3, start_swa=2)]:
+        for changed in [dict(a, max_epochs=1), dict(a, max_epochs=3, start_swa=2),
+                        dict(a, max_epochs=3, dtype='float32')]:
             with self.assertRaises(ValueError): w.compare_protocol(a, changed)
 
     def test_test_labels_do_not_change_training_identity(self):
@@ -212,6 +213,26 @@ class LifecycleTests(unittest.TestCase):
                 self.assertEqual(a, b); self.assertEqual(a['stage'], 'stage1')
                 self.assertTrue(all(call.args[0].name == 'valid.extxyz' for call in predict.call_args_list))
 
+    def test_float32_selection_and_export_keep_campaign_precision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); folder = root/'run'
+            (folder/'datasets').mkdir(parents=True); (folder/'models').mkdir()
+            frame = _frame('CO2')
+            frame.info['REF_energy'] = -10.
+            frame.set_array('REF_forces', np.zeros((len(frame), 3)))
+            write(folder/'datasets/valid.extxyz', [frame])
+            (folder/'models/umof_mh_adsorption_finetuned.model').write_text('fixture')
+            campaign = {'protocol': {'device': 'cuda', 'dtype': 'float32'}}
+            info = {'heads': ['Default', 'pt_head'], 'sha256': 'fixture', 'dtype': 'float32'}
+            prediction = (np.array([-10.]), frame.arrays['REF_forces'])
+            with patch.object(w, 'model_info', return_value=info), patch.object(w, 'predict', return_value=prediction) as predict:
+                w.select_model(root, campaign, {'directory': 'run'})
+                self.assertEqual(predict.call_args.kwargs['dtype'], 'float32')
+            self.assertEqual(w.read_json(folder/'module_c_model.json')['default_dtype'], 'float32')
+            with patch.object(w, 'model_info', return_value=dict(info, dtype='float64')):
+                with self.assertRaisesRegex(ValueError, 'datatype'):
+                    w.select_model(root, campaign, {'directory': 'run'})
+
     def test_interrupted_evaluation_does_not_retrain(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); folder = root/'run'; folder.mkdir()
@@ -244,6 +265,39 @@ class LifecycleTests(unittest.TestCase):
                 self.assertEqual(evaluate.call_args.args[1]['protocol']['device'], 'cuda')
             self.assertEqual(w.read_json(root/'campaign.json'), campaign)
             self.assertEqual(w.read_json(folder/'status.json')['training_identity'], identity)
+
+    def test_cuda_memory_release_collects_before_emptying_cache(self):
+        torch = MagicMock()
+        torch.cuda.is_initialized.return_value = True
+        events = []
+        torch.cuda.empty_cache.side_effect = lambda: events.append('empty')
+        with patch.dict(w.sys.modules, {'torch': torch}), \
+                patch.object(w.gc, 'collect', side_effect=lambda: events.append('collect')):
+            w.release_cuda_memory()
+        self.assertEqual(events, ['collect', 'empty'])
+
+    def test_cuda_memory_release_does_not_initialize_cuda(self):
+        torch = MagicMock()
+        torch.cuda.is_initialized.return_value = False
+        with patch.dict(w.sys.modules, {'torch': torch}), patch.object(w.gc, 'collect'):
+            w.release_cuda_memory()
+        torch.cuda.empty_cache.assert_not_called()
+
+    def test_gpu_training_releases_parent_memory_before_subprocess(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); (root/'run').mkdir()
+            campaign = {'protocol': w.protocol(max_epochs=3), 'files': {},
+                'runs': [{'directory': 'run', 'seed': 12345}]}
+            w.atomic_json(root/'campaign.json', campaign)
+            events = []
+            def start(*args, **kwargs):
+                self.assertEqual(events, ['released'])
+                raise RuntimeError('test stop before training')
+            with patch.object(w, 'training_command', return_value=['training']), \
+                    patch.object(w, 'release_cuda_memory', side_effect=lambda: events.append('released')), \
+                    patch.object(w.subprocess, 'run', side_effect=start):
+                with self.assertRaisesRegex(RuntimeError, 'test stop'):
+                    w.execute_campaign(root, 'resume', device='cuda')
 
     def test_resume_rejects_explicit_protocol_override(self):
         with tempfile.TemporaryDirectory() as tmp:

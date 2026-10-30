@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import hashlib
+import math
 from pathlib import Path
 from typing import Any
 
@@ -189,6 +190,23 @@ def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
 
     forcefield_path = Path(prepare_plan["planned_files"]["forcefield_include"]["output_file"])
     write_lammps_forcefield_include(forcefield, forcefield_path)
+    if (not any(framework_structure.charges)
+            and prepare_plan["parameters"].get("kspace_style", "pppm") == "pppm"):
+        # Empty, uncharged frameworks cannot supply PPPM's automatic error
+        # estimate. Keep electrostatics enabled for subsequently inserted guests.
+        accuracy = float(prepare_plan["parameters"].get("kspace_accuracy", 1e-5))
+        cutoff = float(prepare_plan["parameters"].get("cutoff_A", 12.0))
+        scale = math.sqrt(-math.log(min(accuracy, 0.1)))
+        alpha = scale / cutoff
+        settings = f"kspace_modify gewald {alpha:.12g}"
+        # Resolve reciprocal modes beyond the Gaussian damping scale;
+        # powers of two provide efficient FFT grids even for dilute guests.
+        # This initial grid still requires convergence checks at finite loading.
+        mesh = [2 ** max(2, math.ceil(math.log2(2 * length * alpha * scale / math.pi)))
+                for length in framework_structure.cell_lengths]
+        settings += " mesh " + " ".join(map(str, mesh))
+        with forcefield_path.open("a") as handle:
+            handle.write("\n# Explicit initialization for an uncharged framework.\n" + settings + "\n")
 
     run0_path = Path(prepare_plan["planned_files"]["run0_input"]["path"])
     run0_path.parent.mkdir(parents=True, exist_ok=True)

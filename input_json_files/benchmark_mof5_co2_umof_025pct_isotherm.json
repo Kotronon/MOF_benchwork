@@ -1,0 +1,137 @@
+{
+  "material": {
+    "name": "IRMOF-1",
+    "cif_source": "auto",
+    "charge_scheme": "DDEC",
+    "source": "crafted"
+  },
+  "adsorbates": {
+    "components": [
+      "CO2"
+    ],
+    "mixture": null
+  },
+  "conditions": {
+    "temperature_K": 298.0,
+    "pressures_bar": [
+      0.1,
+      1.0,
+      10.0
+    ]
+  },
+  "benchmark": {
+    "task": "potential_benchmark",
+    "module": "C",
+    "comparison_type": "adsorption_isotherms",
+    "metrics": [
+      "co2_uptake",
+      "isotherm",
+      "error_to_reference",
+      "runtime",
+      "convergence",
+      "validity_range"
+    ],
+    "reference": {
+      "source": "crafted",
+      "preferred_sources": [
+        "crafted"
+      ],
+      "material": "IRMOF-1",
+      "adsorbate": "CO2",
+      "temperature_tolerance_K": 0.5,
+      "allowed_reference_basis": [
+        "absolute",
+        "simulation_reference"
+      ],
+      "allow_unknown_reference_basis": false,
+      "allow_excess_reference_basis": false
+    },
+    "potential_benchmark": {
+      "workflow": "campaign",
+      "adsorption_engine": "mlip_mc",
+      "validation": {
+        "mode": "screening"
+      },
+      "campaign": {
+        "id": "mof5_co2_umof_mh_025pct_comparison_v1",
+        "models": [
+          {
+            "backend": "mace-torch",
+            "device": "cuda",
+            "default_dtype": "float64",
+            "dispersion": false,
+            "model_type": "ScaleShiftMACE",
+            "name": "umof_mh_pretrained",
+            "model": "outputs/module_C_umof_finetuning_matrix_v2/assets/uMOF-MH.model",
+            "head": "r2scan+d4",
+            "sha256": "af6491a88c25740e5641633a54db64f9c8cfae320b8983be3a52c4958b29bcab"
+          },
+          {
+            "backend": "mace-torch",
+            "device": "cuda",
+            "default_dtype": "float64",
+            "dispersion": false,
+            "model_type": "ScaleShiftMACE",
+            "name": "umof_mh_finetuned_025pct",
+            "model": "outputs/module_C_umof_finetuning_matrix_v2/025pct/seed-12345/models/umof_mh_adsorption_finetuned.model",
+            "head": "Default",
+            "sha256": "711eac6b6a8d61104729ecfb2fb2df3733635889124eec376d8482d03506975f"
+          }
+        ],
+        "stages": {
+          "gcmc_pilot": {
+            "method": "gcmc",
+            "equilibration_steps": 10000,
+            "production_steps": 20000,
+            "pressure_selection": "all",
+            "checkpoint_interval": 1000
+          }
+        }
+      }
+    }
+  },
+  "simulation": {
+    "engine": "MLIP_MC",
+    "method": "GCMC",
+    "framework": "rigid",
+    "cell_representation": "source",
+    "minimum_image_policy": "error",
+    "cutoff_A": 6.0,
+    "units": "real",
+    "unit_cells": "auto",
+    "seeds": [
+      104729,
+      130363,
+      155921
+    ],
+    "cycles": 20000,
+    "initialization_cycles": 10000
+  },
+  "convergence": {
+    "minimum_replicates": 3,
+    "relative_ci95_target": 0.05
+  },
+  "evaluation": {
+    "simulation_basis": "absolute",
+    "report_excess": true,
+    "pore_volume_cm3_g": "auto",
+    "gas_density_backend": "HEOS",
+    "reference_matching": "by_basis",
+    "metrics": [
+      "mae",
+      "rmse",
+      "mre",
+      "r2"
+    ]
+  },
+  "output": {
+    "directory": "outputs/module_C_potential_benchmark",
+    "run_id": "mof5_co2_umof_mh_025pct_comparison_v1",
+    "overwrite": false,
+    "save_logs": true,
+    "save_dumps": false,
+    "save_plots": true,
+    "save_csv": true,
+    "save_restarts": true
+  }
+}

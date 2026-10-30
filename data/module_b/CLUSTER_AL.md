@@ -168,3 +168,57 @@ Das Paket ist ein Anfangszustand. Auf einem bereits laufenden Clusterprojekt
 würde erneutes Entpacken die dortigen Kampagnenstände überschreiben; für solche
 Kampagnen ausschließlich `resume` verwenden. Die Versionskontrolle allein
 überträgt dieses von Git ausgeschlossene Paket nicht.
+
+## Separate MOF-5 continuation: 0.1–20 bar
+
+Activate `MOF_sim` before running the commands below. Preparation copies verified
+completed observations and evidence; it does not launch production simulations.
+The source campaign must have no active writer during preparation.
+
+```bash
+bash scripts/run_module_b_al.sh prepare mof5 \
+  --root outputs/module_B_active_learning_mof5_20bar \
+  --pressure-min 0.1 --pressure-max 20 \
+  --import-from outputs/module_B_active_learning/production/mof5/campaign.json
+
+bash scripts/run_module_b_al.sh resume mof5 \
+  --root outputs/module_B_active_learning_mof5_20bar \
+  --max-requests 2 --jobs 3
+
+bash scripts/run_module_b_al.sh report mof5 \
+  --root outputs/module_B_active_learning_mof5_20bar
+
+# Compute up to two outstanding holdouts after finishing a pending training request:
+bash scripts/run_module_b_al.sh holdout mof5 \
+  --root outputs/module_B_active_learning_mof5_20bar \
+  --max-requests 2 --jobs 3
+```
+
+Pressure options and `--import-from` are preparation-only. Subsequent commands
+inherit the stored bounds. Repeating preparation with the same source path and
+bounds preserves progress; different settings require another destination root.
+The import is a snapshot, not an ongoing synchronization with the old campaign.
+
+The new design retains the original candidate pool and twelve initial states,
+adds 4,096 logarithmic-pressure Sobol candidates over 10–20 bar, and schedules
+20 bar / 15% CO2 as the next unobserved initial state. Adaptive GP selection begins
+only after the initial design is complete. Twenty-four distinct training states
+(including imported states) and at most one precision retry per state are allowed.
+`--max-requests` counts requests including retries, not necessarily new states.
+
+The sixteen previous holdouts remain locked; four additional holdouts cover
+12/18 bar at 15/50% CO2. Existing inspected holdouts are marked as such and must
+not be presented as a fresh final test set. Reports separate the old domain,
+the extension, and the full domain, explicitly marking missing holdout data.
+The new learning curve starts with the extended domain; old reports and original
+simulation files are retained byte-for-byte under `provenance/source`. Working evidence is copied separately under `evidence`, with internal paths and
+summary checksums adjusted. The provenance archive retains original paths and
+checksums. No claims of external physical
+validation or advantage over random sampling follow from this extension alone.
+
+## Parallel MOF-5 comparison and validation
+
+Use `bash scripts/run_module_b_comparison.sh prepare` to prepare a separate random
+control and independent holdout worker while the 20-bar AL campaign runs.
+Detailed protocol, commands and limitations: `data/module_b/MOF5_AL_COMPARISON.md`.
+The shared report never writes holdout labels into a live training campaign.

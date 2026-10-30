@@ -117,9 +117,9 @@ def campaign_profile(campaign):
     return profile(campaign["protocol"].get("model", "mh"))
 
 
-def calculator(checkpoint, *, model="mh", head="r2scan+d4", device="cpu"):
+def calculator(checkpoint, *, model="mh", head="r2scan+d4", device="cpu", dtype="float64"):
     from .potential_backends.calculators import build_ase_calculator
     selected = profile(model)
     return build_ase_calculator({"backend": "mace-torch", "name": f"umof_{model}_local",
         "model": str(Path(checkpoint).resolve()), "model_type": selected.model_type,
-        "head": head, "device": device, "default_dtype": "float64", "dispersion": False})
+        "head": head, "device": device, "default_dtype": dtype, "dispersion": False})
