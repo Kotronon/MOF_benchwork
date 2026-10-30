@@ -266,7 +266,7 @@ def worker(config, model_label, seed, phase, pressure, directory):
     from analysis.mlip_widom import read_widom_attempt_trace, BOLTZMANN_EV_PER_K
     host, guest = (read(resolve(config[key]["path"])) for key in ("framework", "adsorbate"))
     row = next(m for m in config["models"] if m["label"] == model_label)
-    base = calculator(resolve(row["path"]), model="polar", device=config["device"],
+    base = calculator(resolve(row["path"]), model=row.get("profile", "polar"), device=config["device"],
                       head=row["head"], dtype=config["dtype"])
     if base.head != row["head"]:
         raise ValueError("Calculator silently selected an unexpected head")
