@@ -120,7 +120,7 @@ def parse_energy(text):
     outcomes = re.findall(r'SCF run\s+(converged|NOT converged)', text, re.I)
     if not outcomes or outcomes[-1].lower() != 'converged':
         raise ValueError('SCF convergence is not established')
-    values = re.findall(r'ENERGY\|\s+Total FORCE_EVAL.*?energy.*?:\s*([-+0-9.EeDd]+)', text)
+    values = re.findall(r'ENERGY\|\s+Total FORCE_EVAL[^\n]*?energy[^\n]*?\]\s*:?\s*([-+0-9.EeDd]+)', text)
     if not values:
         raise ValueError('Missing final CP2K energy')
     value = float(values[-1].replace('D','E').replace('d','e'))*HARTREE_TO_EV
@@ -204,11 +204,40 @@ def collect_job(job):
     return result
 
 
+def active_cp2k_pid(directory):
+    """Find a surviving CP2K worker belonging to this exact job directory."""
+    directory = Path(directory).resolve()
+    for entry in Path('/proc').iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            if (entry/'cwd').resolve() != directory:
+                continue
+            if (entry/'exe').resolve() != EXECUTABLE.resolve():
+                continue
+            if (entry/'stat').read_text().split(') ',1)[1].split()[0] == 'Z':
+                continue
+            return int(entry.name)
+        except (OSError, ValueError):
+            continue
+    return None
+
+
 def execute_job(job, threads):
     path=Path(job['directory'])
+    active = active_cp2k_pid(path)
+    if active is not None:
+        print(f'Adopting running CP2K worker {active}: {job["name"]}', flush=True)
+        while active_cp2k_pid(path) is not None:
+            time.sleep(2)
+        result = collect_job(job)
+        atomic_json(path/'status.json',{'status':'completed','adopted_pid':active})
+        return result
     try:
         if (path/'cp2k.out').exists():
-            return collect_job(job)
+            result=collect_job(job)
+            atomic_json(path/'status.json',{'status':'completed','reused':True})
+            return result
     except ValueError:
         # Preserve failed/incomplete output before a deliberate restart.
         shutil.copy2(path/'cp2k.out',path/f'previous_{time.time_ns()}.out')

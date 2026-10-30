@@ -22,6 +22,7 @@ class DFTReferenceTests(unittest.TestCase):
     def test_energy_requires_normal_end_and_final_scf_convergence(self):
         text='SCF run converged in 20 steps\nENERGY| Total FORCE_EVAL ( QS ) energy [hartree]: -1.25\nPROGRAM ENDED AT 2026-10-29\n'
         self.assertAlmostEqual(parse_energy(text),-1.25*HARTREE_TO_EV)
+        self.assertAlmostEqual(parse_energy(text.replace(']:', ']            ')),-1.25*HARTREE_TO_EV)
         for invalid in [text.replace('PROGRAM ENDED AT','unfinished'),
                         text.replace('SCF run converged','SCF run NOT converged'),
                         text+'[ABORT]',text.replace('-1.25','NaN')]:
