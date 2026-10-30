@@ -1,0 +1,48 @@
+{
+  "material": {"name": "NbOFFIVE-1-Ni", "charge_scheme": "DDEC06"},
+  "adsorbates": {"components": ["H2O"]},
+  "conditions": {
+    "temperature_K": 300.0,
+    "relative_humidity": [0.01, 0.025, 0.05, 0.075, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0]
+  },
+  "benchmark": {
+    "task": "module_d",
+    "flexibility": {
+      "protocol_source": "Wang et al., J. Phys. Chem. C 130 (2026) 2833-2846, DOI 10.1021/acs.jpcc.6c00023, Sections 2.3-2.5 and 3.4",
+      "rh_grid_source": "Project starting grid; replace with SI Table S2 for exact paper replication",
+      "sr_cycles": 100,
+      "discard_cycles": 0,
+      "convergence_window": 10,
+      "uptake_drift_tolerance_mol_kg": 0.05,
+      "rmsd_drift_tolerance_A": 0.02,
+      "volume_relative_drift_tolerance": 0.01,
+      "md": {"ensemble": "NVT", "steps": 1000, "timestep_fs": 1.0, "thermostat_damping_ps": 0.04},
+      "gcmc": {"engine": "gRASPA", "equilibration_steps": 200000, "production_steps": 500000},
+      "reservoir": {
+        "water_model": "TIP4P",
+        "model_saturation_pressure_bar": 0.05197,
+        "experimental_saturation_pressure_bar": 0.036,
+        "source": "Paper Section 2.4: model p0=5197 Pa, experimental p0=3600 Pa at 300 K",
+        "fugacities_bar": null,
+        "fugacity_source": null
+      },
+      "assets": {
+        "initial_structure": "data/module_d/mofaff_reference/example/conf.lmp.initial",
+        "rigid_framework_cif": null,
+        "charges": null,
+        "mlip_model": null,
+        "mlip_validation": null,
+        "experimental_reference": null,
+        "gcmc_parameters_validation": null
+      }
+    }
+  },
+  "simulation": {
+    "framework": "flexible",
+    "method": "MLIP-MD/GCMC",
+    "engine": "LAMMPS",
+    "seeds": [12345, 23456, 34567],
+    "unit_cells": [2, 2, 2]
+  },
+  "output": {"directory": "outputs/module_D_nboffive_water", "run_id": "planning_v1", "overwrite": false}
+}

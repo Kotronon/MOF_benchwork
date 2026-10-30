@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from modules.base import BenchmarkModule, UnsupportedModule
+from modules.module_d_flexibility import FlexibilityModule
 
 
 def _normalized_task_alias(value: str) -> str:
@@ -45,7 +46,7 @@ def _module_d_score(config: dict[str, Any]) -> int:
     simulation = config.get("simulation", {})
     method = str(simulation.get("method", "")).lower()
     framework = str(simulation.get("framework", "rigid")).lower()
-    if framework != "rigid":
+    if framework != "rigid" or isinstance(config.get("benchmark", {}).get("flexibility"), dict):
         return 90
     return 0
 
@@ -113,7 +114,7 @@ MODULE_REGISTRY: tuple[BenchmarkModule, ...] = (
         ),
         selection_score=_module_c_score,
     ),
-    UnsupportedModule(
+    FlexibilityModule(
         id="D",
         name="Framework flexibility benchmark",
         slug="module_D_flexibility",

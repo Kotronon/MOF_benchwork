@@ -14,6 +14,10 @@ from pipeline.utils import pressure_token
 def prepare_benchmark(run_plan: dict[str, Any]) -> dict[str, Any]:
     """Build a central side-effect-free preparation plan."""
     module_id = run_plan.get("module", {}).get("id")
+    if module_id == "D":
+        from modules.module_d_flexibility import prepare_flexibility
+
+        return prepare_flexibility(run_plan)
     if module_id not in {"A", "B", "C"}:
         raise ValueError(f"Prepare currently supports modules 'A', 'B', and 'C' only, got {module_id!r}.")
 

@@ -1,0 +1,40 @@
+{
+  "repository": "https://github.com/xwsci/mofaff",
+  "commit": "7c8ddb138b5cda0a53c55b38906261d998397e47",
+  "license": "BSD-3-Clause",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "c5b1017e67ebf002d5aa36babe4a4b8a5dd591428ff730778cbebdd57c8762ed"
+    },
+    {
+      "path": "example/conf.lmp.initial",
+      "sha256": "124611150d0c8da5510f79ad7364ae1916cabb78372581bb75cb0f82c0e906cb"
+    },
+    {
+      "path": "example/in.lammps",
+      "sha256": "68e3ffac5c842aab4341d3f85205d197c8a8730ca2eea4cce813d47e650773f5"
+    },
+    {
+      "path": "example/gcmc/simulation.input",
+      "sha256": "83fc23a300e3e8bfac77449a8cacc1fb4c775ab4b4d5ba1860a0d4020f093d50"
+    },
+    {
+      "path": "example/gcmc/force_field.def",
+      "sha256": "20dfe7e186a2f1e0c21b68f6db15a0808784bb8c631a21792541e56109c08541"
+    },
+    {
+      "path": "example/gcmc/force_field_mixing_rules.def",
+      "sha256": "32bac7a41947059f0afe4ba186bd67f128d8484c7f0abc14f1acf6eb6f0ec986"
+    },
+    {
+      "path": "example/gcmc/pseudo_atoms.def",
+      "sha256": "536a39708fce6e2347ca2d8514890aabcc5da4041d8fe1eeda51f43e99fa5ff8"
+    },
+    {
+      "path": "example/gcmc/TIP4P.def",
+      "sha256": "75e7cb68480ae350d4b97595b968d59b738d31d38b75e9f9c061ad23021798ec"
+    }
+  ],
+  "status": "unmodified upstream reference inputs; not validated production inputs"
+}

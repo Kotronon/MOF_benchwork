@@ -110,6 +110,10 @@ def build_run_plan(config: dict[str, Any]) -> dict[str, Any]:
     """Build a JSON-serializable dry-run plan for the benchmark."""
     normalized = normalize_config(config)
     module = select_module(normalized)
+    if module["id"] == "D":
+        from modules.module_d_flexibility import build_flexibility_plan
+
+        return build_flexibility_plan(normalized, module)
     resolved = resolve_benchmark(normalized)
     applicability = module_by_id(module["id"]).assess(normalized, resolved)
     evaluation = _resolve_evaluation_config(

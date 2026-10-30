@@ -100,12 +100,12 @@ class ModuleRegistryTests(unittest.TestCase):
 
         self.assertEqual(benchmark.select_module(config)["id"], "C")
 
-    def test_module_d_is_registered_but_not_executable(self) -> None:
+    def test_module_d_simulation_remains_unavailable(self) -> None:
         module = module_by_id("D")
 
         self.assertEqual(module.metadata()["id"], "D")
-        with self.assertRaisesRegex(NotImplementedError, "registered but not implemented"):
-            module.prepare({"module": {"id": "D"}})
+        with self.assertRaisesRegex(NotImplementedError, "simulation execution is unavailable"):
+            module.run({"module": {"id": "D"}})
 
 
 if __name__ == "__main__":

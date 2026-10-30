@@ -212,6 +212,22 @@ def main(argv: list[str] | None = None) -> int:
     if not args.skip_registry_update:
         write_generated_registries(args.registry_output_dir)
     run_plan = build_run_plan(config)
+    if run_plan["module"]["id"] == "D":
+        from modules.registry import module_by_id
+
+        module = module_by_id("D")
+        if args.dry_run:
+            result = run_plan
+        elif args.run_test or args.run_isotherm or args.run_variants:
+            module.run(run_plan)
+        elif args.prepare:
+            result = module.materialize(module.prepare(run_plan))
+        elif args.evaluate:
+            result = module.evaluate(run_plan["outputs"]["directory"])
+        else:
+            parser.error("Module D currently supports --dry-run, --prepare and --evaluate.")
+        print(json.dumps(result, indent=2, allow_nan=False))
+        return 0
     if args.init_module_b_campaign:
         result = _initialize_module_b_campaign(run_plan)
         print(json.dumps(result, indent=2))
