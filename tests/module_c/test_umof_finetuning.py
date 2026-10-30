@@ -33,6 +33,10 @@ class UmofFinetuningTests(unittest.TestCase):
                         frames,
                         format="extxyz",
                     )
+                    # AppleDouble metadata from the release ZIP is not an XYZ dataset.
+                    (data / f"._{mof}-adsorbates-{split}.extxyz").write_bytes(
+                        b"\x00\x05\x16\x07\xa2"
+                    )
 
             manifest = prepare_adsorption_datasets(
                 data,
@@ -59,6 +63,22 @@ class UmofFinetuningTests(unittest.TestCase):
             self.assertEqual(
                 {atoms.info["umof_source_split"] for atoms in test}, {"test"}
             )
+
+    def test_float32_training_command_and_short_schedule(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ('model', 'replay', 'valid'):
+                (root / name).write_text('fixture')
+            options = dict(checkpoint=root/'model', output_directory=root/'out',
+                           replay_dataset=str(root/'replay'), replay_valid_file=root/'valid',
+                           max_epochs=5, start_swa=3, device='cuda')
+            manifest = {'train_file': root/'train', 'valid_file': root/'valid'}
+            command = build_umof_mh_training_command(manifest, dtype='float32', **options)
+            self.assertEqual(command[command.index('--default_dtype') + 1], 'float32')
+            self.assertEqual(command[command.index('--start_swa') + 1], '3')
+            self.assertEqual(command[command.index('--max_num_epochs') + 1], '5')
+            with self.assertRaisesRegex(ValueError, 'dtype'):
+                build_umof_mh_training_command(manifest, dtype='float16', **options)
 
     def test_training_command_uses_foundation_replay_and_cpu(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -169,7 +169,8 @@ class LifecycleTests(unittest.TestCase):
     def test_epoch_increase_only_with_identical_schedule(self):
         a = w.protocol(max_epochs=2)
         w.compare_protocol(a, dict(a, max_epochs=3))
-        for changed in [dict(a, max_epochs=1), dict(a, max_epochs=3, start_swa=2)]:
+        for changed in [dict(a, max_epochs=1), dict(a, max_epochs=3, start_swa=2),
+                        dict(a, max_epochs=3, dtype='float32')]:
             with self.assertRaises(ValueError): w.compare_protocol(a, changed)
 
     def test_test_labels_do_not_change_training_identity(self):
@@ -211,6 +212,26 @@ class LifecycleTests(unittest.TestCase):
                 b = w.select_model(root, campaign, run)
                 self.assertEqual(a, b); self.assertEqual(a['stage'], 'stage1')
                 self.assertTrue(all(call.args[0].name == 'valid.extxyz' for call in predict.call_args_list))
+
+    def test_float32_selection_and_export_keep_campaign_precision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); folder = root/'run'
+            (folder/'datasets').mkdir(parents=True); (folder/'models').mkdir()
+            frame = _frame('CO2')
+            frame.info['REF_energy'] = -10.
+            frame.set_array('REF_forces', np.zeros((len(frame), 3)))
+            write(folder/'datasets/valid.extxyz', [frame])
+            (folder/'models/umof_mh_adsorption_finetuned.model').write_text('fixture')
+            campaign = {'protocol': {'device': 'cuda', 'dtype': 'float32'}}
+            info = {'heads': ['Default', 'pt_head'], 'sha256': 'fixture', 'dtype': 'float32'}
+            prediction = (np.array([-10.]), frame.arrays['REF_forces'])
+            with patch.object(w, 'model_info', return_value=info), patch.object(w, 'predict', return_value=prediction) as predict:
+                w.select_model(root, campaign, {'directory': 'run'})
+                self.assertEqual(predict.call_args.kwargs['dtype'], 'float32')
+            self.assertEqual(w.read_json(folder/'module_c_model.json')['default_dtype'], 'float32')
+            with patch.object(w, 'model_info', return_value=dict(info, dtype='float64')):
+                with self.assertRaisesRegex(ValueError, 'datatype'):
+                    w.select_model(root, campaign, {'directory': 'run'})
 
     def test_interrupted_evaluation_does_not_retrain(self):
         with tempfile.TemporaryDirectory() as tmp:

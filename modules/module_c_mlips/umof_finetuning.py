@@ -79,7 +79,8 @@ def prepare_adsorption_datasets(
             raise ValueError("Selected gas definition uses elements unsupported by the checkpoint")
     root, output = Path(data_directory).expanduser(), Path(output_directory).expanduser()
     files = {split: {p.name.removesuffix(f"-{split}.extxyz"): p
-                    for p in sorted(root.glob(f"*-adsorbates-{split}.extxyz"))}
+                    for p in sorted(root.glob(f"*-adsorbates-{split}.extxyz"))
+                    if p.is_file() and not p.name.startswith("._")}
              for split in ("train", "valid", "test")}
     if any(not group for group in files.values()):
         raise FileNotFoundError(f"Incomplete adsorption train/valid/test files in {root}")
@@ -209,6 +210,7 @@ def build_umof_mh_training_command(
     replay_valid_file: str | Path | None = None,
     start_swa: int = 40,
     model: str = "mh",
+    dtype: str = "float64",
 ) -> list[str]:
     """Build a local multihead training command; MH remains the default profile."""
     from .umof_profiles import profile
@@ -226,6 +228,8 @@ def build_umof_mh_training_command(
         raise ValueError("replay_sample_count must be positive.")
     if device not in {"cpu", "cuda", "mps"}:
         raise ValueError("device must be one of: cpu, cuda, mps.")
+    if dtype not in {"float32", "float64"}:
+        raise ValueError("dtype must be float32 or float64.")
     replay_path = Path(manifest.get("replay_train_file", replay_dataset)).expanduser()
     valid_replay = Path(replay_valid_file or manifest.get("replay_valid_file", replay_path.with_name("valid.extxyz")))
     if not replay_path.is_file() or not valid_replay.is_file():
@@ -289,7 +293,7 @@ def build_umof_mh_training_command(
         "--device",
         device,
         "--default_dtype",
-        "float64",
+        dtype,
         "--batch_size",
         "1",
         "--valid_batch_size",

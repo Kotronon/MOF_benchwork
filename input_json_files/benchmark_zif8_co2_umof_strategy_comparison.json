@@ -28,13 +28,13 @@
       "exclude_regions": [
         "technical_repulsive_probe"
       ],
-      
+
       "comparison": {
         "strategies": [
           "cp2k_local_finetune",
           "umof_pretrained"
         ],
-        
+
         "umof_backends": [
           {
             "backend": "mace-torch",
