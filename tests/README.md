@@ -1,5 +1,14 @@
 # Test suite
 
+The offline Module D checks cover campaign planning, RH and fugacity handling,
+reference checksums, safe resume, imported cycle analysis and periodic framework
+geometry. They start no simulation or training jobs:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m unittest \
+  tests.test_module_d_flexibility tests.test_module_registry -v
+```
+
 The tests are grouped by responsibility:
 
 - `test_planning.py`: configuration, preparation, CLI, and run-plan tests

@@ -209,7 +209,8 @@ def main(argv: list[str] | None = None) -> int:
         config.setdefault("output", {})["overwrite"] = False
     if args.resume:
         config.setdefault("output", {})["resume"] = True
-    if not args.skip_registry_update:
+    selected_module = select_module(normalize_config(config))["id"]
+    if not args.skip_registry_update and selected_module != "D":
         write_generated_registries(args.registry_output_dir)
     run_plan = build_run_plan(config)
     if run_plan["module"]["id"] == "D":

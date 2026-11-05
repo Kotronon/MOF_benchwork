@@ -17,6 +17,23 @@ LAMMPS is used as the primary simulation engine.
 | C | Evaluation of MLIPs | Energy/force errors, adsorption-related properties, runtime |
 | D | Framework flexibility | Structural deformation, pore-volume changes, adsorption differences |
 
+### Module D starting point
+
+The NbOFFIVE-1-Ni/H2O campaign supports offline planning, preparation and
+analysis of imported sorption-relaxation cycles. MD/GCMC execution is not yet
+implemented. See [the Module D guide](MODULE_D_FLEXIBILITY.md) for the paper
+protocol, missing assets, measurement schema and validation boundaries.
+
+```bash
+python benchmark.py input_json_files/benchmark_module_d_nboffive_water.json --dry-run
+python benchmark.py input_json_files/benchmark_module_d_nboffive_water.json --prepare
+```
+
+The preparation creates an isolated bundle under
+`outputs/module_D_nboffive_water/runs/planning_v1/` without starting simulations
+or updating shared registries. Use `--prepare --resume` to verify an existing
+identical bundle, or choose a new `--run-id` for changed settings.
+
 
 ## Installation
 

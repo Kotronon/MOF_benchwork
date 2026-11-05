@@ -63,6 +63,8 @@ def structural_metrics(reference: Any, current: Any, framework_indices: list[int
 def summarize_cycles(plan: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
     protocol = plan["benchmark"]["flexibility"]
     cases = {case["case_id"]: case for case in plan["cases"]}
+    if not cases or len(cases) != len(plan["cases"]):
+        raise ValueError("The plan must contain non-empty, unique cases.")
     grouped: dict[str, dict[int, dict[str, float | None]]] = {}
     for row in rows:
         case_id = row.get("case_id")
@@ -103,6 +105,11 @@ def summarize_cycles(plan: dict[str, Any], rows: list[dict[str, Any]]) -> dict[s
             loadings = [r["uptake_mol_kg"] for r in retained]
             summary["mean_uptake_mol_kg"] = mean(loadings)
             summary["cycle_standard_deviation_mol_kg"] = stdev(loadings) if len(loadings) > 1 else None
+        for field in ("framework_rmsd_A", "cell_volume_A3", "potential_energy_eV", "pore_volume_A3"):
+            measured = [r[field] for r in retained if r[field] is not None]
+            summary[f"mean_{field}"] = mean(measured) if measured and len(measured) == len(retained) else None
+        runtimes = [group[i]["runtime_s"] for i in order]
+        summary["total_runtime_s"] = sum(runtimes) if runtimes and all(v is not None for v in runtimes) else None
         window = protocol["convergence_window"]
         if not flexible:
             summary["stationarity"] = "not_applicable"
@@ -127,6 +134,7 @@ def summarize_cycles(plan: dict[str, Any], rows: list[dict[str, Any]]) -> dict[s
         delta = summary["mean_uptake_mol_kg"] - rigid["mean_uptake_mol_kg"]
         comparisons.append({"point_id": summary["point_id"], "seed": summary["seed"],
                             "relative_humidity": summary["relative_humidity"],
+                            "stationarity": summary["stationarity"],
                             "rigid_uptake_mol_kg": rigid["mean_uptake_mol_kg"],
                             "flexible_uptake_mol_kg": summary["mean_uptake_mol_kg"],
                             "adsorption_change_mol_kg": delta,
@@ -144,13 +152,17 @@ def evaluate_flexibility(run_directory: str | Path) -> dict[str, Any]:
     root = Path(run_directory)
     plan = json.loads((root / "module_d_plan.json").read_text())
     with (root / "cycle_results.csv").open(newline="") as handle:
-        rows = list(csv.DictReader(handle))
+        reader = csv.DictReader(handle)
+        required = {"case_id", "cycle", "uptake_mol_kg", "framework_rmsd_A", "cell_volume_A3"}
+        if not required.issubset(reader.fieldnames or []):
+            raise ValueError(f"cycle_results.csv requires columns: {', '.join(sorted(required))}")
+        rows = list(reader)
     result = summarize_cycles(plan, rows)
     # Analysis may be refreshed; raw data and the archived plan are never edited.
     destination = root / "evaluation"
     destination.mkdir(exist_ok=True)
     (destination / "module_d_report.json").write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
-    fields = ("point_id", "seed", "relative_humidity", "rigid_uptake_mol_kg",
+    fields = ("point_id", "seed", "relative_humidity", "stationarity", "rigid_uptake_mol_kg",
               "flexible_uptake_mol_kg", "adsorption_change_mol_kg", "relative_adsorption_change")
     with (destination / "rigid_vs_flexible.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
