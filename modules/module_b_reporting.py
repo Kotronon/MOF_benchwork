@@ -157,6 +157,8 @@ def write_artifacts(state, prediction, target):
                 s=12,
             )
             ax.set_xscale("log")
+            from analysis.plotting import decimal_pressure_axis
+            decimal_pressure_axis(ax)
             ax.set_xlabel("Total pressure / bar")
             ax.set_ylabel(f"Gas fraction {c}")
             ax.set_title(c)

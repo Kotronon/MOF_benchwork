@@ -370,6 +370,8 @@ def report(root, system):
                 yerr=[r["ci95_half_width"] if r["ci95_half_width"] is not None else np.nan for r in selected], fmt="o-", capsize=4, label=model)
     ax.set(xscale="log", xlim=(min(config["pressures_bar"])*.7, max(config["pressures_bar"])*1.3), xlabel="Pressure (bar)", ylabel="Absolute loading (mmol/g)",
            title=f"{config['material']} / CO2, 298 K — {len(seeds)}/{len(jobs)} jobs\nSeed intervals and chain screens do not prove equilibrium")
+    from analysis.plotting import decimal_pressure_axis
+    decimal_pressure_axis(ax, sorted(config["pressures_bar"]))
     ax.legend(fontsize=8); ax.grid(alpha=.2)
     for ext in ("png", "svg"): fig.savefig(output / f"isotherms.{ext}", dpi=180)
     plt.close(fig)

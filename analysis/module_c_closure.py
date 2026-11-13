@@ -181,7 +181,7 @@ def plot_all(data, sources, output):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.colors import TwoSlopeNorm
-    from matplotlib.ticker import FuncFormatter, NullFormatter
+    from analysis.plotting import decimal_pressure_axis
     plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 11,
         "axes.spines.top": False, "axes.spines.right": False, "axes.titleweight": "bold",
         "axes.labelcolor": "#243344", "text.color": "#243344", "axes.edgecolor": "#abb5bd",
@@ -246,12 +246,11 @@ def plot_all(data, sources, output):
         rows = sorted([r for r in data["polar_isotherm"]["summary"] if r["model"] == model], key=lambda r:r["pressure_bar"])
         axes[1].plot([r["pressure_bar"] for r in rows], [r["mean_loading_mol_per_kg"] for r in rows], "o-", color=COLORS[i], label=["POLAR pretrained", "POLAR Stage 1", "POLAR follow-up"][i])
     axes[1].set(title="ZIF-8 · uMOF-POLAR", xlim=(.07, 6), ylim=(0, 8))
-    for ax, pressure_ticks in zip(axes, ([.1, 1., 10.], [.1, .5, 1., 5.])):
+    for ax in axes:
         ax.set(xscale="log", xlabel="Pressure (bar)", ylabel="Absolute loading (mmol/g)", ylim=(0, None))
-        ax.set_xticks(pressure_ticks)
-        ax.xaxis.set_major_formatter(FuncFormatter(lambda value, position: f"{value:g}"))
-        ax.xaxis.set_minor_formatter(NullFormatter())
         ax.legend(frameon=False, fontsize=9); ax.grid(alpha=.18)
+    decimal_pressure_axis(axes[0], [.1, 1, 10])
+    decimal_pressure_axis(axes[1], [.1, .5, 1, 5])
     save(fig, "03_isotherms", "Isotherms before and after fine-tuning · 298 K",
          "One seed per comparison; sampling limits quantitative rankings. No seed confidence intervals.\nDifferent MOFs: no direct MH/POLAR comparison. CRAFTED is a classical simulation reference.")
 

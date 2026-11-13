@@ -1,0 +1,18 @@
+{
+  "created_at_utc": "2026-10-30T07:57:23.711518+00:00",
+  "source_host": "TUMWMFM-GPU01",
+  "source_project": "/home/ge64zuq/MOF_benchwork",
+  "git_commit": "e51bb6eef3f856f907c927b35094dfd6b8c3b405",
+  "git_status": "?? scripts/export_results.py",
+  "scope": "all",
+  "purpose": "Merge/view already computed results; not a simulation/training restart bundle.",
+  "file_size_limit_bytes": 8388608,
+  "snapshot_note": "Files from running campaigns may be provisional. Preserve their status and convergence labels.",
+  "file_count": 2400,
+  "uncompressed_bytes": 175280854,
+  "archive": "/home/ge64zuq/MOF_benchwork/exports/MOF_benchwork_results_20261030_075721_UTC.tar.gz",
+  "archive_bytes": 52394612,
+  "archive_sha256": "b1eb2ec69d8c36461ca37311e8af01638672b4e1c5ea3dbba287163722c5e053",
+  "omitted_file_count": 1117,
+  "integrity_verified": true
+}

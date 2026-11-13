@@ -285,11 +285,17 @@ def _input_mixture(input_path: Path) -> dict[str, float]:
         component: float(value)
         for component, value in pattern.findall(input_path.read_text(encoding="utf-8"))
     }
-    if set(mixture) != {"CO2", "N2"} or not math.isclose(
-        sum(mixture.values()), 1.0, abs_tol=1e-8
+    # lammps_inputs writes these comments with :g (six significant digits).
+    # Independent rounding of the fractions can shift their sum by ~1e-6.
+    if set(mixture) != {"CO2", "N2"} or any(
+        not math.isfinite(value) or not 0 <= value <= 1
+        for value in mixture.values()
+    ) or not math.isclose(
+        sum(mixture.values()), 1.0, rel_tol=0, abs_tol=1e-6
     ):
         raise ValueError(f"Expected normalized CO2/N2 fractions in {input_path}.")
-    return mixture
+    total = sum(mixture.values())
+    return {component: value / total for component, value in mixture.items()}
 
 
 def _window_means(

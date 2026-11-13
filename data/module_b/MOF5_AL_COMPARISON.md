@@ -4,6 +4,14 @@ The live AL campaign remains in `outputs/module_B_active_learning_mof5_20bar`.
 Its current tmux process is not stopped, restarted or edited by the comparison tools.
 Activate `MOF_sim` for every command below.
 
+For unattended completion within the existing budgets, use
+`bash scripts/run_remaining.sh module-b`. It waits for existing writers,
+continues AL and shared holdouts, starts the random control once the common
+initial design is ready, and saves training checkpoints after each request.
+For Module B plus POLAR/MH use `bash scripts/run_remaining.sh all --gpu 0`.
+See [the combined runner instructions](../REMAINING_RUNS.md) for CPU/GPU use,
+logs, restart behavior and the read-only `--plan` option.
+
 ## Prepared experiment
 
 `outputs/module_B_mof5_al_comparison/comparison.json` freezes the physical model,

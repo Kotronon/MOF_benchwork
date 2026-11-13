@@ -1,0 +1,3 @@
+# Decimal tick labels in frozen uMOF report subprocesses as well.
+# This changes labels only; logarithmic axes retain their original scale.
+axes.formatter.min_exponent: 100

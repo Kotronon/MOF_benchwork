@@ -476,6 +476,8 @@ def report(config, output):
         ax.plot([p["pressure_bar"] for p in points], [p["loading_mol_per_kg"] for p in points], "k.--", label="Experiment (reported uptake)")
         ax.set(xlabel="Pressure (bar)", ylabel="Loading (mol/kg = mmol/g)", ylim=(0, None)); ax.grid(alpha=.2)
     axes[1].set_xscale("log"); axes[0].legend(fontsize=8)
+    from analysis.plotting import decimal_pressure_axis
+    decimal_pressure_axis(axes[1])
     uncertainty_label = "one seed; no between-seed uncertainty" if len(config["seeds"]) == 1 else "error bars: seed SD"
     fig.suptitle(f"Mg-MOF-74 / CO2, {config['temperature_K']:g} K — {completed_count}/{sum(1 for _ in jobs(config, output))} jobs\nPilot; {uncertainty_label}; convergence unestablished")
     for suffix in ("png", "svg"):
