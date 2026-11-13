@@ -27,9 +27,9 @@ Shared guides: [getting started](docs/getting_started.md),
 ### Module D starting point
 
 The [general Module D profile](docs/module_d_general.md) now provides a shared
-classical/MLIP potential interface and executable classical NVT MD/GCMC, with
-rigid/flexible comparisons and a local technical example. MLIP and NPT execution
-remain blocked. Each real MOF still needs its own parameterized flexible potential.
+classical/MLIP potential interface and executable classical NVT/NPT MD/GCMC, with
+rigid/flexible comparisons and a [MIL-53(Al)/CO₂ pilot](docs/module_d_mil53_cluster.md).
+MLIP execution remains blocked. Each real MOF still needs its own parameterized flexible potential.
 
 The NbOFFIVE-1-Ni/H2O campaign targets LAMMPS for both MD and GCMC, without a
 RASPA/gRASPA dependency. It supports offline planning, preparation and

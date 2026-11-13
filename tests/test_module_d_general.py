@@ -240,6 +240,7 @@ class RealLAMMPSTests(unittest.TestCase):
                 external_pressure_bar=100., barostat_damping_ps=1.)
             plan = build_run_plan(config)
             root = Path(materialize_flexibility(prepare_flexibility(plan))["working_directory"])
+            self.assertIn("mol guestmol reinit no", render_input(plan, plan["cases"][2]))
             try:
                 result = execute_bundle(root, smoke=True, command=[os.environ["MODULE_D_LAMMPS"]])
             except Exception:

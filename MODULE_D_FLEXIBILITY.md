@@ -1,9 +1,9 @@
 # Module D: flexible frameworks
 
 The new [general profile](docs/module_d_general.md) supports arbitrary material
-inputs with a common classical/MLIP potential interface. Classical NVT MD/GCMC
-is executable and locally tested with synthetic technical fixtures. MLIP and
-NPT execution remain gated. See that guide for templates, required force-field
+inputs with a common classical/MLIP potential interface. Classical NVT/NPT MD/GCMC
+is executable, with a [MIL-53(Al)/CO₂ technical pilot](docs/module_d_mil53_cluster.md).
+MLIP execution remains gated. See that guide for templates, required force-field
 inputs, smoke tests and cluster commands. This is not universal MOF parameterization.
 
 ## NbOFFIVE-1-Ni water paper profile

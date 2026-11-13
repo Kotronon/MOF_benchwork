@@ -1,8 +1,8 @@
 """Flexible-framework benchmarks with paper and general potential profiles.
 
 Both stages target LAMMPS; RASPA/gRASPA is not an execution dependency.
-The paper adapter remains disabled. General classical NVT execution is handled
-by module_d_general; MLIP/NPT profiles currently support planning and analysis.
+The paper adapter remains disabled. General classical NVT/NPT execution is handled
+by module_d_general; MLIP profiles currently support planning and analysis.
 Preparation never launches a simulation.
 """
 from __future__ import annotations
@@ -31,7 +31,7 @@ CYCLE_COLUMNS = ("case_id", "cycle", "uptake_mol_kg", "framework_rmsd_A",
 
 def metadata() -> dict[str, object]:
     return {"module_id": MODULE_ID, "module_name": MODULE_NAME, "task": TASK,
-            "description": DESCRIPTION, "status": "classical_nvt_execution_and_planning"}
+            "description": DESCRIPTION, "status": "classical_nvt_npt_execution_and_planning"}
 
 
 def finite(value: Any, name: str, minimum: float = 0, *, positive: bool = False) -> float:

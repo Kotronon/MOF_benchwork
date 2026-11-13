@@ -256,3 +256,9 @@ presentations/
 outputs/
 
 
+
+# Keep the Module D execution and real-material pilot guides versioned.
+!docs/
+docs/**
+!docs/module_d_general.md
+!docs/module_d_mil53_cluster.md

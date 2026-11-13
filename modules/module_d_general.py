@@ -315,8 +315,12 @@ def render_input(plan, case):
         options = ""
         guest_type = guest["type"]
     else:
+        # Preserve each body's reference geometry across equilibration and
+        # measurement run commands. NPT remapping can leave small finite-step
+        # distortions in the instantaneous atom coordinates; do not adopt them
+        # as new body geometry at the next run's setup.
         lines += ["molecule guestmol assets/guest_template",
-                  f"fix guestmd gas rigid/nvt/small molecule temp {t} {t} {damping} mol guestmol",
+                  f"fix guestmd gas rigid/nvt/small molecule temp {t} {t} {damping} mol guestmol reinit no",
                   "fix_modify guestmd dynamic/dof yes"]
         guest_type = 0
         options = f"mol guestmol rigid guestmd intra_energy {guest['intra_energy']}"
