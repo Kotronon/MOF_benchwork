@@ -52,6 +52,8 @@ class ModuleDPlanningTests(unittest.TestCase):
         self.assertIsNone(plan['state_points'][8]['fugacity_bar'])
         self.assertFalse(plan['benchmark']['applicability']['can_attempt_simulation'])
         self.assertTrue(plan['benchmark']['metrics'])
+        self.assertEqual(plan['simulation']['engine'], 'LAMMPS')
+        self.assertEqual(plan['benchmark']['flexibility']['gcmc']['engine'], 'LAMMPS')
         self.assertTrue(any(a['status'] == 'missing' for a in plan['benchmark']['applicability']['assets']))
 
     def test_explicit_fugacity_is_not_replaced_by_pressure(self):
@@ -88,6 +90,7 @@ class ModuleDPlanningTests(unittest.TestCase):
             lambda d: d['material'].update(charge_scheme='auto'),
             lambda d: d['simulation'].update(framework='rigid'),
             lambda d: d['simulation'].update(engine='RASPA'),
+            lambda d: d['benchmark']['flexibility']['gcmc'].update(engine='gRASPA'),
             lambda d: d['benchmark']['flexibility']['md'].update(ensemble='NPT'),
             lambda d: d['benchmark']['flexibility'].update(sr_cycles=10),
             lambda d: d['benchmark']['flexibility'].update(discard_cycles=90),

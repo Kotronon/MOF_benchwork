@@ -1,0 +1,154 @@
+{
+  "material": {
+    "name": "MIL-53(Al)",
+    "charge_scheme": "published_QuickFF_Gaussian"
+  },
+  "adsorbates": {
+    "components": [
+      "CO2"
+    ]
+  },
+  "conditions": {
+    "temperature_K": 300.0,
+    "pressures_bar": [
+      1.0
+    ]
+  },
+  "simulation": {
+    "engine": "LAMMPS",
+    "framework": "flexible",
+    "seeds": [
+      12345,
+      23456,
+      34567
+    ]
+  },
+  "output": {
+    "directory": "outputs/module_D_mil53_co2",
+    "run_id": "classical_pilot_v1"
+  },
+  "benchmark": {
+    "task": "module_d",
+    "flexibility": {
+      "profile": "general",
+      "sr_cycles": 20,
+      "discard_cycles": 4,
+      "convergence_window": 4,
+      "potential": {
+        "kind": "classical",
+        "name": "Published MIL-53 QuickFF + project TraPPE-CO2 cross model",
+        "source": "Neirynck et al. DOI 10.1021/acsphyschemau.5c00141; adaptations in model_provenance.json",
+        "units": "real",
+        "styles": [
+          "pair_style hybrid/overlay coul/long 15.00000000 table spline 5000",
+          "bond_style hybrid mm3 table spline 1000 zero",
+          "angle_style hybrid mm3 cosine/periodic cross",
+          "dihedral_style fourier",
+          "improper_style distharm"
+        ],
+        "coefficients": [
+          "special_bonds lj 0.000000 1.000000 1.000000 coul 0.000000 1.000000 1.000000",
+          "pair_modify tail yes",
+          "pair_coeff * * coul/long",
+          "pair_coeff 1 1 table assets/potential/lammps.table AL_00000---AL_00000",
+          "pair_coeff 1 2 table assets/potential/lammps.table C_CA_00000---AL_00000",
+          "pair_coeff 1 3 table assets/potential/lammps.table C_PC_00000---AL_00000",
+          "pair_coeff 1 4 table assets/potential/lammps.table C_PH_00000---AL_00000",
+          "pair_coeff 1 5 table assets/potential/lammps.table H_HY_00000---AL_00000",
+          "pair_coeff 1 6 table assets/potential/lammps.table H_PH_00000---AL_00000",
+          "pair_coeff 1 7 table assets/potential/lammps.table O_CA_00000---AL_00000",
+          "pair_coeff 1 8 table assets/potential/lammps.table O_HY_00000---AL_00000",
+          "pair_coeff 2 2 table assets/potential/lammps.table C_CA_00000---C_CA_00000",
+          "pair_coeff 2 3 table assets/potential/lammps.table C_PC_00000---C_CA_00000",
+          "pair_coeff 2 4 table assets/potential/lammps.table C_PH_00000---C_CA_00000",
+          "pair_coeff 2 5 table assets/potential/lammps.table H_HY_00000---C_CA_00000",
+          "pair_coeff 2 6 table assets/potential/lammps.table H_PH_00000---C_CA_00000",
+          "pair_coeff 2 7 table assets/potential/lammps.table O_CA_00000---C_CA_00000",
+          "pair_coeff 2 8 table assets/potential/lammps.table O_HY_00000---C_CA_00000",
+          "pair_coeff 3 3 table assets/potential/lammps.table C_PC_00000---C_PC_00000",
+          "pair_coeff 3 4 table assets/potential/lammps.table C_PH_00000---C_PC_00000",
+          "pair_coeff 3 5 table assets/potential/lammps.table H_HY_00000---C_PC_00000",
+          "pair_coeff 3 6 table assets/potential/lammps.table H_PH_00000---C_PC_00000",
+          "pair_coeff 3 7 table assets/potential/lammps.table O_CA_00000---C_PC_00000",
+          "pair_coeff 3 8 table assets/potential/lammps.table O_HY_00000---C_PC_00000",
+          "pair_coeff 4 4 table assets/potential/lammps.table C_PH_00000---C_PH_00000",
+          "pair_coeff 4 5 table assets/potential/lammps.table H_HY_00000---C_PH_00000",
+          "pair_coeff 4 6 table assets/potential/lammps.table H_PH_00000---C_PH_00000",
+          "pair_coeff 4 7 table assets/potential/lammps.table O_CA_00000---C_PH_00000",
+          "pair_coeff 4 8 table assets/potential/lammps.table O_HY_00000---C_PH_00000",
+          "pair_coeff 5 5 table assets/potential/lammps.table H_HY_00000---H_HY_00000",
+          "pair_coeff 5 6 table assets/potential/lammps.table H_PH_00000---H_HY_00000",
+          "pair_coeff 5 7 table assets/potential/lammps.table O_CA_00000---H_HY_00000",
+          "pair_coeff 5 8 table assets/potential/lammps.table O_HY_00000---H_HY_00000",
+          "pair_coeff 6 6 table assets/potential/lammps.table H_PH_00000---H_PH_00000",
+          "pair_coeff 6 7 table assets/potential/lammps.table O_CA_00000---H_PH_00000",
+          "pair_coeff 6 8 table assets/potential/lammps.table O_HY_00000---H_PH_00000",
+          "pair_coeff 7 7 table assets/potential/lammps.table O_CA_00000---O_CA_00000",
+          "pair_coeff 7 8 table assets/potential/lammps.table O_HY_00000---O_CA_00000",
+          "pair_coeff 8 8 table assets/potential/lammps.table O_HY_00000---O_HY_00000",
+          "kspace_style ewald 1e-7",
+          "pair_coeff 1 9 table assets/potential/co2_cross.table PAIR_1_9",
+          "pair_coeff 1 10 table assets/potential/co2_cross.table PAIR_1_10",
+          "pair_coeff 2 9 table assets/potential/co2_cross.table PAIR_2_9",
+          "pair_coeff 2 10 table assets/potential/co2_cross.table PAIR_2_10",
+          "pair_coeff 3 9 table assets/potential/co2_cross.table PAIR_3_9",
+          "pair_coeff 3 10 table assets/potential/co2_cross.table PAIR_3_10",
+          "pair_coeff 4 9 table assets/potential/co2_cross.table PAIR_4_9",
+          "pair_coeff 4 10 table assets/potential/co2_cross.table PAIR_4_10",
+          "pair_coeff 5 9 table assets/potential/co2_cross.table PAIR_5_9",
+          "pair_coeff 5 10 table assets/potential/co2_cross.table PAIR_5_10",
+          "pair_coeff 6 9 table assets/potential/co2_cross.table PAIR_6_9",
+          "pair_coeff 6 10 table assets/potential/co2_cross.table PAIR_6_10",
+          "pair_coeff 7 9 table assets/potential/co2_cross.table PAIR_7_9",
+          "pair_coeff 7 10 table assets/potential/co2_cross.table PAIR_7_10",
+          "pair_coeff 8 9 table assets/potential/co2_cross.table PAIR_8_9",
+          "pair_coeff 8 10 table assets/potential/co2_cross.table PAIR_8_10",
+          "pair_coeff 9 9 table assets/potential/co2_cross.table PAIR_9_9",
+          "pair_coeff 9 10 table assets/potential/co2_cross.table PAIR_9_10",
+          "pair_coeff 10 10 table assets/potential/co2_cross.table PAIR_10_10"
+        ],
+        "files": {
+          "lammps.table": "data/module_d/mil53_co2_pilot/lammps.table",
+          "eibonded.table": "data/module_d/mil53_co2_pilot/eibonded.table",
+          "co2_cross.table": "data/module_d/mil53_co2_pilot/co2_cross.table"
+        }
+      },
+      "assets": {
+        "initial_structure": "data/module_d/mil53_co2_pilot/dry.data",
+        "guest_template": "data/module_d/mil53_co2_pilot/co2.mol",
+        "validation": "data/module_d/mil53_co2_pilot/model_provenance.json"
+      },
+      "guest": {
+        "kind": "rigid_molecule",
+        "atoms_per_molecule": 3,
+        "intra_energy": 0.0,
+        "intra_energy_source": "Zero bonded energy and every intramolecular nonbonded pair excluded through zero-energy edges.",
+        "extra_bond_per_atom": 3,
+        "extra_special_per_atom": 4
+      },
+      "md": {
+        "ensemble": "NPT",
+        "cell_mode": "tri",
+        "external_pressure_bar": 1.0,
+        "barostat_damping_ps": 1.0,
+        "thermostat_damping_ps": 0.1,
+        "timestep_fs": 0.25
+      },
+      "hybrid": {
+        "equilibration_steps": 2000,
+        "steps_per_cycle": 1000,
+        "exchange_interval": 20,
+        "exchange_attempts": 5,
+        "move_attempts": 0,
+        "max_displacement_A": 1.0,
+        "overlap_cutoff_A": 0.75
+      },
+      "reservoir": {
+        "fugacities_bar": [
+          1.0
+        ],
+        "source": "Explicit ideal-gas approximation f=p at 300 K and 1 bar; pilot only, not a calibrated TraPPE reservoir."
+      }
+    }
+  }
+}

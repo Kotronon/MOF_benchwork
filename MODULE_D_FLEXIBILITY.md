@@ -1,9 +1,18 @@
-# Module D NbOFFIVE-1-Ni water benchmark
+# Module D: flexible frameworks
 
-Module D now plans the NbOFFIVE-1-Ni (KAUST-7)/H2O comparison and evaluates
+The new [general profile](docs/module_d_general.md) supports arbitrary material
+inputs with a common classical/MLIP potential interface. Classical NVT MD/GCMC
+is executable and locally tested with synthetic technical fixtures. MLIP and
+NPT execution remain gated. See that guide for templates, required force-field
+inputs, smoke tests and cluster commands. This is not universal MOF parameterization.
+
+## NbOFFIVE-1-Ni water paper profile
+
+The separate paper profile plans the NbOFFIVE-1-Ni (KAUST-7)/H2O comparison and evaluates
 imported sorption-relaxation (SR) cycle measurements. It prepares an independent
-workspace while Module A–C calculations continue. It does **not** yet run
-LAMMPS/gRASPA, reproduce an isotherm, or validate a potential.
+workspace while Module A–C calculations continue. Both MD and GCMC target
+LAMMPS; RASPA/gRASPA is not an execution dependency. It does **not** yet run
+the coupled simulation, reproduce an isotherm, or validate a potential.
 
 The selected starting point is Wang et al., *J. Phys. Chem. C* **130** (2026),
 2833–2846, [DOI 10.1021/acs.jpcc.6c00023](https://doi.org/10.1021/acs.jpcc.6c00023).
@@ -22,7 +31,7 @@ python benchmark.py input_json_files/benchmark_module_d_nboffive_water.json --pr
 ```
 
 The default directory is
-`outputs/module_D_nboffive_water/runs/planning_v1/`. The plan contains 60 cases:
+`outputs/module_D_nboffive_water/runs/planning_lammps_v1/`. The plan contains 60 cases:
 10 relative-humidity points × 3 independent seeds × rigid/SR-NVT branches.
 The rigid branch expects one GCMC summary per case; the flexible branch expects
 100 SR cycle summaries per case. These are planned computations, not results.
@@ -55,10 +64,37 @@ For changed settings or a new campaign, use a new run ID:
 python benchmark.py input_json_files/benchmark_module_d_nboffive_water.json --prepare --run-id planning_v2
 ```
 
+## Current cluster entry point
+
+For the paper profile, only preparation and imported-result analysis can currently be started on the
+cluster. There is no working paper-profile production submission script. A scheduler
+allocation cannot enable the missing simulation adapter.
+
+Transfer the current repository files, including `data/module_d/`, to the cluster.
+From that checkout, activate the project's Python environment (`MOF_sim` if
+installed there) and run:
+
+```bash
+conda activate MOF_sim
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+python benchmark.py input_json_files/benchmark_module_d_nboffive_water.json --dry-run
+python benchmark.py input_json_files/benchmark_module_d_nboffive_water.json --prepare --run-id cluster_lammps_v1
+```
+
+This creates `outputs/module_D_nboffive_water/runs/cluster_lammps_v1/`.
+Use the same `--run-id cluster_lammps_v1` with `--prepare --resume` to verify
+and reuse that bundle. Preparation needs no GPU or LAMMPS installation; use a
+small CPU allocation if required by the cluster's login-node policy. No jobs
+are submitted by these commands.
+
+The earlier `planning_v1` bundle retains the old paper-engine plan. The new
+LAMMPS plan uses a different run ID so that existing bundles remain immutable.
+
 ## Paper protocol and project choices
 
-The initial scope is the NVT branch at 300 K. NPT, classical flexible-force-field
-MD, mixtures and arbitrary structural-state ensembles are not implemented.
+The paper profile's scope is the NVT branch at 300 K. Its coupled adapter, NPT,
+mixtures and arbitrary structural-state ensembles are not implemented. Classical
+NVT execution is provided separately by the general profile above.
 
 | Parameter | Initial setting | Basis |
 | --- | --- | --- |
@@ -86,9 +122,11 @@ continuation protocol.
 
 The shared `simulation` block also receives legacy pipeline defaults during
 normalization. Module D does not render those defaults as a flexible LAMMPS
-potential. The MD and GCMC settings above belong to separate engines, with
-separate unit conventions. In particular, the original MD input uses LAMMPS
-`metal` units, while the gRASPA input pressure is in Pa. The initial reference
+potential. The intended implementation uses separate LAMMPS stages: DeePMD
+for MD and classical TIP4P/UFF interactions for GCMC. Unit conversion must be
+explicit: the original MD input uses `metal` units; the source gRASPA pressure
+is in Pa, while LAMMPS `real` units use atm. Original gRASPA files remain
+literature references only. The initial reference
 structure is already a supercell; `[2, 2, 2]` describes its provenance and is
 **not** an instruction to replicate that file again.
 
@@ -99,7 +137,9 @@ at 300 K is 5197 Pa = 0.05197 bar, so `pressure_bar = RH * 0.05197`.
 The experimental saturation reference is 3600 Pa = 0.036 bar; it must not be
 substituted into the simulated reservoir. The current profile rejects other
 temperatures and other water models because this conversion is specific to the
-paper's parameterization.
+paper's parameterization. This is a reference conversion, not a validated
+LAMMPS calibration. Reuse of the paper reservoir requires validation of the
+LAMMPS water Hamiltonian, cutoff and tail-correction treatment.
 
 The paper obtains the pressure-to-fugacity relation from TMMC. The planning
 config leaves `reservoir.fugacities_bar` unset until that relation/SI Table S2 is
@@ -146,12 +186,23 @@ archive is `DP_NbOFFIVE-1-Ni-xH2O.zip` (published MD5
 this preparation. The other archives target dry and fixed-hydration systems.
 After retrieval, inspect checkpoint metadata and training coverage before use.
 
-The future execution adapter must check LAMMPS with DeePMD support and gRASPA,
+The future execution adapter must check LAMMPS with DeePMD, MC and the required
+electrostatics support,
 apply per-case seeds, check subprocess exit codes and preserve failure/restart
 state. It must validate water geometry projection, charge mapping, guest counts,
 cell transfer and units before a real short test. `--run-test` and
 `--run-isotherm` currently fail explicitly, including with `--allow-unsupported`.
 Module-C pure-gas transfer results do not validate this flexible water system.
+
+The GCMC target is LAMMPS `fix gcmc` with full-system energy evaluation. Water
+geometry and molecule IDs must remain consistent through insertion/deletion and
+the MD/GCMC handoff. The paper's configurational-bias moves cannot be equated
+with the native LAMMPS move set; sampling efficiency must be checked separately.
+See the official [GCMC documentation](https://docs.lammps.org/fix_gcmc.html) and
+[TIP4P guidance](https://docs.lammps.org/Howto_tip4p.html). The local capability
+check found MC and Ewald support but no `pair_style deepmd`; the cluster build
+must be checked independently. These are implementation prerequisites, not a
+claim that the LAMMPS runner already exists.
 
 ## Analyze measured cycles
 

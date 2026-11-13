@@ -438,6 +438,11 @@ def _run_adsorption(
     output_suffix: str | None = None,
 ) -> dict[str, Any]:
     potential = plan["benchmark"]["potential_benchmark"]
+    if potential.get("execution_entrypoint") == "modules.module_c_mlips.guarded_pilot":
+        raise ValueError(
+            "This comparison requires the frozen guarded pilot; generic campaign execution would change "
+            "its exclusion rule and gas reference. Use modules.module_c_mlips.guarded_pilot prepare/start."
+        )
     model = potential.get("mlip_mc", {}).get("model")
     if not isinstance(model, dict):
         raise ValueError("Campaign adsorption tasks require at least one model definition.")

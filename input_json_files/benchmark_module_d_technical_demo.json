@@ -1,0 +1,88 @@
+{
+  "material": {
+    "name": "SYNTHETIC_TECHNICAL_FIXTURE_NOT_A_MOF",
+    "charge_scheme": "in_data"
+  },
+  "adsorbates": {
+    "components": [
+      "CO2"
+    ]
+  },
+  "conditions": {
+    "temperature_K": 300.0,
+    "pressures_bar": [
+      100.0
+    ]
+  },
+  "simulation": {
+    "engine": "LAMMPS",
+    "framework": "flexible",
+    "seeds": [
+      12345
+    ]
+  },
+  "output": {
+    "directory": "outputs/module_D_technical_demo",
+    "run_id": "classical_v1"
+  },
+  "benchmark": {
+    "task": "module_d",
+    "flexibility": {
+      "profile": "general",
+      "sr_cycles": 4,
+      "discard_cycles": 0,
+      "convergence_window": 2,
+      "potential": {
+        "kind": "classical",
+        "name": "synthetic numerical fixture",
+        "source": "test only, not a MOF model",
+        "units": "real",
+        "styles": [
+          "pair_style lj/cut/coul/long 8",
+          "bond_style harmonic",
+          "angle_style harmonic"
+        ],
+        "coefficients": [
+          "pair_coeff * * 0.01 2",
+          "bond_coeff 1 20 2",
+          "bond_coeff 2 20 1.16",
+          "angle_coeff 1 20 180",
+          "special_bonds lj/coul 0 0 0",
+          "kspace_style ewald 1e-5"
+        ]
+      },
+      "assets": {
+        "initial_structure": "examples/module_d/technical_classical/dry.data",
+        "guest_template": "examples/module_d/technical_classical/guest.mol"
+      },
+      "guest": {
+        "kind": "rigid_molecule",
+        "type": 2,
+        "intra_energy": 0.0,
+        "intra_energy_source": "Zero harmonic energy at template geometry; intramolecular nonbonded exclusions",
+        "atoms_per_molecule": 3,
+        "extra_bond_per_atom": 2,
+        "extra_angle_per_atom": 1,
+        "extra_special_per_atom": 4
+      },
+      "md": {
+        "ensemble": "NVT",
+        "timestep_fs": 0.1,
+        "thermostat_damping_ps": 0.1
+      },
+      "hybrid": {
+        "equilibration_steps": 10,
+        "steps_per_cycle": 10,
+        "exchange_interval": 1,
+        "exchange_attempts": 2,
+        "move_attempts": 0
+      },
+      "reservoir": {
+        "fugacities_bar": [
+          100.0
+        ],
+        "source": "explicit ideal-gas approximation for technical fixture"
+      }
+    }
+  }
+}

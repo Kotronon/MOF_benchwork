@@ -1,7 +1,9 @@
-"""Offline planning/preparation for the NbOFFIVE-1-Ni/TIP4P benchmark.
+"""Flexible-framework benchmarks with paper and general potential profiles.
 
-Production execution remains disabled until the coupled engine adapter and
-paper-specific assets are validated. Preparation never launches a simulation.
+Both stages target LAMMPS; RASPA/gRASPA is not an execution dependency.
+The paper adapter remains disabled. General classical NVT execution is handled
+by module_d_general; MLIP/NPT profiles currently support planning and analysis.
+Preparation never launches a simulation.
 """
 from __future__ import annotations
 
@@ -20,7 +22,7 @@ from modules.base import BenchmarkModule
 MODULE_ID = "D"
 MODULE_NAME = "Module D"
 TASK = "framework_flexibility"
-DESCRIPTION = "Framework flexibility via MLIP-MD/GCMC sorption relaxation."
+DESCRIPTION = "Framework flexibility with classical/MLIP potential profiles and rigid comparisons."
 REFERENCE_DIR = Path("data/module_d/mofaff_reference")
 CYCLE_COLUMNS = ("case_id", "cycle", "uptake_mol_kg", "framework_rmsd_A",
                  "cell_volume_A3", "potential_energy_eV", "pore_volume_A3",
@@ -29,7 +31,7 @@ CYCLE_COLUMNS = ("case_id", "cycle", "uptake_mol_kg", "framework_rmsd_A",
 
 def metadata() -> dict[str, object]:
     return {"module_id": MODULE_ID, "module_name": MODULE_NAME, "task": TASK,
-            "description": DESCRIPTION, "status": "planning_and_analysis"}
+            "description": DESCRIPTION, "status": "classical_nvt_execution_and_planning"}
 
 
 def finite(value: Any, name: str, minimum: float = 0, *, positive: bool = False) -> float:
@@ -66,6 +68,12 @@ def asset(path: Any, role: str) -> dict[str, Any]:
 
 def build_flexibility_plan(config: dict[str, Any], module: dict[str, str]) -> dict[str, Any]:
     """Plan a paper campaign without falling back to unrelated CRAFTED assets."""
+    profile = config.get("benchmark", {}).get("flexibility", {}).get("profile", "nboffive_paper")
+    if profile == "general":
+        from modules.module_d_general import build_general_plan
+        return build_general_plan(config, module)
+    if profile != "nboffive_paper":
+        raise ValueError(f"Unknown Module D profile: {profile}")
     config = deepcopy(config)
     protocol = config["benchmark"].get("flexibility")
     if not isinstance(protocol, dict):
@@ -124,8 +132,9 @@ def build_flexibility_plan(config: dict[str, Any], module: dict[str, str]) -> di
     md["timestep_fs"] = finite(md.get("timestep_fs", 1), "md.timestep_fs", positive=True)
     md["thermostat_damping_ps"] = finite(md.get("thermostat_damping_ps", 0.04), "thermostat_damping_ps", positive=True)
     gcmc = protocol.setdefault("gcmc", {})
-    if gcmc.get("engine", "gRASPA").casefold() != "graspa":
-        raise ValueError("The paper GCMC branch requires gRASPA.")
+    if str(gcmc.get("engine", "LAMMPS")).casefold() != "lammps":
+        raise ValueError("Module D requires LAMMPS for GCMC; RASPA/gRASPA execution is not supported.")
+    gcmc["engine"] = "LAMMPS"
     for key, default in (("equilibration_steps", 200000), ("production_steps", 500000)):
         gcmc[key] = integer(gcmc.get(key, default), f"gcmc.{key}")
     assets = [asset(protocol.get("assets", {}).get(role), role) for role in (
@@ -135,7 +144,8 @@ def build_flexibility_plan(config: dict[str, Any], module: dict[str, str]) -> di
     if fugacities is None:
         blockers.append("Missing TMMC pressure-to-fugacity table (paper SI Table S2); p is not silently used as f.")
     blockers.extend([
-        "The coupled MD/GCMC engine adapter and TIP4P handoff have not been validated.",
+        "The LAMMPS-only MD/GCMC adapter and TIP4P handoff are not implemented.",
+        "LAMMPS TIP4P energies, tail corrections and reservoir consistency need validation against the paper model.",
         "Presence of an MLIP or validation file is not proof of validation for hydration, deformation or stress.",
     ])
     points = [{"point_id": f"rh{i:03d}", "relative_humidity": rh,
@@ -163,6 +173,8 @@ def build_flexibility_plan(config: dict[str, Any], module: dict[str, str]) -> di
         "validation_status": "not_validated",
         "reason": "Offline preparation and imported-cycle analysis are implemented; simulation execution is unavailable.",
         "notes": [
+            "Both MD and GCMC target LAMMPS. Upstream MOFAFF files are reference inputs only; no RASPA/gRASPA installation is required.",
+            "The paper saturation pressure is a reference value, not a validated LAMMPS reservoir calibration.",
             "The upstream force_field.def enables Ow-Ow tail corrections despite the global no default.",
             "The upstream initial structure is already a hydrated supercell; do not replicate it again.",
             "The RH grid and drift thresholds are project choices, not a reproduction of SI Table S2.",
@@ -199,6 +211,9 @@ def verify_reference_inputs(directory: Path = REFERENCE_DIR) -> dict[str, Any]:
 
 def materialize_flexibility(prepared: dict[str, Any]) -> dict[str, Any]:
     """Create an immutable planning bundle, preserving existing calculation outputs."""
+    if prepared["run_plan"]["benchmark"]["flexibility"].get("profile") == "general":
+        from modules.module_d_general import materialize_general
+        return materialize_general(prepared)
     plan = prepared["run_plan"]
     root = Path(prepared["working_directory"])
     manifest = root / "module_d_plan.json"
@@ -258,9 +273,15 @@ class FlexibilityModule(BenchmarkModule):
         return materialize_flexibility(prepare_plan)
 
     def run_test(self, materialized_plan: dict[str, Any]) -> dict[str, Any]:
+        if materialized_plan.get("benchmark", {}).get("flexibility", {}).get("profile") == "general":
+            from modules.module_d_general import run_general
+            return run_general(materialized_plan, smoke=True)
         raise NotImplementedError("Module D simulation execution is unavailable; use --dry-run, --prepare or --evaluate.")
 
     def run(self, materialized_plan: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        if materialized_plan.get("benchmark", {}).get("flexibility", {}).get("profile") == "general":
+            from modules.module_d_general import run_general
+            return run_general(materialized_plan, smoke=False)
         return self.run_test(materialized_plan)
 
     def evaluate(self, run_directory: str | Path, **kwargs: Any) -> dict[str, Any]:

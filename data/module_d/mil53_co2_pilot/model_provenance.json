@@ -1,0 +1,220 @@
+{
+  "source": {
+    "repository": "https://github.com/SvenRogge/supporting-info",
+    "commit": "12ac39727f750a2ea12b22d1de18b62b7fc57715",
+    "doi": "10.1021/acsphyschemau.5c00141",
+    "authors": "Jelto Neirynck, Sander Geerinckx, Sven M. J. Rogge",
+    "license": "CC-BY-SA-4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "retrieved": "2026-11-12",
+    "files": [
+      {
+        "path": "lammps.data",
+        "source_path": "2026_ACSPhysChemAu_v6_p356_AnisotropicStressesCauchystat/input_files/MIL-53/MTTK/1x2x1_supercell/lammps.data",
+        "sha256": "738b7ebde41139d42776544c6485d64529ec7bf6a5608552a97bdbb9db90c0a1"
+      },
+      {
+        "path": "lammps_2x4x2.data",
+        "source_path": "2026_ACSPhysChemAu_v6_p356_AnisotropicStressesCauchystat/input_files/MIL-53/MTTK/2x4x2_supercell/lammps.data",
+        "sha256": "ec679eb1c0636f3e1c41b4919006d68ac362d58bcb3df3ffbe767ff90940df8d"
+      },
+      {
+        "path": "lammps.in",
+        "source_path": "2026_ACSPhysChemAu_v6_p356_AnisotropicStressesCauchystat/input_files/MIL-53/MTTK/1x2x1_supercell/lammps.in",
+        "sha256": "4e64c9f5c1594956971fa3df52f6a58b69c065010a69aaa4c73064f3a14d3a69"
+      },
+      {
+        "path": "lammps.table",
+        "source_path": "2026_ACSPhysChemAu_v6_p356_AnisotropicStressesCauchystat/input_files/MIL-53/MTTK/1x2x1_supercell/lammps.table",
+        "sha256": "8ea1436433215ac980cf59a7f0029c114658682a1e3908faeee847862e722a03"
+      },
+      {
+        "path": "eibonded.table",
+        "source_path": "2026_ACSPhysChemAu_v6_p356_AnisotropicStressesCauchystat/input_files/MIL-53/MTTK/1x2x1_supercell/eibonded.table",
+        "sha256": "88f9f298e3fe12695dcf47071fe0de299fc6ec87cba76920628aed37410a3ccd"
+      },
+      {
+        "path": "pars.txt",
+        "source_path": "2026_ACSPhysChemAu_v6_p356_AnisotropicStressesCauchystat/input_files/MIL-53/yaff_input/pars.txt",
+        "sha256": "032c327212b0aaea344995890925fb3c85717d189a0459a363359a557a10cae9"
+      },
+      {
+        "path": "README.md",
+        "source_path": "2026_ACSPhysChemAu_v6_p356_AnisotropicStressesCauchystat/README.md",
+        "sha256": "f6bebd3f38bef9d495baa6f3f6374cb31da5b42f69bd08a6de76d3cfacc8881b"
+      }
+    ]
+  },
+  "source_structure": "lammps_2x4x2.data",
+  "supercell": "2x4x2",
+  "license": "CC-BY-SA-4.0",
+  "validation_status": "not_validated",
+  "host_atoms": 1216,
+  "host_charge": 7.105427357601002e-15,
+  "guest_source": "Potoff and Siepmann, DOI 10.1002/aic.690470719",
+  "cross_model": "Project adaptation: LJ minimum-matched MM3 host parameters, Lorentz-Berthelot, Gaussian-host/point-guest electrostatics.",
+  "cross_method_reference": "MIL-53/water host-guest LJ conversion: DOI 10.1039/D0FD00025F; this is not a fitted MIL-53/CO2 force field.",
+  "cutoff_A": 15.0,
+  "tail_corrections": "Native table styles provide no analytical tail correction, despite upstream pair_modify tail yes.",
+  "overlap_rejection_A": 0.75,
+  "guest_pairs": [
+    {
+      "i": 1,
+      "j": 9,
+      "sigma": 3.5025209748112003,
+      "epsilon": 0.07889184836257215,
+      "charge_product": 1.4636992622,
+      "gaussian_radius": 1.6742
+    },
+    {
+      "i": 1,
+      "j": 10,
+      "sigma": 3.6275209748112003,
+      "epsilon": 0.13494717420600022,
+      "charge_product": -0.7318496311,
+      "gaussian_radius": 1.6742
+    },
+    {
+      "i": 2,
+      "j": 9,
+      "sigma": 3.128343513192258,
+      "epsilon": 0.05481471370959566,
+      "charge_product": 0.5922224483,
+      "gaussian_radius": 1.1703
+    },
+    {
+      "i": 2,
+      "j": 10,
+      "sigma": 3.253343513192258,
+      "epsilon": 0.09376242125834332,
+      "charge_product": -0.29611122415,
+      "gaussian_radius": 1.1703
+    },
+    {
+      "i": 3,
+      "j": 9,
+      "sigma": 3.128343513192258,
+      "epsilon": 0.05481471370959566,
+      "charge_product": -0.10326278269999999,
+      "gaussian_radius": 1.1703
+    },
+    {
+      "i": 3,
+      "j": 10,
+      "sigma": 3.253343513192258,
+      "epsilon": 0.09376242125834332,
+      "charge_product": 0.05163139134999999,
+      "gaussian_radius": 1.1703
+    },
+    {
+      "i": 4,
+      "j": 9,
+      "sigma": 3.128343513192258,
+      "epsilon": 0.05481471370959566,
+      "charge_product": -0.07460188259999999,
+      "gaussian_radius": 1.1703
+    },
+    {
+      "i": 4,
+      "j": 10,
+      "sigma": 3.253343513192258,
+      "epsilon": 0.09376242125834332,
+      "charge_product": 0.037300941299999994,
+      "gaussian_radius": 1.1703
+    },
+    {
+      "i": 5,
+      "j": 9,
+      "sigma": 2.825437949024543,
+      "epsilon": 0.029299696922201066,
+      "charge_product": 0.36296846599999993,
+      "gaussian_radius": 0.7308
+    },
+    {
+      "i": 5,
+      "j": 10,
+      "sigma": 2.950437949024543,
+      "epsilon": 0.05011812230044148,
+      "charge_product": -0.18148423299999997,
+      "gaussian_radius": 0.7308
+    },
+    {
+      "i": 6,
+      "j": 9,
+      "sigma": 2.84325592338735,
+      "epsilon": 0.03275805701909147,
+      "charge_product": 0.10637841129999999,
+      "gaussian_radius": 0.7308
+    },
+    {
+      "i": 6,
+      "j": 10,
+      "sigma": 2.96825592338735,
+      "epsilon": 0.05603376418421764,
+      "charge_product": -0.053189205649999995,
+      "gaussian_radius": 0.7308
+    },
+    {
+      "i": 7,
+      "j": 9,
+      "sigma": 3.0214356670154174,
+      "epsilon": 0.05626381060695091,
+      "charge_product": -0.5211950471,
+      "gaussian_radius": 1.1325
+    },
+    {
+      "i": 7,
+      "j": 10,
+      "sigma": 3.1464356670154174,
+      "epsilon": 0.09624115049979873,
+      "charge_product": 0.26059752355,
+      "gaussian_radius": 1.1325
+    },
+    {
+      "i": 8,
+      "j": 9,
+      "sigma": 3.0214356670154174,
+      "epsilon": 0.05626381060695091,
+      "charge_product": -0.8469129858,
+      "gaussian_radius": 1.1325
+    },
+    {
+      "i": 8,
+      "j": 10,
+      "sigma": 3.1464356670154174,
+      "epsilon": 0.09624115049979873,
+      "charge_product": 0.4234564929,
+      "gaussian_radius": 1.1325
+    },
+    {
+      "i": 9,
+      "j": 9,
+      "sigma": 2.8,
+      "epsilon": 0.053654514983302405,
+      "charge_product": 0.0,
+      "gaussian_radius": 0.0
+    },
+    {
+      "i": 9,
+      "j": 10,
+      "sigma": 2.925,
+      "epsilon": 0.09177786210704635,
+      "charge_product": 0.0,
+      "gaussian_radius": 0.0
+    },
+    {
+      "i": 10,
+      "j": 10,
+      "sigma": 3.05,
+      "epsilon": 0.15698913643262558,
+      "charge_product": 0.0,
+      "gaussian_radius": 0.0
+    }
+  ],
+  "modifications": [
+    "Host topology, charges and all host coefficients unchanged.",
+    "Reserved guest types/masses and zero-energy exclusion bond type added.",
+    "Three rigid CO2 exclusion edges make every intramolecular pair 1-2 under the host's special_bonds rules.",
+    "Bond table paths rewritten to archived relative locations."
+  ]
+}

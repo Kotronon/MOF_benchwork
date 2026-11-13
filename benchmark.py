@@ -219,8 +219,12 @@ def main(argv: list[str] | None = None) -> int:
         module = module_by_id("D")
         if args.dry_run:
             result = run_plan
-        elif args.run_test or args.run_isotherm or args.run_variants:
-            module.run(run_plan)
+        elif args.run_test:
+            result = module.run_test(run_plan)
+        elif args.run_isotherm:
+            result = module.run(run_plan)
+        elif args.run_variants:
+            parser.error("Module D includes rigid/flexible variants in --run-isotherm.")
         elif args.prepare:
             result = module.materialize(module.prepare(run_plan))
         elif args.evaluate:

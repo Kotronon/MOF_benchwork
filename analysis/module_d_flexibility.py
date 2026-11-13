@@ -94,8 +94,9 @@ def summarize_cycles(plan: dict[str, Any], rows: list[dict[str, Any]]) -> dict[s
         order = sorted(group)
         if order and order != list(range(1, max(order) + 1)):
             raise ValueError(f"Non-contiguous cycles for {case_id}; include the full history.")
-        flexible = case["variant"] == "sr_nvt"
-        discard = protocol["discard_cycles"] if flexible else 0
+        flexible = case["variant"] != "rigid"
+        general = protocol.get("profile") == "general"
+        discard = protocol["discard_cycles"] if flexible or general else 0
         retained = [group[i] for i in order if i > discard]
         complete = len(order) == case["expected_cycles"]
         summary = {**case, "observed_cycles": len(order), "retained_cycles": len(retained),
@@ -111,7 +112,7 @@ def summarize_cycles(plan: dict[str, Any], rows: list[dict[str, Any]]) -> dict[s
         runtimes = [group[i]["runtime_s"] for i in order]
         summary["total_runtime_s"] = sum(runtimes) if runtimes and all(v is not None for v in runtimes) else None
         window = protocol["convergence_window"]
-        if not flexible:
+        if not flexible and not general:
             summary["stationarity"] = "not_applicable"
         elif len(retained) >= 2 * window:
             before, after = retained[-2 * window:-window], retained[-window:]
@@ -126,14 +127,18 @@ def summarize_cycles(plan: dict[str, Any], rows: list[dict[str, Any]]) -> dict[s
     baseline = {(s["point_id"], s["seed"]): s for s in summaries if s["variant"] == "rigid"}
     comparisons = []
     for summary in summaries:
-        if summary["variant"] != "sr_nvt":
+        if summary["variant"] == "rigid":
             continue
         rigid = baseline[(summary["point_id"], summary["seed"])]
         if not summary["complete"] or not rigid["complete"]:
             continue
         delta = summary["mean_uptake_mol_kg"] - rigid["mean_uptake_mol_kg"]
         comparisons.append({"point_id": summary["point_id"], "seed": summary["seed"],
-                            "relative_humidity": summary["relative_humidity"],
+                            "relative_humidity": summary.get("relative_humidity"),
+                            "pressure_bar": summary.get("pressure_bar"),
+                            "temperature_K": summary.get("temperature_K"),
+                            "variant": summary["variant"],
+                            "rigid_stationarity": rigid["stationarity"],
                             "stationarity": summary["stationarity"],
                             "rigid_uptake_mol_kg": rigid["mean_uptake_mol_kg"],
                             "flexible_uptake_mol_kg": summary["mean_uptake_mol_kg"],
@@ -141,6 +146,9 @@ def summarize_cycles(plan: dict[str, Any], rows: list[dict[str, Any]]) -> dict[s
                             "relative_adsorption_change": delta / rigid["mean_uptake_mol_kg"] if rigid["mean_uptake_mol_kg"] else None})
     return {"status": "complete" if all(s["complete"] for s in summaries) else "partial",
             "validation_status": "not_validated", "cases": summaries, "comparisons": comparisons,
+            "sampling_protocol": protocol.get("sampling_protocol", "paper_sorption_relaxation"),
+            "rmsd_convention": protocol.get("rmsd_convention", "as supplied by measurement source"),
+            "potential": protocol.get("potential"),
             "notes": ["Complete means all planned records were imported, not physically validated.",
                       "SR cycles can be correlated; cycle standard deviation is not a confidence interval.",
                       "Passing two-window stationarity is not proof of equilibrium or adequate sampling.",
@@ -162,7 +170,8 @@ def evaluate_flexibility(run_directory: str | Path) -> dict[str, Any]:
     destination = root / "evaluation"
     destination.mkdir(exist_ok=True)
     (destination / "module_d_report.json").write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
-    fields = ("point_id", "seed", "relative_humidity", "stationarity", "rigid_uptake_mol_kg",
+    fields = ("point_id", "seed", "relative_humidity", "pressure_bar", "temperature_K", "variant",
+              "stationarity", "rigid_stationarity", "rigid_uptake_mol_kg",
               "flexible_uptake_mol_kg", "adsorption_change_mol_kg", "relative_adsorption_change")
     with (destination / "rigid_vs_flexible.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
