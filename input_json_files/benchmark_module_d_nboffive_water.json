@@ -17,7 +17,7 @@
       "rmsd_drift_tolerance_A": 0.02,
       "volume_relative_drift_tolerance": 0.01,
       "md": {"ensemble": "NVT", "steps": 1000, "timestep_fs": 1.0, "thermostat_damping_ps": 0.04},
-      "gcmc": {"engine": "gRASPA", "equilibration_steps": 200000, "production_steps": 500000},
+      "gcmc": {"engine": "LAMMPS", "equilibration_steps": 200000, "production_steps": 500000},
       "reservoir": {
         "water_model": "TIP4P",
         "model_saturation_pressure_bar": 0.05197,
@@ -44,5 +44,5 @@
     "seeds": [12345, 23456, 34567],
     "unit_cells": [2, 2, 2]
   },
-  "output": {"directory": "outputs/module_D_nboffive_water", "run_id": "planning_v1", "overwrite": false}
+  "output": {"directory": "outputs/module_D_nboffive_water", "run_id": "planning_lammps_v1", "overwrite": false}
 }

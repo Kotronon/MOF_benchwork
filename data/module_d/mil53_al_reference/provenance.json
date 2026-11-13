@@ -1,0 +1,46 @@
+{
+  "repository": "https://github.com/SvenRogge/supporting-info",
+  "commit": "12ac39727f750a2ea12b22d1de18b62b7fc57715",
+  "doi": "10.1021/acsphyschemau.5c00141",
+  "authors": "Jelto Neirynck, Sander Geerinckx, Sven M. J. Rogge",
+  "license": "CC-BY-SA-4.0",
+  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "retrieved": "2026-11-12",
+  "files": [
+    {
+      "path": "lammps.data",
+      "source_path": "2026_ACSPhysChemAu_v6_p356_AnisotropicStressesCauchystat/input_files/MIL-53/MTTK/1x2x1_supercell/lammps.data",
+      "sha256": "738b7ebde41139d42776544c6485d64529ec7bf6a5608552a97bdbb9db90c0a1"
+    },
+    {
+      "path": "lammps_2x4x2.data",
+      "source_path": "2026_ACSPhysChemAu_v6_p356_AnisotropicStressesCauchystat/input_files/MIL-53/MTTK/2x4x2_supercell/lammps.data",
+      "sha256": "ec679eb1c0636f3e1c41b4919006d68ac362d58bcb3df3ffbe767ff90940df8d"
+    },
+    {
+      "path": "lammps.in",
+      "source_path": "2026_ACSPhysChemAu_v6_p356_AnisotropicStressesCauchystat/input_files/MIL-53/MTTK/1x2x1_supercell/lammps.in",
+      "sha256": "4e64c9f5c1594956971fa3df52f6a58b69c065010a69aaa4c73064f3a14d3a69"
+    },
+    {
+      "path": "lammps.table",
+      "source_path": "2026_ACSPhysChemAu_v6_p356_AnisotropicStressesCauchystat/input_files/MIL-53/MTTK/1x2x1_supercell/lammps.table",
+      "sha256": "8ea1436433215ac980cf59a7f0029c114658682a1e3908faeee847862e722a03"
+    },
+    {
+      "path": "eibonded.table",
+      "source_path": "2026_ACSPhysChemAu_v6_p356_AnisotropicStressesCauchystat/input_files/MIL-53/MTTK/1x2x1_supercell/eibonded.table",
+      "sha256": "88f9f298e3fe12695dcf47071fe0de299fc6ec87cba76920628aed37410a3ccd"
+    },
+    {
+      "path": "pars.txt",
+      "source_path": "2026_ACSPhysChemAu_v6_p356_AnisotropicStressesCauchystat/input_files/MIL-53/yaff_input/pars.txt",
+      "sha256": "032c327212b0aaea344995890925fb3c85717d189a0459a363359a557a10cae9"
+    },
+    {
+      "path": "README.md",
+      "source_path": "2026_ACSPhysChemAu_v6_p356_AnisotropicStressesCauchystat/README.md",
+      "sha256": "f6bebd3f38bef9d495baa6f3f6374cb31da5b42f69bd08a6de76d3cfacc8881b"
+    }
+  ]
+}

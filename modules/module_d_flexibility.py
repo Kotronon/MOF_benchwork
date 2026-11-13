@@ -1,7 +1,9 @@
-"""Offline planning/preparation for the NbOFFIVE-1-Ni/TIP4P benchmark.
+"""Flexible-framework benchmarks with paper and general potential profiles.
 
-Production execution remains disabled until the coupled engine adapter and
-paper-specific assets are validated. Preparation never launches a simulation.
+Both stages target LAMMPS; RASPA/gRASPA is not an execution dependency.
+The paper adapter remains disabled. General classical NVT execution is handled
+by module_d_general; MLIP/NPT profiles currently support planning and analysis.
+Preparation never launches a simulation.
 """
 from __future__ import annotations
 
@@ -20,7 +22,7 @@ from modules.base import BenchmarkModule
 MODULE_ID = "D"
 MODULE_NAME = "Module D"
 TASK = "framework_flexibility"
-DESCRIPTION = "Framework flexibility via MLIP-MD/GCMC sorption relaxation."
+DESCRIPTION = "Framework flexibility with classical/MLIP potential profiles and rigid comparisons."
 REFERENCE_DIR = Path("data/module_d/mofaff_reference")
 CYCLE_COLUMNS = ("case_id", "cycle", "uptake_mol_kg", "framework_rmsd_A",
                  "cell_volume_A3", "potential_energy_eV", "pore_volume_A3",
@@ -29,7 +31,7 @@ CYCLE_COLUMNS = ("case_id", "cycle", "uptake_mol_kg", "framework_rmsd_A",
 
 def metadata() -> dict[str, object]:
     return {"module_id": MODULE_ID, "module_name": MODULE_NAME, "task": TASK,
-            "description": DESCRIPTION, "status": "planning_and_analysis"}
+            "description": DESCRIPTION, "status": "classical_nvt_execution_and_planning"}
 
 
 def finite(value: Any, name: str, minimum: float = 0, *, positive: bool = False) -> float:
@@ -66,6 +68,12 @@ def asset(path: Any, role: str) -> dict[str, Any]:
 
 def build_flexibility_plan(config: dict[str, Any], module: dict[str, str]) -> dict[str, Any]:
     """Plan a paper campaign without falling back to unrelated CRAFTED assets."""
+    profile = config.get("benchmark", {}).get("flexibility", {}).get("profile", "nboffive_paper")
+    if profile == "general":
+        from modules.module_d_general import build_general_plan
+        return build_general_plan(config, module)
+    if profile != "nboffive_paper":
+        raise ValueError(f"Unknown Module D profile: {profile}")
     config = deepcopy(config)
     protocol = config["benchmark"].get("flexibility")
     if not isinstance(protocol, dict):
@@ -74,6 +82,15 @@ def build_flexibility_plan(config: dict[str, Any], module: dict[str, str]) -> di
         raise ValueError("The initial Module D protocol supports NbOFFIVE-1-Ni / KAUST-7.")
     if config["adsorbates"]["components"] != ["H2O"]:
         raise ValueError("The NbOFFIVE-1-Ni protocol requires single-component H2O.")
+    if str(config["material"].get("charge_scheme", "")).upper() != "DDEC06":
+        raise ValueError("The paper profile requires DDEC06 framework charges.")
+    if str(config["simulation"].get("framework", "")).lower() != "flexible":
+        raise ValueError("The Module D comparison requires simulation.framework = flexible.")
+    if config["simulation"]["engine"] != "LAMMPS":
+        raise ValueError("The paper MD branch requires LAMMPS.")
+    for key in ("reservoir", "md", "gcmc", "assets"):
+        if not isinstance(protocol.get(key, {}), dict):
+            raise ValueError(f"benchmark.flexibility.{key} must be an object.")
     conditions = config["conditions"]
     if finite(conditions["temperature_K"], "temperature_K", positive=True) != 300.0:
         raise ValueError("The paper TIP4P saturation pressure is defined at 300 K only.")
@@ -115,6 +132,9 @@ def build_flexibility_plan(config: dict[str, Any], module: dict[str, str]) -> di
     md["timestep_fs"] = finite(md.get("timestep_fs", 1), "md.timestep_fs", positive=True)
     md["thermostat_damping_ps"] = finite(md.get("thermostat_damping_ps", 0.04), "thermostat_damping_ps", positive=True)
     gcmc = protocol.setdefault("gcmc", {})
+    if str(gcmc.get("engine", "LAMMPS")).casefold() != "lammps":
+        raise ValueError("Module D requires LAMMPS for GCMC; RASPA/gRASPA execution is not supported.")
+    gcmc["engine"] = "LAMMPS"
     for key, default in (("equilibration_steps", 200000), ("production_steps", 500000)):
         gcmc[key] = integer(gcmc.get(key, default), f"gcmc.{key}")
     assets = [asset(protocol.get("assets", {}).get(role), role) for role in (
@@ -124,8 +144,8 @@ def build_flexibility_plan(config: dict[str, Any], module: dict[str, str]) -> di
     if fugacities is None:
         blockers.append("Missing TMMC pressure-to-fugacity table (paper SI Table S2); p is not silently used as f.")
     blockers.extend([
-        "The coupled MD/GCMC engine adapter and TIP4P handoff have not been validated.",
-        "The upstream example disables global LJ tail corrections, whereas the paper applies water-water tails; reconcile with SI before execution.",
+        "The LAMMPS-only MD/GCMC adapter and TIP4P handoff are not implemented.",
+        "LAMMPS TIP4P energies, tail corrections and reservoir consistency need validation against the paper model.",
         "Presence of an MLIP or validation file is not proof of validation for hydration, deformation or stress.",
     ])
     points = [{"point_id": f"rh{i:03d}", "relative_humidity": rh,
@@ -152,11 +172,21 @@ def build_flexibility_plan(config: dict[str, Any], module: dict[str, str]) -> di
         "recommended_module": "D", "assets": assets, "blockers": blockers,
         "validation_status": "not_validated",
         "reason": "Offline preparation and imported-cycle analysis are implemented; simulation execution is unavailable.",
+        "notes": [
+            "Both MD and GCMC target LAMMPS. Upstream MOFAFF files are reference inputs only; no RASPA/gRASPA installation is required.",
+            "The paper saturation pressure is a reference value, not a validated LAMMPS reservoir calibration.",
+            "The upstream force_field.def enables Ow-Ow tail corrections despite the global no default.",
+            "The upstream initial structure is already a hydrated supercell; do not replicate it again.",
+            "The RH grid and drift thresholds are project choices, not a reproduction of SI Table S2.",
+        ],
     }
+    from modules.registry import module_by_id
+
+    metrics = config["benchmark"].get("metrics") or list(module_by_id("D").default_metrics)
     return {"status": "planned", "module": module, "material": config["material"],
             "adsorbates": config["adsorbates"], "conditions": conditions,
             "simulation": config["simulation"],
-            "benchmark": {**config["benchmark"], "flexibility": protocol, "applicability": applicability},
+            "benchmark": {**config["benchmark"], "metrics": metrics, "flexibility": protocol, "applicability": applicability},
             "outputs": {**config["output"], "directory": str(output)},
             "state_points": points, "cases": cases}
 
@@ -166,11 +196,31 @@ def prepare_flexibility(plan: dict[str, Any]) -> dict[str, Any]:
             "working_directory": plan["outputs"]["directory"], "run_plan": deepcopy(plan)}
 
 
+def verify_reference_inputs(directory: Path = REFERENCE_DIR) -> dict[str, Any]:
+    """Verify the pinned source inputs before copying or reusing a bundle."""
+    manifest = json.loads((directory / "provenance.json").read_text())
+    for entry in manifest["files"]:
+        relative = Path(entry["path"])
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError("Reference manifest paths must remain inside the reference directory.")
+        actual = asset(directory / relative, entry["path"])
+        if actual.get("sha256") != entry["sha256"]:
+            raise ValueError(f"Reference input checksum mismatch: {entry['path']}")
+    return manifest
+
+
 def materialize_flexibility(prepared: dict[str, Any]) -> dict[str, Any]:
     """Create an immutable planning bundle, preserving existing calculation outputs."""
+    if prepared["run_plan"]["benchmark"]["flexibility"].get("profile") == "general":
+        from modules.module_d_general import materialize_general
+        return materialize_general(prepared)
     plan = prepared["run_plan"]
     root = Path(prepared["working_directory"])
     manifest = root / "module_d_plan.json"
+    reference_manifest = verify_reference_inputs()
+    for expected in plan["benchmark"]["applicability"]["assets"]:
+        if asset(expected["path"], expected["role"]) != expected:
+            raise ValueError(f"Asset changed since planning: {expected['role']}")
     if root.exists():
         if plan["outputs"].get("resume") and manifest.is_file():
             previous = json.loads(manifest.read_text())
@@ -179,6 +229,17 @@ def materialize_flexibility(prepared: dict[str, Any]) -> dict[str, Any]:
                 comparable["outputs"].pop(flag, None)
                 previous["outputs"].pop(flag, None)
             if comparable == previous:
+                archived = verify_reference_inputs(root / "upstream_reference")
+                if archived != reference_manifest:
+                    raise ValueError("Archived reference provenance differs from the current pinned inputs.")
+                with (root / "cases.csv").open(newline="") as handle:
+                    archived_cases = list(csv.DictReader(handle))
+                expected_cases = [{k: "" if v is None else str(v) for k, v in case.items()}
+                                  for case in plan["cases"]]
+                if archived_cases != expected_cases:
+                    raise ValueError("Archived cases.csv differs from the plan.")
+                if not (root / "cycle_results.template.csv").is_file() or not (root / "README.txt").is_file():
+                    raise ValueError("Incomplete Module D preparation bundle.")
                 return {"status": "reused_plan", "working_directory": str(root)}
         raise FileExistsError(f"Module D preserves existing directories: {root}. Choose a new run_id or resume an identical plan.")
     root.mkdir(parents=True)
@@ -189,8 +250,7 @@ def materialize_flexibility(prepared: dict[str, Any]) -> dict[str, Any]:
         writer.writerows(plan["cases"])
     with (root / "cycle_results.template.csv").open("x", newline="") as handle:
         csv.writer(handle).writerow(CYCLE_COLUMNS)
-    if REFERENCE_DIR.is_dir():
-        shutil.copytree(REFERENCE_DIR, root / "upstream_reference")
+    shutil.copytree(REFERENCE_DIR, root / "upstream_reference")
     (root / "README.txt").write_text(
         "Planning bundle only; no simulations have been run.\n"
         "Inspect benchmark.applicability in module_d_plan.json for missing assets.\n"
@@ -213,9 +273,15 @@ class FlexibilityModule(BenchmarkModule):
         return materialize_flexibility(prepare_plan)
 
     def run_test(self, materialized_plan: dict[str, Any]) -> dict[str, Any]:
+        if materialized_plan.get("benchmark", {}).get("flexibility", {}).get("profile") == "general":
+            from modules.module_d_general import run_general
+            return run_general(materialized_plan, smoke=True)
         raise NotImplementedError("Module D simulation execution is unavailable; use --dry-run, --prepare or --evaluate.")
 
     def run(self, materialized_plan: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        if materialized_plan.get("benchmark", {}).get("flexibility", {}).get("profile") == "general":
+            from modules.module_d_general import run_general
+            return run_general(materialized_plan, smoke=False)
         return self.run_test(materialized_plan)
 
     def evaluate(self, run_directory: str | Path, **kwargs: Any) -> dict[str, Any]:

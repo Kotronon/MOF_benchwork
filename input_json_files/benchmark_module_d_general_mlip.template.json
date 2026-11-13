@@ -1,0 +1,87 @@
+{
+  "material": {
+    "name": "REPLACE_WITH_MOF_NAME",
+    "charge_scheme": "in_data"
+  },
+  "adsorbates": {
+    "components": [
+      "CO2"
+    ]
+  },
+  "conditions": {
+    "temperature_K": 298.15,
+    "pressures_bar": [
+      1.0
+    ]
+  },
+  "simulation": {
+    "engine": "LAMMPS",
+    "framework": "flexible",
+    "seeds": [
+      12345,
+      23456,
+      34567
+    ]
+  },
+  "output": {
+    "directory": "outputs/module_D_general",
+    "run_id": "mlip_planning_v1"
+  },
+  "benchmark": {
+    "task": "module_d",
+    "flexibility": {
+      "profile": "general",
+      "sr_cycles": 100,
+      "discard_cycles": 10,
+      "convergence_window": 10,
+      "potential": {
+        "kind": "mlip",
+        "name": "REPLACE_WITH_MLIP_NAME",
+        "source": "REPLACE_WITH_TRAINING_AND_VALIDATION_PROVENANCE",
+        "units": "metal",
+        "styles": [
+          "pair_style deepmd assets/potential/model.pb"
+        ],
+        "coefficients": [
+          "pair_coeff * * ELEMENT_TYPE_ORDER"
+        ],
+        "files": {
+          "model.pb": null
+        }
+      },
+      "assets": {
+        "initial_structure": null,
+        "guest_template": null,
+        "validation": null,
+        "mlip_model": null
+      },
+      "guest": {
+        "kind": "rigid_molecule",
+        "intra_energy": 0.0,
+        "intra_energy_source": "REPLACE: establish reference energy in the chosen force field; zero is only a placeholder",
+        "atoms_per_molecule": 3,
+        "extra_bond_per_atom": 2,
+        "extra_angle_per_atom": 1,
+        "extra_special_per_atom": 4
+      },
+      "md": {
+        "ensemble": "NVT",
+        "timestep_fs": 0.5,
+        "thermostat_damping_ps": 0.1
+      },
+      "hybrid": {
+        "equilibration_steps": 10000,
+        "steps_per_cycle": 1000,
+        "exchange_interval": 10,
+        "exchange_attempts": 10,
+        "move_attempts": 0
+      },
+      "reservoir": {
+        "fugacities_bar": [
+          1.0
+        ],
+        "source": "EXPLICIT IDEAL-GAS APPROXIMATION f=p; replace if inappropriate"
+      }
+    }
+  }
+}

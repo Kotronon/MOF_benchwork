@@ -1,0 +1,4 @@
+Original data: Neirynck, Geerinckx and Rogge, ACS Phys. Chem. Au 6 (2026), 356-366. DOI 10.1021/acsphyschemau.5c00141.
+Source: https://github.com/SvenRogge/supporting-info
+License: CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/
+Files listed in provenance.json are unchanged. Any derived parameter data are documented separately and retain CC BY-SA 4.0.

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from modules.base import BenchmarkModule, UnsupportedModule
+from modules.base import BenchmarkModule
 from modules.module_d_flexibility import FlexibilityModule
 
 

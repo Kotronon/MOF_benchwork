@@ -1,0 +1,28 @@
+TraPPE CO2; 3 zero-energy edges exclude every intramolecular pair
+
+3 atoms
+3 bonds
+
+Coords
+
+1 0 0 0
+2 0 0 1.16
+3 0 0 -1.16
+
+Types
+
+1 9
+2 10
+3 10
+
+Charges
+
+1 0.7
+2 -0.35
+3 -0.35
+
+Bonds
+
+1 26 1 2
+2 26 1 3
+3 26 2 3
