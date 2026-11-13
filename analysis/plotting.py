@@ -3,6 +3,19 @@ from __future__ import annotations
 from typing import Any
 
 
+def decimal_pressure_axis(axis: Any, ticks: list[float] | None = None) -> None:
+    """Show pressure as 0.1, 1, 10, etc., preserving the axis scale."""
+    from decimal import Decimal
+    from matplotlib.ticker import FuncFormatter, NullFormatter
+
+    if ticks is not None:
+        axis.set_xticks(ticks)
+    axis.xaxis.set_major_formatter(
+        FuncFormatter(lambda value, position: format(Decimal(f"{value:.12g}"), "f"))
+    )
+    axis.xaxis.set_minor_formatter(NullFormatter())
+
+
 def legend_outside_right(axis: Any, *, fontsize: str = "small", ncol: int = 1) -> None:
     """Place a legend outside the plotting area when labelled artists exist."""
     handles, labels = axis.get_legend_handles_labels()

@@ -1,0 +1,131 @@
+{
+  "material": {
+    "name": "MOF-5",
+    "cif_source": "auto",
+    "charge_scheme": "DDEC",
+    "source": "crafted"
+  },
+  "adsorbates": {
+    "components": ["CO2"],
+    "mixture": null
+  },
+  "conditions": {
+    "temperature_K": 298.0,
+    "pressures_bar": [0.1, 1.0, 10.0]
+  },
+  "benchmark": {
+    "task": "potential_benchmark",
+    "module": "C",
+    "comparison_type": "adsorption_isotherms",
+    "metrics": [
+      "co2_uptake",
+      "isotherm",
+      "error_to_reference",
+      "runtime",
+      "convergence"
+    ],
+    "reference": {
+      "source": "crafted",
+      "preferred_sources": ["crafted"],
+      "material": "MOF-5",
+      "adsorbate": "CO2",
+      "temperature_tolerance_K": 0.5,
+      "allowed_reference_basis": ["absolute", "simulation_reference"],
+      "allow_unknown_reference_basis": false,
+      "allow_excess_reference_basis": false
+    },
+    "potential_benchmark": {
+      "workflow": "campaign",
+      "adsorption_engine": "mlip_mc",
+      "validation": {
+        "mode": "screening"
+      },
+      "campaign": {
+        "id": "mof5_co2_umof_three_model_v1",
+        "models": [
+          {
+            "backend": "mace-torch",
+            "name": "umof_mh_pretrained",
+            "model_family": "umof",
+            "model": "external/umof_models/uMOF-MH.model",
+            "head": "r2scan+d4",
+            "device": "cuda",
+            "default_dtype": "float64",
+            "dispersion": false
+          },
+          {
+            "backend": "mace-torch",
+            "name": "umof_polar_pretrained",
+            "model_family": "umof",
+            "model_type": "PolarMACE",
+            "model": "external/models/umof-polar.model",
+            "head": "r2scan+d4",
+            "device": "cuda",
+            "default_dtype": "float32",
+            "dispersion": false
+          },
+          {
+            "backend": "mace-torch",
+            "name": "umof_polar_stage1",
+            "model_family": "umof",
+            "model_type": "PolarMACE",
+            "model": "outputs/umof_polar_24h_float32/025pct/seed-12345/models/umof_polar_adsorption_finetuned.model",
+            "head": "Default",
+            "device": "cuda",
+            "default_dtype": "float32",
+            "dispersion": false
+          }
+        ],
+        "stages": {
+          "screening": {
+            "method": "widom",
+            "trials": 1000,
+            "block_size": 100
+          },
+          "gcmc_pilot": {
+            "method": "gcmc",
+            "equilibration_steps": 20000,
+            "production_steps": 40000,
+            "checkpoint_interval": 1000,
+            "pressure_selection": "all"
+          }
+        }
+      }
+    }
+  },
+  "simulation": {
+    "engine": "MLIP_MC",
+    "method": "GCMC",
+    "framework": "rigid",
+    "cell_representation": "source",
+    "minimum_image_policy": "error",
+    "cutoff_A": 6.0,
+    "unit_cells": "auto",
+    "seeds": [32452843]
+  },
+  "convergence": {
+    "minimum_replicates": 3,
+    "relative_ci95_target": 0.2
+  },
+  "evaluation": {
+    "simulation_basis": "absolute",
+    "report_excess": true,
+    "pore_volume_cm3_g": "auto",
+    "gas_density_backend": "HEOS",
+    "reference_matching": "by_basis",
+    "metrics": ["mae", "rmse", "mre", "r2"]
+  },
+  "output": {
+    "directory": "outputs/module_C_potential_benchmark",
+    "run_id": "mof5_co2_umof_three_model_v1",
+    "overwrite": false,
+    "resume": true,
+    "save_logs": true,
+    "save_dumps": true,
+    "dump_every_steps": 1000,
+    "save_restarts": true,
+    "restart_every_steps": 10000,
+    "save_plots": true,
+    "save_csv": true
+  }
+}

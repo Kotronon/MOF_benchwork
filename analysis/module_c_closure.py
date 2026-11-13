@@ -181,6 +181,7 @@ def plot_all(data, sources, output):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.colors import TwoSlopeNorm
+    from analysis.plotting import decimal_pressure_axis
     plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 11,
         "axes.spines.top": False, "axes.spines.right": False, "axes.titleweight": "bold",
         "axes.labelcolor": "#243344", "text.color": "#243344", "axes.edgecolor": "#abb5bd",
@@ -248,6 +249,8 @@ def plot_all(data, sources, output):
     for ax in axes:
         ax.set(xscale="log", xlabel="Pressure (bar)", ylabel="Absolute loading (mmol/g)", ylim=(0, None))
         ax.legend(frameon=False, fontsize=9); ax.grid(alpha=.18)
+    decimal_pressure_axis(axes[0], [.1, 1, 10])
+    decimal_pressure_axis(axes[1], [.1, .5, 1, 5])
     save(fig, "03_isotherms", "Isotherms before and after fine-tuning · 298 K",
          "One seed per comparison; sampling limits quantitative rankings. No seed confidence intervals.\nDifferent MOFs: no direct MH/POLAR comparison. CRAFTED is a classical simulation reference.")
 

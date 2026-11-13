@@ -7,11 +7,31 @@ import unittest
 
 from analysis.module_b_convergence_report import (
     _batch_statistics,
+    _input_mixture,
     analyze_module_b_convergence,
 )
 
 
 class ModuleBConvergenceReportTests(unittest.TestCase):
+    def test_mixture_accepts_generated_comment_rounding_but_rejects_invalid_fractions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "gcmc.in"
+            for co2, n2, valid in [
+                ("0.99905", "0.000949817", True),
+                ("0.6", "0.3", False),
+                ("1.0000001", "-0.0000001", False),
+                ("1e309", "0", False),
+            ]:
+                with self.subTest(co2=co2, n2=n2):
+                    path.write_text(f"# CO2 mole_fraction {co2}\n# N2 mole_fraction {n2}\n")
+                    if valid:
+                        mixture = _input_mixture(path)
+                        self.assertAlmostEqual(sum(mixture.values()), 1.0)
+                        self.assertAlmostEqual(mixture["N2"] / mixture["CO2"], float(n2) / float(co2))
+                    else:
+                        with self.assertRaises(ValueError):
+                            _input_mixture(path)
+
     def test_batch_statistics_account_for_temporal_autocorrelation(self) -> None:
         values = [float((index // 10) % 4) for index in range(400)]
 

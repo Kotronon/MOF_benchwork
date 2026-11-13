@@ -149,6 +149,8 @@ def create_report(run_directory, output_directory, stage='gcmc_pilot', reference
         for ax in axes:
             ax.errorbar(x, y, yerr=sd, fmt='o-', capsize=3, color=colors[model], label=model, lw=1.7)
     axes[1].set_xscale('log')
+    from analysis.plotting import decimal_pressure_axis
+    decimal_pressure_axis(axes[1])
     if reference:
         visible_reference = [p for p in reference['points'] if min(grids[0]) <= p['pressure_bar'] <= max(grids[0])]
         for ax in axes:
