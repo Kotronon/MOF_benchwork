@@ -140,6 +140,11 @@ LAMMPS units. See [LAMMPS MSD](https://docs.lammps.org/compute_msd.html).
 include IDs, molecule IDs, types, charges and image flags. Final data and binary
 restart files are saved for inspection; automatic continuation is not implemented.
 
+Optional `flexibility.trajectory` accepts `interval_steps` and `precision_digits`
+(1–17). Without this block, the original block-length dump interval and default
+LAMMPS text precision are retained. The MIL-53 isotherm input uses 16 significant
+digits and a trajectory frame every 1000 steps (0.25 ps).
+
 ## Archives, gates and outputs
 
 Preparation copies declared assets and writes a SHA-256 manifest. Execution
@@ -155,6 +160,13 @@ writes only under `smoke/`. It is not a convergence study or a test of every
 loading. `run` requires a passing smoke test of the same bundle, runner code
 and LAMMPS build description. Production runs all planned cases sequentially.
 Use separate bundles/jobs for independent materials or potential profiles.
+
+The [MIL-53 full isotherm guide](module_d_mil53_isotherm_cluster.md) also provides
+an array runner for the existing repository checkout: `case --directory DIR
+--case-index N` prepares an independent case, runs its smoke test and executes
+it. Jobs use relative links to shared campaign assets instead of copying the
+parameter files. `collect --directory DIR` requires all planned jobs and forms
+the paired rigid/flexible comparison afterwards.
 
 Results are under `results/CASE_ID/`; completed campaign measurements become
 `cycle_results.csv`. `--evaluate` writes `evaluation/module_d_report.json` and

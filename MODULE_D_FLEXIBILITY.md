@@ -6,6 +6,32 @@ is executable, with a [MIL-53(Al)/CO₂ technical pilot](docs/module_d_mil53_clu
 MLIP execution remains gated. See that guide for templates, required force-field
 inputs, smoke tests and cluster commands. This is not universal MOF parameterization.
 
+The [full MIL-53/CO₂ isotherm campaign](docs/module_d_mil53_isotherm_cluster.md)
+is configured for 300 K, ten pressures from 0.01 to 10 bar, three variants and
+three seeds (90 independent cases). Each case uses a 50 ps warmup and a 100 ps
+observation budget. Execution uses the existing repository checkout and a Slurm
+array template; no distribution archive is needed. Parameter assets are shared
+between jobs through relative links. No production jobs have been submitted.
+
+The [MIL-53 cluster pilot status and next checks](docs/module_d_mil53_cluster.md#stand-nach-dem-clusterpilot-14112026)
+record nine technically complete runs, with only one passing the stationarity
+diagnostic. Mean pilot loadings are 2.00 mol/kg (rigid), 2.03 mol/kg (flexible NVT)
+and 1.46 mol/kg (flexible NPT); these are not established equilibrium values.
+The [NPT control review](reports/module_d_npt_review_v2_2026-11-15/README.md)
+now covers four complete 5.5 ps runs for one seed: CO₂/dry × 0.25/0.125 fs.
+The dry framework also relaxes substantially (mean volume increase about 3.4–3.5%);
+all four runs fail the RMSD stationarity diagnostic. Timestep convergence remains
+unproven. Higher-precision CO₂ output was included in the subsequent longer
+controls below; numerical validation and agreement across additional seeds remain open.
+
+The subsequent [20 ps control review](reports/module_d_npt_relaxation_review_2026-11-16/README.md)
+covers two complete LAMMPS runs at 0.25 fs with seed 12345. Mean volume changes
+over 5–20 ps are +3.362% with CO₂ and +3.506% dry; mean CO₂ loading is
+1.666 mol/kg. Both cases still fail the RMSD window diagnostic, and the CO₂
+case also fails the loading diagnostic. Precise dumps retain linear CO₂ but
+show pair-distance deviations up to 5.22×10⁻⁵ Å in saved frames. These remain
+exploratory results; no Module-D FLAMES run has been performed.
+
 ## NbOFFIVE-1-Ni water paper profile
 
 The separate paper profile plans the NbOFFIVE-1-Ni (KAUST-7)/H2O comparison and evaluates

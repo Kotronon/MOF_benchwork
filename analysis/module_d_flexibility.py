@@ -129,7 +129,11 @@ def summarize_cycles(plan: dict[str, Any], rows: list[dict[str, Any]]) -> dict[s
     for summary in summaries:
         if summary["variant"] == "rigid":
             continue
-        rigid = baseline[(summary["point_id"], summary["seed"])]
+        # A cluster job may contain one independently executed flexible case.
+        # Pairwise comparisons are formed after collecting the whole campaign.
+        rigid = baseline.get((summary["point_id"], summary["seed"]))
+        if rigid is None:
+            continue
         if not summary["complete"] or not rigid["complete"]:
             continue
         delta = summary["mean_uptake_mol_kg"] - rigid["mean_uptake_mol_kg"]

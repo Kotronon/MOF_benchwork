@@ -11,6 +11,7 @@ import csv
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import re
 import shlex
@@ -148,6 +149,14 @@ def build_general_plan(config, module):
         raise ValueError("Native LAMMPS gcmc rigid requires move_attempts=0; rigid-body MD samples translations/rotations.")
     if hybrid["equilibration_steps"] % hybrid["steps_per_cycle"] or hybrid["steps_per_cycle"] % hybrid["exchange_interval"]:
         raise ValueError("equilibration_steps must be a multiple of steps_per_cycle, itself a multiple of exchange_interval.")
+    if "trajectory" in p:
+        trajectory = p["trajectory"]
+        if not isinstance(trajectory, dict) or set(trajectory) - {"interval_steps", "precision_digits"}:
+            raise ValueError("trajectory accepts interval_steps and precision_digits only.")
+        trajectory["interval_steps"] = integer(trajectory.get("interval_steps", hybrid["steps_per_cycle"]), "trajectory.interval_steps")
+        trajectory["precision_digits"] = integer(trajectory.get("precision_digits", 16), "trajectory.precision_digits")
+        if trajectory["precision_digits"] > 17:
+            raise ValueError("trajectory.precision_digits must be between 1 and 17.")
     hybrid["max_displacement_A"] = finite(hybrid.get("max_displacement_A", 1), "max_displacement_A", positive=True)
     hybrid["overlap_cutoff_A"] = finite(hybrid.get("overlap_cutoff_A", 0), "overlap_cutoff_A")
     conditions = config["conditions"]
@@ -235,10 +244,18 @@ def materialize_general(prepared):
     for entry in plan["benchmark"]["applicability"]["assets"]:
         if asset(entry["path"], entry["role"]) != entry:
             raise ValueError(f"Asset changed since planning: {entry['role']}")
+    shared_assets = prepared.get("shared_assets_directory")
+    if shared_assets is not None:
+        shared_assets = Path(shared_assets).resolve()
+        for entry in plan["benchmark"]["applicability"]["assets"]:
+            if asset(shared_assets / entry["role"], entry["role"]).get("sha256") != entry.get("sha256"):
+                raise ValueError(f"Shared asset mismatch: {entry['role']}")
     root.mkdir(parents=True)
     _json(root / "module_d_plan.json", plan)
+    if shared_assets is not None:
+        (root / "assets").symlink_to(os.path.relpath(shared_assets, root), target_is_directory=True)
     for entry in plan["benchmark"]["applicability"]["assets"]:
-        if entry["status"] == "present":
+        if entry["status"] == "present" and shared_assets is None:
             dest = root / _destination(entry["role"])
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(Path(entry["path"]).expanduser(), dest)
@@ -252,8 +269,12 @@ def materialize_general(prepared):
         "Run python -m modules.module_d_general check --directory THIS_DIRECTORY\n"
         "Then smoke, then run (same CLI); --command lmp selects the executable.\n"
         "Missing assets and MLIP execution remain blocked. No scientific validation is implied.\n")
-    _json(root / "bundle_manifest.json", {str(path.relative_to(root)): asset(path, "file")["sha256"]
-        for path in sorted(root.rglob("*")) if path.is_file()})
+    manifest = {str(path.relative_to(root)): asset(path, "file")["sha256"]
+                for path in sorted(root.rglob("*")) if path.is_file()}
+    if shared_assets is not None:
+        manifest.update({str(_destination(entry["role"])): entry["sha256"]
+                         for entry in plan["benchmark"]["applicability"]["assets"]})
+    _json(root / "bundle_manifest.json", manifest)
     return dict(status="prepared_general_bundle", working_directory=str(root), simulation_started=False,
                 applicability=plan["benchmark"]["applicability"])
 
@@ -338,11 +359,16 @@ def render_input(plan, case):
         lines += [f"variable cell_{name} equal {name}"]
     lines += [f"fix cellstats all ave/time 1 {n} {n} " + " ".join(f"v_cell_{name}" for name in
               ("lx", "ly", "lz", "xy", "xz", "yz", "pxx", "pyy", "pzz", "pxy", "pxz", "pyz")) + " file cell_history.txt"]
+    trajectory = p.get("trajectory", {})
+    dump_interval = trajectory.get("interval_steps", n)
+    dump_modify = "dump_modify trajectory sort id"
+    if "precision_digits" in trajectory:
+        dump_modify += f" format float %.{trajectory['precision_digits']}g"
     lines += [f"fix stats all ave/time 1 {n} {n} v_uptake v_rmsd v_volume v_energy file measurements.txt",
               f"fix attempts all ave/time 1 1 {n} f_exchange[1] f_exchange[2] f_exchange[3] f_exchange[4] "
               "f_exchange[5] f_exchange[6] f_exchange[7] f_exchange[8] file mc_attempts.txt",
-              f"dump trajectory all custom {n} trajectory.lammpstrj id mol type q x y z ix iy iz",
-              "dump_modify trajectory sort id",
+              f"dump trajectory all custom {dump_interval} trajectory.lammpstrj id mol type q x y z ix iy iz",
+              dump_modify,
               f"run {n * case['expected_cycles']}", "write_restart final.restart", "write_data final.data",
               'print "MODULE_D_COMPLETED"']
     return "\n".join(lines) + "\n"
@@ -418,7 +444,7 @@ def execute_bundle(directory, *, smoke=False, command=None):
         for case in working["cases"]:
             case_dir = target / case["case_id"]
             case_dir.mkdir()
-            shutil.copytree(root / "assets", case_dir / "assets")
+            (case_dir / "assets").symlink_to(os.path.relpath(root / "assets", case_dir), target_is_directory=True)
             (case_dir / "in.lammps").write_text(render_input(working, case))
             start = time.monotonic()
             with (case_dir / "console.log").open("x") as handle:
