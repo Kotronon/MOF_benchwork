@@ -9,9 +9,9 @@ inputs, smoke tests and cluster commands. This is not universal MOF parameteriza
 The [full MIL-53/CO₂ isotherm campaign](docs/module_d_mil53_isotherm_cluster.md)
 is configured for 300 K, ten pressures from 0.01 to 10 bar, three variants and
 three seeds (90 independent cases). Each case uses a 50 ps warmup and a 100 ps
-observation budget. Execution uses the existing repository checkout and a Slurm
-array template; no distribution archive is needed. Parameter assets are shared
-between jobs through relative links. No production jobs have been submitted.
+observation budget. Execution runs directly from the existing repository checkout,
+with cases processed sequentially. Parameter assets are shared between cases
+through relative links. No production simulations have been started.
 
 The [MIL-53 cluster pilot status and next checks](docs/module_d_mil53_cluster.md#stand-nach-dem-clusterpilot-14112026)
 record nine technically complete runs, with only one passing the stationarity

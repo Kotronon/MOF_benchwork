@@ -29,13 +29,19 @@ class ClusterCampaignTests(unittest.TestCase):
             p["trajectory"] = dict(interval_steps=5, precision_digits=16)
             plan = build_run_plan(config)
             root = Path(materialize_flexibility(prepare_flexibility(plan))["working_directory"])
-            for index in range(1, len(plan["cases"])+1):
-                self.assertEqual(runner.run_case(plan, root, index, [os.environ["MODULE_D_LAMMPS"]])["status"], "complete")
-                case_id = plan["cases"][index-1]["case_id"]
+            command = [os.environ["MODULE_D_LAMMPS"]]
+            runner.run_all_cases(plan, root, command)
+            completed_times = {}
+            for case in plan["cases"]:
+                case_id = case["case_id"]
                 job = root / "jobs" / case_id
+                completed_times[case_id] = (job / "cycle_results.csv").stat().st_mtime_ns
                 for link in (job / "assets", job / "smoke" / case_id / "assets", job / "results" / case_id / "assets"):
                     self.assertTrue(link.is_symlink())
                     self.assertEqual(link.resolve(), (root / "assets").resolve())
+            runner.run_all_cases(plan, root, command)
+            for case_id, timestamp in completed_times.items():
+                self.assertEqual((root / "jobs" / case_id / "cycle_results.csv").stat().st_mtime_ns, timestamp)
             report = runner.collect_cases(plan, root)
             self.assertEqual(report["status"], "complete")
             self.assertEqual(len(report["comparisons"]), 2)

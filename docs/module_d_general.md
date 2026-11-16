@@ -162,11 +162,12 @@ and LAMMPS build description. Production runs all planned cases sequentially.
 Use separate bundles/jobs for independent materials or potential profiles.
 
 The [MIL-53 full isotherm guide](module_d_mil53_isotherm_cluster.md) also provides
-an array runner for the existing repository checkout: `case --directory DIR
---case-index N` prepares an independent case, runs its smoke test and executes
-it. Jobs use relative links to shared campaign assets instead of copying the
-parameter files. `collect --directory DIR` requires all planned jobs and forms
-the paired rigid/flexible comparison afterwards.
+a direct runner for the existing repository checkout: `all --directory DIR`
+processes the independent cases sequentially and reuses verified complete cases.
+`case --directory DIR --case-index N` runs one selected case. Cases use relative
+links to shared campaign assets. `collect --directory DIR` requires all planned
+cases and forms the paired rigid/flexible comparison afterwards; `all` performs
+this collection automatically on completion.
 
 Results are under `results/CASE_ID/`; completed campaign measurements become
 `cycle_results.csv`. `--evaluate` writes `evaluation/module_d_report.json` and

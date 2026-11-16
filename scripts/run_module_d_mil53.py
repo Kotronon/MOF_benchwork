@@ -75,6 +75,32 @@ def collect_cases(plan, campaign):
     return evaluate_flexibility(campaign)
 
 
+def run_all_cases(plan, campaign, command):
+    """Run directly and sequentially, reusing only verified complete cases."""
+    from modules.module_d_general import verify_bundle
+    from analysis.module_d_flexibility import summarize_cycles
+    for index, case in enumerate(plan["cases"], 1):
+        expected, directory = job_plan(plan, campaign, case)
+        if not directory.exists():
+            run_case(plan, campaign, index, command)
+            continue
+        # Incomplete attempts are preserved and require a fresh campaign.
+        if verify_bundle(directory) != expected:
+            raise ValueError(f"Changed case plan: {case['case_id']}")
+        status_path = directory / "results/status.json"
+        if not status_path.is_file():
+            raise ValueError(f"Incomplete prior attempt: {directory}")
+        status = json.loads(status_path.read_text())
+        if (status["status"] != "complete" or status["command"] != command or
+                [row["case_id"] for row in status["cases"]] != [case["case_id"]]):
+            raise ValueError(f"Incomplete case or changed LAMMPS command: {directory}")
+        with (directory / "cycle_results.csv").open(newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        if summarize_cycles(expected, rows)["status"] != "complete":
+            raise ValueError(f"Incomplete measurements: {directory}")
+        print(f"Already complete {index}/{len(plan['cases'])}: {case['case_id']}", flush=True)
+
+
 def check_capabilities(help_text):
     required = {
         "Atom": {"full"}, "Pair": {"hybrid/overlay", "coul/long", "table"},
@@ -95,8 +121,8 @@ def check_capabilities(help_text):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=["check", "smoke", "pilot", "run", "case", "collect"], default="check", nargs="?")
-    parser.add_argument("--case-index", type=int, help="1-based campaign case index, e.g. SLURM_ARRAY_TASK_ID")
+    parser.add_argument("stage", choices=["check", "smoke", "pilot", "run", "all", "case", "collect"], default="check", nargs="?")
+    parser.add_argument("--case-index", type=int, help="1-based campaign case index")
     parser.add_argument("--directory", type=Path, help="Prepared campaign directory in the existing repository checkout")
     parser.add_argument("--command", nargs="+", default=["lmp"])
     args = parser.parse_args(argv)
@@ -129,6 +155,12 @@ def main(argv=None):
     check_capabilities(result.stdout + result.stderr)
     print("PASS: inputs and required LAMMPS styles verified.", flush=True)
     if args.stage == "check":
+        return
+    if args.stage == "all":
+        run_all_cases(plan, campaign, args.command)
+        if not (campaign / "cycle_results.csv").exists():
+            collect_cases(plan, campaign)
+        print(f"Complete: {campaign / 'evaluation/module_d_report.json'}", flush=True)
         return
     if args.stage == "case":
         run_case(plan, campaign, args.case_index, args.command)
