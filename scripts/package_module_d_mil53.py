@@ -10,8 +10,8 @@ import tarfile
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 from benchmark import build_run_plan
-from modules.module_d_flexibility import prepare_flexibility, materialize_flexibility
-from modules.module_d_mil53 import verify_sources
+from modules.module_d.flexibility import prepare_flexibility, materialize_flexibility
+from modules.module_d.mil53 import verify_sources
 
 
 def main():
@@ -32,7 +32,7 @@ def main():
     prepared = prepare_flexibility(plan)
     prepared["working_directory"] = str(root / "campaign")
     materialize_flexibility(prepared)
-    files = ["modules/base.py", "modules/module_d_flexibility.py", "modules/module_d_general.py",
+    files = ["modules/base.py", "modules/module_d/__init__.py", "modules/module_d/flexibility.py", "modules/module_d/general.py",
              "analysis/module_d_flexibility.py"]
     for name in files:
         destination = root / name
@@ -41,8 +41,9 @@ def main():
     for package in ("modules", "analysis"):
         (root / package / "__init__.py").write_text('"""Standalone Module D runtime."""\n')
     shutil.copyfile(REPO / "scripts/run_module_d_mil53.py", root / "run_mil53.py")
-    shutil.copyfile(REPO / "docs/module_d_mil53_cluster.md", root / "README.md")
+    shutil.copyfile(REPO / "docs/modules/module_d/mil53_cluster.md", root / "README.md")
     shutil.copytree(REPO / "data/module_d/mil53_al_reference", root / "source_reference")
+    shutil.copyfile(REPO / "docs/references/mil53_al_reference_source.md", root / "source_reference/README.md")
     shutil.copyfile(REPO / "data/module_d/mil53_co2_pilot/ATTRIBUTION.txt", root / "ATTRIBUTION.txt")
     manifest = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
                 for path in sorted(root.rglob("*")) if path.is_file()}

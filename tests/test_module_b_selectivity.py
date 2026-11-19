@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 import benchmark
-from modules.module_b_selectivity import (
+from modules.module_b.selectivity import (
     build_candidate_pool,
     evaluate_selectivity,
     initialize_campaign_state_from_isotherm,

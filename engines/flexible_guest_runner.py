@@ -344,7 +344,7 @@ def run_pressure_point(run, index, total_runs, discard_fraction):
                 ]
             )
             if step % 10 == 0 or step == run["run_steps"]:
-                from modules.module_b_active_learning import _save
+                from modules.module_b.active_learning import _save
 
                 _save(
                     checkpoint,

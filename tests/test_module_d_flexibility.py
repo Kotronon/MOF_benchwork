@@ -13,7 +13,7 @@ from unittest.mock import patch
 from ase import Atoms
 import benchmark
 from analysis.module_d_flexibility import evaluate_flexibility, structural_metrics, summarize_cycles
-from modules.module_d_flexibility import materialize_flexibility, prepare_flexibility, verify_reference_inputs
+from modules.module_d.flexibility import materialize_flexibility, prepare_flexibility, verify_reference_inputs
 from modules.registry import module_by_id
 
 CONFIG = Path('input_json_files/benchmark_module_d_nboffive_water.json')

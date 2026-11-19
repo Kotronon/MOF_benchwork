@@ -6,10 +6,10 @@ import math
 from pathlib import Path
 import shutil
 
-from modules import module_b_campaign as al
-from modules.module_b_active_learning import _save
-from modules.module_b_profiles import point, simplex_candidates
-from modules.module_b_runtime import campaign_lock, asset_fingerprints
+from modules.module_b import campaign as al
+from modules.module_b.active_learning import _save
+from modules.module_b.profiles import point, simplex_candidates
+from modules.module_b.runtime import campaign_lock, asset_fingerprints
 
 
 def digest(path):
@@ -139,7 +139,7 @@ def refresh_evidence_checksums(evidence):
 
 
 def prepare_extension(root, source_path, lower, upper):
-    from modules.module_b_cluster import freeze_config, archive_prepared_manifest
+    from modules.module_b.cluster import freeze_config, archive_prepared_manifest
     from pipeline.planning import build_run_plan
     from pipeline.prepare import prepare_benchmark
     from pipeline.materialization import materialize_benchmark

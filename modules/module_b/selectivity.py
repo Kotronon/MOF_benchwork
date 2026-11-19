@@ -119,7 +119,7 @@ def initial_candidate_ids(candidates: list[dict[str, Any]]) -> list[str]:
 def select_next_candidate(campaign_state: dict[str, Any]) -> dict[str, Any] | None:
     """Use GP acquisition for new campaigns; retain maximin for legacy states."""
     if campaign_state.get("strategy") == "noise_aware_component_gp":
-        from modules.module_b_active_learning import recommend
+        from modules.module_b.active_learning import recommend
         return recommend(campaign_state).get("candidate")
     candidates = campaign_state.get("candidates", [])
     completed = {
@@ -203,7 +203,7 @@ def mixture_results_from_isotherm_summary(
     isotherm_summary: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Extract compact campaign results from a Module-B isotherm summary."""
-    from modules.module_b_profiles import point as state_point
+    from modules.module_b.profiles import point as state_point
     results = []
     for p in isotherm_summary.get("results", []):
         summary = p.get("summary", {})

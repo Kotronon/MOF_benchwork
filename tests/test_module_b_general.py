@@ -13,7 +13,7 @@ from pipeline.config import normalize_config
 from pipeline.eos import mixture_fugacities
 from pipeline.lammps_inputs import gcmc_input_builder
 from modules.registry import select_registered_module
-from modules.module_b_profiles import paper_profile, simplex_candidates, point
+from modules.module_b.profiles import paper_profile, simplex_candidates, point
 from engines.configurational_bias import ConfigurationalBias, TreeProposal
 from engines.flexible_guest_runner import load_models
 
@@ -174,7 +174,7 @@ class ProfileTests(unittest.TestCase):
         import csv
         from sklearn.gaussian_process import GaussianProcessRegressor
         from sklearn.gaussian_process.kernels import RBF
-        from modules.module_b_campaign import predict
+        from modules.module_b.campaign import predict
 
         fixture = (
             Path(__file__).resolve().parents[1]
@@ -370,7 +370,7 @@ class FlexibleSamplingTests(unittest.TestCase):
 
 class GeneralCampaignTests(unittest.TestCase):
     def state(self):
-        from modules.module_b_campaign import initialize
+        from modules.module_b.campaign import initialize
 
         names = ["CO2", "CH4", "N2"]
         c = {
@@ -382,12 +382,12 @@ class GeneralCampaignTests(unittest.TestCase):
         }
         points = simplex_candidates(names, [0.1, 10], [300], 20)
         with tempfile.TemporaryDirectory() as d, patch(
-            "modules.module_b_campaign.identity", return_value="physics"
+            "modules.module_b.campaign.identity", return_value="physics"
         ):
             return initialize(c, Path(d) / "state.json", candidates=points, budget=15)
 
     def test_holdout_separate_and_budget(self):
-        from modules.module_b_campaign import recommend
+        from modules.module_b.campaign import recommend
 
         s = self.state()
         self.assertEqual(len(s["holdout"]), 4)
@@ -397,7 +397,7 @@ class GeneralCampaignTests(unittest.TestCase):
         self.assertEqual(recommend(s)["status"], "budget_exhausted")
 
     def test_paper_pac_and_upstream_stop_rules_stay_distinct(self):
-        from modules.module_b_campaign import recommend
+        from modules.module_b.campaign import recommend
 
         s = self.state()
         held = {p["candidate_id"] for p in s["holdout"]}
@@ -421,7 +421,7 @@ class GeneralCampaignTests(unittest.TestCase):
             },
         }
         s["holdout_results"] = [{"components": "must never be inspected for selection"}]
-        with patch("modules.module_b_campaign.predict", return_value=prediction):
+        with patch("modules.module_b.campaign.predict", return_value=prediction):
             s["mode"] = "paper"
             self.assertEqual(recommend(s)["status"], "pac_target_met")
             s["mode"] = "upstream_compat"
@@ -432,7 +432,7 @@ class GeneralCampaignTests(unittest.TestCase):
     @unittest.skipUnless(importlib.util.find_spec("sklearn"), "scikit-learn")
     def test_report_exports_all_components_pairs_and_separate_holdouts(self):
         import csv
-        from modules.module_b_campaign import report
+        from modules.module_b.campaign import report
 
         s = self.state()
         held = {p["candidate_id"] for p in s["holdout"]}
@@ -473,7 +473,7 @@ class GeneralCampaignTests(unittest.TestCase):
 
     @unittest.skipUnless(importlib.util.find_spec("sklearn"), "scikit-learn")
     def test_ternary_prediction(self):
-        from modules.module_b_campaign import predict
+        from modules.module_b.campaign import predict
 
         s = self.state()
         s["results"] = [

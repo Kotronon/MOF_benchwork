@@ -11,10 +11,10 @@ import hashlib
 import json
 from pathlib import Path
 
-from modules import module_b_campaign as al
-from modules.module_b_active_learning import _save
-from modules.module_b_extension import verify_source
-from modules.module_b_runtime import campaign_lock
+from modules.module_b import campaign as al
+from modules.module_b.active_learning import _save
+from modules.module_b.extension import verify_source
+from modules.module_b.runtime import campaign_lock
 
 DEFAULT_SOURCE = Path('outputs/module_B_active_learning_mof5_20bar/production/mof5/campaign.json')
 DEFAULT_ROOT = Path('outputs/module_B_mof5_al_comparison')
@@ -59,7 +59,7 @@ def completed_history(state, ids):
 
 
 def clone(state, target, role, random_seed):
-    from modules.module_b_cluster import freeze_config, archive_prepared_manifest
+    from modules.module_b.cluster import freeze_config, archive_prepared_manifest
     from pipeline.planning import build_run_plan
     from pipeline.prepare import prepare_benchmark
     from pipeline.materialization import materialize_benchmark
@@ -343,7 +343,7 @@ def main(argv=None):
     if args.command in ('holdout','random') and (args.max_requests is None or args.max_requests<1):
         parser.error('An explicit positive --max-requests is required.')
     if args.command=='prepare':
-        from modules.module_b_cluster import check_dependencies
+        from modules.module_b.cluster import check_dependencies
         check_dependencies();result=prepare(args.root,args.source,args.random_seed)
     elif args.command in ('holdout','random'):
         result=run(args.root,'holdouts' if args.command=='holdout' else 'random',args.max_requests,args.jobs)

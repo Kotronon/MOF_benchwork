@@ -19,7 +19,7 @@ import shutil
 import subprocess
 import time
 
-from modules.module_d_flexibility import CYCLE_COLUMNS, asset, finite, integer
+from modules.module_d.flexibility import CYCLE_COLUMNS, asset, finite, integer
 
 
 def _json(path, value):
@@ -266,7 +266,7 @@ def materialize_general(prepared):
     with (root / "cycle_results.template.csv").open("x", newline="") as handle:
         csv.writer(handle).writerow(CYCLE_COLUMNS)
     (root / "README.txt").write_text("Module D general profile. Preparation does not run LAMMPS.\n"
-        "Run python -m modules.module_d_general check --directory THIS_DIRECTORY\n"
+        "Run python -m modules.module_d.general check --directory THIS_DIRECTORY\n"
         "Then smoke, then run (same CLI); --command lmp selects the executable.\n"
         "Missing assets and MLIP execution remain blocked. No scientific validation is implied.\n")
     manifest = {str(path.relative_to(root)): asset(path, "file")["sha256"]
@@ -407,7 +407,7 @@ def execute_bundle(directory, *, smoke=False, command=None):
         raise ValueError("command must be a non-empty argument list (no shell evaluation).")
     fingerprint = asset(root / "bundle_manifest.json", "manifest")["sha256"]
     implementation = hashlib.sha256(Path(__file__).read_bytes() +
-        (Path(__file__).parents[1] / "analysis/module_d_flexibility.py").read_bytes()).hexdigest()
+        (Path(__file__).parents[2] / "analysis/module_d_flexibility.py").read_bytes()).hexdigest()
     version = subprocess.run([*command, "-help"], capture_output=True, text=True, check=True, timeout=60)
     help_text = version.stdout + version.stderr
     runtime_hash = hashlib.sha256(help_text.encode()).hexdigest()
@@ -474,7 +474,7 @@ def execute_bundle(directory, *, smoke=False, command=None):
 
 
 def run_general(plan, *, smoke):
-    from modules.module_d_flexibility import prepare_flexibility
+    from modules.module_d.flexibility import prepare_flexibility
     if plan["benchmark"]["applicability"]["blockers"]:
         raise ValueError("Module D execution blocked: " + "; ".join(plan["benchmark"]["applicability"]["blockers"]))
     materialize_general(prepare_flexibility(plan))

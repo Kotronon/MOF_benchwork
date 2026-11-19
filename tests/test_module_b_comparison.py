@@ -6,10 +6,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from modules import module_b_campaign as al
-from modules import module_b_comparison as compare
-from modules.module_b_active_learning import _save
-from modules.module_b_profiles import simplex_candidates
+from modules.module_b import campaign as al
+from modules.module_b import comparison as compare
+from modules.module_b.active_learning import _save
+from modules.module_b.profiles import simplex_candidates
 
 
 def state_fixture():
@@ -172,8 +172,8 @@ class ComparisonTests(unittest.TestCase):
             state['pending_request']={'candidate':state['candidates'][5],'action':'sample'};_save(source,state)
             original=source.read_bytes();root=folder/'comparison'
             with patch.object(compare,'verify_source'),patch.object(al,'identity',return_value='physics'), \
-                 patch('modules.module_b_cluster.freeze_config',side_effect=lambda cfg,folder:cfg), \
-                 patch('modules.module_b_cluster.archive_prepared_manifest'), \
+                 patch('modules.module_b.cluster.freeze_config',side_effect=lambda cfg,folder:cfg), \
+                 patch('modules.module_b.cluster.archive_prepared_manifest'), \
                  patch('pipeline.planning.build_run_plan',return_value={}), \
                  patch('pipeline.prepare.prepare_benchmark',return_value={}), \
                  patch('pipeline.materialization.materialize_benchmark',return_value={}):

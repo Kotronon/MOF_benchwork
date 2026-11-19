@@ -22,7 +22,7 @@ from pipeline.utils import unique
 def materialize_benchmark(prepare_plan: dict[str, Any]) -> dict[str, Any]:
     """Materialize a prepare plan into generated benchmark files on disk."""
     if prepare_plan.get("kind") == "module_d_preparation":
-        from modules.module_d_flexibility import materialize_flexibility
+        from modules.module_d.flexibility import materialize_flexibility
 
         return materialize_flexibility(prepare_plan)
     working_dir = Path(prepare_plan["working_directory"])

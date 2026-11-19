@@ -12,7 +12,7 @@ from pathlib import Path
 from statistics import mean, stdev
 from typing import Any
 
-from modules.module_d_flexibility import finite, integer
+from modules.module_d.flexibility import finite, integer
 
 
 def structural_metrics(reference: Any, current: Any, framework_indices: list[int],

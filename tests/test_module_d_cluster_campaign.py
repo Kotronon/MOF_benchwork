@@ -8,8 +8,8 @@ import tempfile
 import unittest
 
 from benchmark import build_run_plan
-from modules.module_d_flexibility import CYCLE_COLUMNS, prepare_flexibility, materialize_flexibility
-from modules.module_d_general import materialize_general, render_input, verify_bundle
+from modules.module_d.flexibility import CYCLE_COLUMNS, prepare_flexibility, materialize_flexibility
+from modules.module_d.general import materialize_general, render_input, verify_bundle
 from tests.test_module_d_general import fixture
 from tests.test_module_d_flexibility import measured_rows
 from analysis.module_d_flexibility import summarize_cycles

@@ -15,8 +15,8 @@ import subprocess
 
 from benchmark import build_run_plan
 from analysis.module_d_flexibility import evaluate_flexibility
-from modules.module_d_flexibility import materialize_flexibility, prepare_flexibility
-from modules.module_d_general import execute_bundle, render_input, verify_bundle
+from modules.module_d.flexibility import materialize_flexibility, prepare_flexibility
+from modules.module_d.general import execute_bundle, render_input, verify_bundle
 
 
 def fixture(directory, molecule=False, units="real"):
@@ -140,12 +140,12 @@ class GeneralProfileTests(unittest.TestCase):
             plan = build_run_plan(fixture(tmp))
             root = Path(materialize_flexibility(prepare_flexibility(plan))["working_directory"])
             help_result = subprocess.CompletedProcess(["lmp"], 0, "test build", "")
-            with patch("modules.module_d_general.subprocess.run", side_effect=[help_result, subprocess.CalledProcessError(1, ["lmp"])]):
+            with patch("modules.module_d.general.subprocess.run", side_effect=[help_result, subprocess.CalledProcessError(1, ["lmp"])]):
                 with self.assertRaises(subprocess.CalledProcessError):
                     execute_bundle(root, smoke=True)
             self.assertEqual(json.loads((root / "smoke/status.json").read_text())["status"], "failed")
             self.assertFalse((root / "cycle_results.csv").exists())
-            with patch("modules.module_d_general.subprocess.run", return_value=help_result):
+            with patch("modules.module_d.general.subprocess.run", return_value=help_result):
                 with self.assertRaisesRegex(ValueError, "passing smoke"):
                     execute_bundle(root)
                 with self.assertRaises(FileExistsError):

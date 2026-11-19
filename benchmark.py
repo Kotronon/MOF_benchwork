@@ -22,7 +22,7 @@ from pipeline.registry_generation import write_generated_registries
 from pipeline.runners import run_benchmark, run_isotherm
 from pipeline.variants import build_variant_plans, run_variant_benchmark
 from modules.module_c_mlips.workflow import run_potential_benchmark
-from modules.module_b_selectivity import (
+from modules.module_b.selectivity import (
     initialize_campaign_state,
     initialize_campaign_state_from_isotherm,
 )

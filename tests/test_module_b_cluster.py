@@ -12,10 +12,10 @@ import unittest
 import numpy as np
 
 from converter.cif_to_lammps_data import load_framework_structure, parse_cif_atom_site_charges
-from modules import module_b_campaign as al
-from modules.module_b_cluster import base_config, maximin, import_pilot, read
-from modules.module_b_profiles import point, simplex_candidates
-from modules.module_b_runtime import campaign_lock, add_raw_uncertainty
+from modules.module_b import campaign as al
+from modules.module_b.cluster import base_config, maximin, import_pilot, read
+from modules.module_b.profiles import point, simplex_candidates
+from modules.module_b.runtime import campaign_lock, add_raw_uncertainty
 
 ROOT = Path('outputs/module_B_active_learning')
 
@@ -106,7 +106,7 @@ class DesignTests(unittest.TestCase):
                 with self.assertRaises(ValueError): al.execute(Path(d)/'state.json',budget,jobs=jobs)
 
     def test_execution_contingent_and_error_status(self):
-        from modules.module_b_active_learning import _save
+        from modules.module_b.active_learning import _save
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'state.json';s=self.state();_save(p,s)
             cfg=Path(d)/'config.json';_save(cfg,s['base_config'])
@@ -130,7 +130,7 @@ class DesignTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'campaign.json'
             with campaign_lock(p),campaign_lock(p):
-                script='from modules.module_b_runtime import campaign_lock\nwith campaign_lock('+repr(str(p))+'): pass'
+                script='from modules.module_b.runtime import campaign_lock\nwith campaign_lock('+repr(str(p))+'): pass'
                 r=subprocess.run([sys.executable,'-c',script],capture_output=True,text=True)
                 self.assertNotEqual(r.returncode,0)
                 self.assertIn('active writer',r.stderr)

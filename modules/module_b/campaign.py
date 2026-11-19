@@ -10,9 +10,9 @@ from pathlib import Path
 import platform
 import warnings
 
-from modules.module_b_profiles import point, paper_profile, simplex_candidates
-from modules.module_b_active_learning import _save
-from modules.module_b_runtime import locked, asset_fingerprints, add_raw_uncertainty
+from modules.module_b.profiles import point, paper_profile, simplex_candidates
+from modules.module_b.active_learning import _save
+from modules.module_b.runtime import locked, asset_fingerprints, add_raw_uncertainty
 
 
 def identity(config):
@@ -452,7 +452,7 @@ def propose(path, *, holdout=False):
     path = Path(path)
     state = json.loads(path.read_text())
     if state["schema_version"] != 2:
-        from modules.module_b_active_learning import propose_campaign
+        from modules.module_b.active_learning import propose_campaign
 
         return propose_campaign(path)
     role = state.get("comparison_role")
@@ -699,7 +699,7 @@ def execute(path, max_requests, *, holdout=False, jobs=1):
 def validation_metrics(state, pred, test):
     import numpy as np
     from itertools import combinations
-    from modules.module_b_reporting import ratio
+    from modules.module_b.reporting import ratio
     result = {"metrics": {}}
     if pred and test:
         index = {p["candidate_id"]: i for i, p in enumerate(state["candidates"])}
@@ -756,7 +756,7 @@ def validation_metrics(state, pred, test):
 
 @locked
 def report(path):
-    from modules.module_b_reporting import write_artifacts
+    from modules.module_b.reporting import write_artifacts
 
     state = json.loads(Path(path).read_text())
     test = state["holdout_results"]
@@ -828,7 +828,7 @@ def report(path):
     previous = [r for r in previous if r["training_points"] != len(results)] + [result]
     _save(curve, previous)
     if state.get("campaign_kind"):
-        from modules.module_b_cluster_reporting import write_cluster_report
+        from modules.module_b.cluster_reporting import write_cluster_report
         write_cluster_report(state, pred, result, previous, target)
     return result
 

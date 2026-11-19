@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from modules.module_d_mil53 import REFERENCE, nonempty, pair_energy_force, prepare_mil53, source_sections
+from modules.module_d.mil53 import REFERENCE, nonempty, pair_energy_force, prepare_mil53, source_sections
 _spec = importlib.util.spec_from_file_location("mil53_cluster_runner", Path(__file__).parents[1] / "scripts/run_module_d_mil53.py")
 _runner = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_runner)

@@ -9,10 +9,10 @@ import shutil
 import subprocess
 import sys
 
-from modules import module_b_campaign as al
-from modules.module_b_active_learning import _save
-from modules.module_b_profiles import point, simplex_candidates
-from modules.module_b_runtime import campaign_lock, asset_fingerprints
+from modules.module_b import campaign as al
+from modules.module_b.active_learning import _save
+from modules.module_b.profiles import point, simplex_candidates
+from modules.module_b.runtime import campaign_lock, asset_fingerprints
 from pipeline.planning import build_run_plan
 from pipeline.prepare import prepare_benchmark
 from pipeline.materialization import materialize_benchmark
@@ -194,8 +194,8 @@ def archive_prepared_manifest(folder, prepared):
         raise ValueError('Previously prepared model inputs changed; inspect model_manifest.json.')
     manifest['rendered_sha256'] = rendered
     manifest['resolved_parameters'] = prepared['parameters']
-    implementation = ['modules/module_b_campaign.py','modules/module_b_runtime.py',
-                      'modules/module_b_cluster.py','pipeline/lammps_inputs.py','pipeline/eos.py',
+    implementation = ['modules/module_b/campaign.py','modules/module_b/runtime.py',
+                      'modules/module_b/cluster.py','pipeline/lammps_inputs.py','pipeline/eos.py',
                       'pipeline/materialization.py','converter/cif_to_lammps_data.py',
                       'converter/forcefield_to_lammps.py','analysis/module_b_convergence_report.py']
     manifest['implementation_sha256'] = {p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in implementation}
@@ -203,7 +203,7 @@ def archive_prepared_manifest(folder, prepared):
 
 
 def prepare(name, root=DEFAULT_ROOT, smoke=False, pressure_min=.1, pressure_max=10.):
-    from modules.module_b_extension import validate_bounds
+    from modules.module_b.extension import validate_bounds
     validate_bounds(pressure_min, pressure_max)
     folder = Path(root) / ('smoke' if smoke else 'production') / name
     path = folder / 'campaign.json'
@@ -359,7 +359,7 @@ def main(argv=None):
         parser.error('Pressure bounds and --import-from are only accepted by prepare.')
     if args.import_from and args.material != 'mof5':
         parser.error('--import-from requires material mof5.')
-    from modules.module_b_extension import validate_bounds
+    from modules.module_b.extension import validate_bounds
     lower = args.pressure_min if args.pressure_min is not None else .1
     upper = args.pressure_max if args.pressure_max is not None else 10.
     try:
@@ -374,12 +374,12 @@ def main(argv=None):
         environment=check_dependencies()
         _save(args.root/'environment.json',environment)
         if args.command=='prepare':
-            shutil.copyfile('data/module_b/CLUSTER_AL.md',args.root/'START_HERE.md')
+            shutil.copyfile('docs/modules/module_b/cluster_al.md',args.root/'START_HERE.md')
     for name in MATERIALS if args.material=='all' else [args.material]:
         path=args.root/'production'/name/'campaign.json'
         if args.command=='prepare':
             if args.import_from:
-                from modules.module_b_extension import prepare_extension
+                from modules.module_b.extension import prepare_extension
                 prepare_extension(args.root,args.import_from,lower,upper)
             else:
                 prepare(name,args.root,pressure_min=lower,pressure_max=upper)

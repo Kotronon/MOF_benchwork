@@ -70,14 +70,14 @@ def build_flexibility_plan(config: dict[str, Any], module: dict[str, str]) -> di
     """Plan a paper campaign without falling back to unrelated CRAFTED assets."""
     profile = config.get("benchmark", {}).get("flexibility", {}).get("profile", "nboffive_paper")
     if profile == "general":
-        from modules.module_d_general import build_general_plan
+        from modules.module_d.general import build_general_plan
         return build_general_plan(config, module)
     if profile != "nboffive_paper":
         raise ValueError(f"Unknown Module D profile: {profile}")
     config = deepcopy(config)
     protocol = config["benchmark"].get("flexibility")
     if not isinstance(protocol, dict):
-        raise ValueError("Module D requires benchmark.flexibility; see MODULE_D_FLEXIBILITY.md.")
+        raise ValueError("Module D requires benchmark.flexibility; see docs/modules/module_d.md.")
     if config["material"]["name"].casefold() not in {"nboffive-1-ni", "kaust-7"}:
         raise ValueError("The initial Module D protocol supports NbOFFIVE-1-Ni / KAUST-7.")
     if config["adsorbates"]["components"] != ["H2O"]:
@@ -212,7 +212,7 @@ def verify_reference_inputs(directory: Path = REFERENCE_DIR) -> dict[str, Any]:
 def materialize_flexibility(prepared: dict[str, Any]) -> dict[str, Any]:
     """Create an immutable planning bundle, preserving existing calculation outputs."""
     if prepared["run_plan"]["benchmark"]["flexibility"].get("profile") == "general":
-        from modules.module_d_general import materialize_general
+        from modules.module_d.general import materialize_general
         return materialize_general(prepared)
     plan = prepared["run_plan"]
     root = Path(prepared["working_directory"])
@@ -274,13 +274,13 @@ class FlexibilityModule(BenchmarkModule):
 
     def run_test(self, materialized_plan: dict[str, Any]) -> dict[str, Any]:
         if materialized_plan.get("benchmark", {}).get("flexibility", {}).get("profile") == "general":
-            from modules.module_d_general import run_general
+            from modules.module_d.general import run_general
             return run_general(materialized_plan, smoke=True)
         raise NotImplementedError("Module D simulation execution is unavailable; use --dry-run, --prepare or --evaluate.")
 
     def run(self, materialized_plan: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
         if materialized_plan.get("benchmark", {}).get("flexibility", {}).get("profile") == "general":
-            from modules.module_d_general import run_general
+            from modules.module_d.general import run_general
             return run_general(materialized_plan, smoke=False)
         return self.run_test(materialized_plan)
 

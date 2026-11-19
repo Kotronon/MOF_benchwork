@@ -45,7 +45,7 @@ def write_cluster_report(state, prediction, result, curve, target):
         pts=state['candidates'];x=[p['pressure_bar'] for p in pts];y=[p['mixture']['CO2'] for p in pts]
         quantities={c:np.array([v['value'] for v in prediction['components'][c]]) for c in names}
         quantities['Total']=sum(quantities.values())
-        from modules.module_b_reporting import ratio
+        from modules.module_b.reporting import ratio
         quantities['CO2/N2 selectivity']=np.array([
             ratio(quantities['CO2'][i],quantities['N2'][i],p['mixture']['CO2'],p['mixture']['N2'])
             for i,p in enumerate(pts)],dtype=float)

@@ -6,10 +6,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from modules import module_b_campaign as al
-from modules.module_b_extension import extension_design, prepare_extension, validate_bounds, verify_source, digest, refresh_evidence_checksums
-from modules.module_b_profiles import point
-from modules.module_b_active_learning import _save
+from modules.module_b import campaign as al
+from modules.module_b.extension import extension_design, prepare_extension, validate_bounds, verify_source, digest, refresh_evidence_checksums
+from modules.module_b.profiles import point
+from modules.module_b.active_learning import _save
 
 
 def fixture():
@@ -59,13 +59,13 @@ class ExtensionTests(unittest.TestCase):
             s['results'][0]['source_summary']=str(evidence)
             _save(source,s);before=source.read_bytes()
             root=Path(d)/'target'
-            with patch('modules.module_b_extension.verify_source'), \
-                 patch('modules.module_b_cluster.freeze_config',side_effect=lambda cfg,folder:cfg), \
+            with patch('modules.module_b.extension.verify_source'), \
+                 patch('modules.module_b.cluster.freeze_config',side_effect=lambda cfg,folder:cfg), \
                  patch.object(al,'identity',return_value='physics'), \
                  patch('pipeline.planning.build_run_plan',return_value={}), \
                  patch('pipeline.prepare.prepare_benchmark',return_value={}), \
                  patch('pipeline.materialization.materialize_benchmark',return_value={}) as materialize, \
-                 patch('modules.module_b_cluster.archive_prepared_manifest'):
+                 patch('modules.module_b.cluster.archive_prepared_manifest'):
                 p=prepare_extension(root,source,.1,20);state=json.loads(p.read_text())
                 self.assertIsNone(state['pending_request'])
                 self.assertEqual(state['results'][0]['precision_retries'],0)
@@ -137,7 +137,7 @@ class ExtensionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'campaign.json';_save(p,s)
             def artifacts(state,pred,target):target.mkdir(parents=True,exist_ok=True);return {}
-            with patch.object(al,'predict',return_value=pred),patch('modules.module_b_reporting.write_artifacts',side_effect=artifacts):
+            with patch.object(al,'predict',return_value=pred),patch('modules.module_b.reporting.write_artifacts',side_effect=artifacts):
                 r=al.report(p)
             self.assertEqual(r['metrics_by_region']['extended_domain']['status'],'missing_holdout_data')
             self.assertEqual(r['acquisition_progress']['initial_design_remaining'],0)

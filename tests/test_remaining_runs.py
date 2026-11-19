@@ -13,7 +13,7 @@ from modules import remaining_runs as runner
 
 class RemainingRunsTests(unittest.TestCase):
     def test_b_step_waits_for_real_existing_writer_without_executing(self):
-        from modules import module_b_comparison as compare
+        from modules.module_b import comparison as compare
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             target = root / "source" / "campaign.json"
@@ -26,7 +26,7 @@ class RemainingRunsTests(unittest.TestCase):
                 execute.assert_not_called()
 
     def test_b_step_refuses_execution_after_ceiling(self):
-        from modules import module_b_comparison as compare
+        from modules.module_b import comparison as compare
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             target = root / "campaign.json"
@@ -58,8 +58,8 @@ class RemainingRunsTests(unittest.TestCase):
 
     def run_b(self, decisions):
         state = {"options": {"max_training_points": 1, "max_precision_retries": 0}}
-        with patch("modules.module_b_comparison.read", side_effect=[{"source": "campaign.json"}, state]), \
-             patch("modules.module_b_cluster.check_dependencies"), \
+        with patch("modules.module_b.comparison.read", side_effect=[{"source": "campaign.json"}, state]), \
+             patch("modules.module_b.cluster.check_dependencies"), \
              patch.object(runner, "b_step", side_effect=decisions) as step, \
              patch.object(runner, "save_status"), patch.object(runner, "log"), \
              patch.object(runner.time, "sleep") as sleep:

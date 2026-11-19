@@ -11,11 +11,7 @@
   "conditions": {
     "temperature_K": 300.0,
     "pressures_bar": [
-      0.01,
-      0.025,
-      0.05,
       0.1,
-      0.25,
       0.5,
       1.0,
       2.0,
@@ -34,15 +30,15 @@
   },
   "output": {
     "directory": "outputs/module_D_mil53_co2",
-    "run_id": "classical_isotherm_v1"
+    "run_id": "classical_isotherm_short_6p_v1"
   },
   "benchmark": {
     "task": "module_d",
     "flexibility": {
       "profile": "general",
-      "sr_cycles": 400,
+      "sr_cycles": 800,
       "discard_cycles": 0,
-      "convergence_window": 40,
+      "convergence_window": 10,
       "potential": {
         "kind": "classical",
         "name": "Published MIL-53 QuickFF + project TraPPE-CO2 cross model",
@@ -144,8 +140,8 @@
         "timestep_fs": 0.25
       },
       "hybrid": {
-        "equilibration_steps": 200000,
-        "steps_per_cycle": 1000,
+        "equilibration_steps": 3000,
+        "steps_per_cycle": 100,
         "exchange_interval": 20,
         "exchange_attempts": 5,
         "move_attempts": 0,
@@ -154,11 +150,7 @@
       },
       "reservoir": {
         "fugacities_bar": [
-          0.009999463805310556,
-          0.024996648852998807,
-          0.04998659587732246,
           0.09994638723103323,
-          0.24966498993288544,
           0.49866042407316785,
           0.994645402224618,
           1.9786111145011755,

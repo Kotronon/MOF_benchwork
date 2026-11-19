@@ -81,8 +81,8 @@ def request_limit(state, holdout=False):
 
 
 def b_step(root, role, jobs, execute_allowed=True):
-    from modules import module_b_comparison as compare
-    from modules.module_b_runtime import campaign_lock
+    from modules.module_b import comparison as compare
+    from modules.module_b.runtime import campaign_lock
 
     manifest = compare.read(root / "comparison.json")
     target = Path(manifest["source"]) if role == "al" else compare.campaign(root, role)
@@ -112,8 +112,8 @@ def b_step(root, role, jobs, execute_allowed=True):
 
 
 def drive_b(root, role, jobs, poll):
-    from modules import module_b_comparison as compare
-    from modules.module_b_cluster import check_dependencies
+    from modules.module_b import comparison as compare
+    from modules.module_b.cluster import check_dependencies
 
     check_dependencies()
     manifest = compare.read(root / "comparison.json")
@@ -254,7 +254,7 @@ def supervise(args):
                         del remaining[stage]
                 if args.scope in {"all", "module-b"} and not b_reported and not (set(remaining) & {"al", "holdouts", "random"}):
                     if not (set(failed) & {"al", "holdouts", "random"}):
-                        from modules.module_b_comparison import report
+                        from modules.module_b.comparison import report
                         report(args.comparison_root)
                         log(f"Module B report refreshed: {args.comparison_root / 'report/report.md'}")
                     b_reported = True

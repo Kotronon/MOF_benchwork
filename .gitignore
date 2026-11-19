@@ -229,8 +229,6 @@ isodb-library/
 external/
 data/generated/
 reports/
-docs/
-docs/**
 
 
 
@@ -250,15 +248,13 @@ guidelines_for_project_developement/
 *.fls
 *.fdb_latexmk
 *.synctex.gz
-docs/
 presentations/
 presentations/
 outputs/
+output/
 
 
-
-# Keep the Module D execution and real-material pilot guides versioned.
-!docs/
-docs/**
-!docs/module_d_general.md
-!docs/module_d_mil53_cluster.md
+# Historical LaTeX drafts and generated documentation are not source guides.
+docs/old/
+docs/_build/
+docs/

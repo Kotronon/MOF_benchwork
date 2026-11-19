@@ -189,8 +189,8 @@ class LammpsEnergyTests(unittest.TestCase):
 
 class CampaignLoopTests(unittest.TestCase):
     def test_complete_import_resume_and_holdout_isolation(self):
-        from modules.module_b_campaign import initialize, propose, ingest
-        from modules.module_b_profiles import point
+        from modules.module_b.campaign import initialize, propose, ingest
+        from modules.module_b.profiles import point
         from pipeline.config import save_benchmark_data
         from pipeline.runners import _aggregate_replicates
 

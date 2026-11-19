@@ -13,8 +13,8 @@ from pipeline.evaluate import build_evaluation_rows, evaluate_all_references, ev
 from pipeline.mixture_evaluation import assess_reference, build_mixture_evaluation, corrected_summary, framework_mass
 from pipeline.mixture_statistics import fieller_interval, mean_interval
 from pipeline.runners import _aggregate_replicates
-from modules.module_b_active_learning import DEFAULTS, compare_sampling_strategies, predict_components, recommend, propose_campaign, ingest_campaign, _context
-from modules.module_b_selectivity import build_candidate_pool
+from modules.module_b.active_learning import DEFAULTS, compare_sampling_strategies, predict_components, recommend, propose_campaign, ingest_campaign, _context
+from modules.module_b.selectivity import build_candidate_pool
 
 
 def replicates(xs=(2., 2.1, 1.9), ys=(1., 1.05, .95), pressure=1.):

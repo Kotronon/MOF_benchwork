@@ -197,7 +197,7 @@ def prepare(root, source_path=None):
             dest=root/path.relative_to(PROJECT);dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(path,dest)
     for name in ('requirements.txt','requirements-mlip-mc.txt','requirements-module-c-umof.txt'):
         shutil.copy2(PROJECT/name,root/name)
-    instructions='umof_mof5_single_seed_isotherm.md' if configurable else 'umof_guarded_pilot.md'
+    instructions='modules/module_c/umof_mof5_single_seed_isotherm.md' if configurable else 'modules/module_c/umof_guarded_pilot.md'
     shutil.copy2(PROJECT/'docs'/instructions,root/'START_HERE.md')
     (root/'run_gpu.sh').write_text('#!/usr/bin/env bash\nset -euo pipefail\ncd -- "$(dirname -- "$0")"\nexport OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1\npython -m modules.module_c_mlips.guarded_pilot start --directory .\n')
     dump(root/'bundle_manifest.json',{'origins':origins,'diagnostic_manifest_sha256':digest(diagnostic/'manifest.json'),

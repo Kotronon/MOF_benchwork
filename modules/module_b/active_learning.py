@@ -14,7 +14,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from modules.module_b_selectivity import build_candidate_pool, mixture_results_from_isotherm_summary
+from modules.module_b.selectivity import build_candidate_pool, mixture_results_from_isotherm_summary
 from pipeline.mixture_evaluation import corrected_summary, _prepare
 
 DEFAULTS = {"relative_uncertainty_target": 0.2, "absolute_loading_floor": 0.05,
@@ -132,7 +132,7 @@ def _ingest(state: dict[str, Any], summary_path: str | Path) -> None:
 def ingest_campaign(state_path: str | Path, summary_path: str | Path) -> dict[str, Any]:
     state = json.loads(Path(state_path).read_text())
     if state.get("schema_version") == 2:
-        from modules.module_b_campaign import ingest
+        from modules.module_b.campaign import ingest
         return ingest(state_path, summary_path)
     _ingest(state, summary_path)
     _save(state_path, state)
@@ -195,7 +195,7 @@ def _maximin(pending, observed, domain):
 
 def recommend(state: dict[str, Any]) -> dict[str, Any]:
     if state.get("schema_version") == 2:
-        from modules.module_b_campaign import recommend as recommend_general
+        from modules.module_b.campaign import recommend as recommend_general
         return recommend_general(state)
     options, candidates, observations = state["options"], state["candidates"], state["results"]
     if state.get("pending_request"):
@@ -240,7 +240,7 @@ def propose_campaign(state_path: str | Path) -> dict[str, Any]:
     state_path = Path(state_path)
     state = json.loads(state_path.read_text())
     if state.get("schema_version") == 2:
-        from modules.module_b_campaign import propose
+        from modules.module_b.campaign import propose
         return propose(state_path)
     result = recommend(state)
     if result["status"] == "request":

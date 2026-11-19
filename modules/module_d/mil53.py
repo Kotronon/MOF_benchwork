@@ -14,7 +14,8 @@ from pathlib import Path
 import re
 import shutil
 
-REFERENCE = Path(__file__).parents[1] / "data/module_d/mil53_al_reference"
+REFERENCE = Path(__file__).parents[2] / "data/module_d/mil53_al_reference"
+SOURCE_README = Path(__file__).parents[2] / "docs/references/mil53_al_reference_source.md"
 KB_KCAL = 0.00198720425864083
 COULOMB_REAL = 332.06371  # LAMMPS real units, same constant as the source tables
 
@@ -54,7 +55,8 @@ def pair_energy_force(r, sigma, epsilon, charge_product=0., gaussian_radius=0.):
 def verify_sources():
     manifest = json.loads((REFERENCE / "provenance.json").read_text())
     for entry in manifest["files"]:
-        if hashlib.sha256((REFERENCE / entry["path"]).read_bytes()).hexdigest() != entry["sha256"]:
+        source = SOURCE_README if entry["path"] == "README.md" else REFERENCE / entry["path"]
+        if hashlib.sha256(source.read_bytes()).hexdigest() != entry["sha256"]:
             raise ValueError(f"Modified MIL-53 reference: {entry['path']}")
     return manifest
 

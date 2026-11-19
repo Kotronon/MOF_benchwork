@@ -13,7 +13,7 @@ import sys
 
 def job_plan(plan, campaign, case):
     """Create an independent one-case plan using only transferred assets."""
-    from modules.module_d_flexibility import asset
+    from modules.module_d.flexibility import asset
     result = deepcopy(plan)
     directory = Path(campaign).resolve() / "jobs" / case["case_id"]
     result["cases"] = [deepcopy(case)]
@@ -29,7 +29,7 @@ def job_plan(plan, campaign, case):
 
 
 def run_case(plan, campaign, index, command):
-    from modules.module_d_general import materialize_general, execute_bundle
+    from modules.module_d.general import materialize_general, execute_bundle
     from analysis.module_d_flexibility import evaluate_flexibility
     if index is None or not 1 <= index <= len(plan["cases"]):
         raise ValueError(f"--case-index must be between 1 and {len(plan['cases'])}.")
@@ -45,8 +45,8 @@ def run_case(plan, campaign, index, command):
 
 def collect_cases(plan, campaign):
     """Require every planned job, validate records, then form comparisons."""
-    from modules.module_d_general import verify_bundle
-    from modules.module_d_flexibility import CYCLE_COLUMNS
+    from modules.module_d.general import verify_bundle
+    from modules.module_d.flexibility import CYCLE_COLUMNS
     from analysis.module_d_flexibility import summarize_cycles, evaluate_flexibility
     campaign = Path(campaign)
     rows = []
@@ -77,7 +77,7 @@ def collect_cases(plan, campaign):
 
 def run_all_cases(plan, campaign, command):
     """Run directly and sequentially, reusing only verified complete cases."""
-    from modules.module_d_general import verify_bundle
+    from modules.module_d.general import verify_bundle
     from analysis.module_d_flexibility import summarize_cycles
     for index, case in enumerate(plan["cases"], 1):
         expected, directory = job_plan(plan, campaign, case)
@@ -139,7 +139,7 @@ def main(argv=None):
                 raise ValueError("Invalid manifest path")
             if hashlib.sha256((root / relative).read_bytes()).hexdigest() != expected:
                 raise ValueError("Package checksum mismatch: " + name)
-    from modules.module_d_general import verify_bundle, execute_bundle
+    from modules.module_d.general import verify_bundle, execute_bundle
     from analysis.module_d_flexibility import evaluate_flexibility
     plan = verify_bundle(campaign)
     if plan["benchmark"]["applicability"]["blockers"]:
