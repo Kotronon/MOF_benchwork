@@ -1,0 +1,87 @@
+{
+  "schema": "module_d.flames_umof_hybrid.v1",
+  "description": "Short paired FLAMES hybrid GCMC/MD pilot for MIL-53(Al)/CO2. This is a protocol pilot, not a converged isotherm.",
+  "system": {
+    "name": "MIL-53(Al)",
+    "framework": {
+      "path": "data/module_d/mil53_co2_pilot/dry.data",
+      "format": "lammps-data",
+      "atom_style": "full",
+      "atomic_number_by_lammps_type": {
+        "1": 13,
+        "2": 6,
+        "3": 6,
+        "4": 6,
+        "5": 1,
+        "6": 1,
+        "7": 8,
+        "8": 8,
+        "9": 6,
+        "10": 8
+      },
+      "automatic_supercell": false
+    },
+    "adsorbate": {
+      "name": "CO2",
+      "path": "data/module_c/umof_adsorption_comparison/co2.extxyz",
+      "eos": {
+        "criticalTemperature_K": 304.1282,
+        "criticalPressure_Pa": 7377300.0,
+        "acentricFactor": 0.22394
+      }
+    }
+  },
+  "conditions": {
+    "temperature_K": 298.0,
+    "reservoir_pressures_bar": [5.0, 6.0, 7.0, 10.0],
+    "external_npt_pressure_bar": 1.0,
+    "gas_fugacity_model": "Peng-Robinson CO2 EOS"
+  },
+  "models": [
+    {
+      "name": "uMOF-MH",
+      "profile": "mh",
+      "checkpoint": "external/umof_models/uMOF-MH.model",
+      "head": "r2scan+d4",
+      "dtype": "float64"
+    },
+    {
+      "name": "uMOF-POLAR",
+      "profile": "polar",
+      "checkpoint": "external/umof_models/uMOF-POLAR.model",
+      "head": "r2scan+d4",
+      "dtype": "float32",
+      "polar_conditioning": {
+        "total_charge": 0,
+        "total_spin": 1,
+        "note": "MACE conditioning defaults, not quantum-chemistry reference labels"
+      }
+    }
+  ],
+  "pilot": {
+    "seeds": [12345],
+    "gcmc_steps_per_block": 1000,
+    "hybrid_blocks": 5,
+    "final_gcmc_steps": 1000,
+    "md_steps_per_block": 500,
+    "md_timestep_fs": 0.5,
+    "md_ensemble": "NPT",
+    "md_thermostat": "MTK",
+    "md_output_interval": 500,
+    "md_movie_interval": 500,
+    "gcmc_save_frequency": 500,
+    "cutoff_A": 6.0,
+    "vdw_factor": 0.6,
+    "save_rejected_moves": false
+  },
+  "execution": {
+    "device": "auto",
+    "output_directory": "outputs/module_D_mil53_co2/flames_umof_hybrid_pilot_v1",
+    "refuse_existing_case_directory": true,
+    "parallelism": "one process per selected model/pressure/seed; no Slurm assumed"
+  },
+  "comparison": {
+    "reference": "NIST Isotherm 11, Boutin et al.; compare only after convergence and matching the experimental activation/pressure protocol",
+    "interpretation": "The short run checks that both model profiles can execute the same hybrid protocol. Its loadings must not be reported as a validated NIST comparison."
+  }
+}
