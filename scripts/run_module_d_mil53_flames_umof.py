@@ -115,6 +115,16 @@ def construct_simulation(config: dict, model_config: dict, pressure_bar: float, 
     )
     signature = inspect.signature(GCMC.__init__)
     parameters = signature.parameters
+    fugacity_coeff = peng_robinson_phi(
+        pressure_bar * 100_000.0,
+        float(config["conditions"]["temperature_K"]),
+        config["system"]["adsorbate"]["eos"],
+    )
+    if "fugacity_coeff" not in parameters:
+        raise RuntimeError(
+            "The installed FLAMES GCMC API does not expose fugacity_coeff; "
+            "refusing to run because the requested Peng-Robinson reservoir cannot be verified."
+        )
     common = {
         "model": calc,
         "framework_atoms": framework,
@@ -130,6 +140,10 @@ def construct_simulation(config: dict, model_config: dict, pressure_bar: float, 
         "random_seed": int(seed),
         "cutoff_radius": float(config["pilot"]["cutoff_A"]),
         "automatic_supercell": bool(config["system"]["framework"]["automatic_supercell"]),
+        # FLAMES uses this value in the GCMC insertion/deletion fugacity.
+        # Supplying critical constants on Adsorbate alone does not override
+        # BaseSimulator's fugacity_coeff default for the single-component run.
+        "fugacity_coeff": fugacity_coeff,
     }
     if "adsorbates" in parameters:
         try:
@@ -149,16 +163,16 @@ def construct_simulation(config: dict, model_config: dict, pressure_bar: float, 
         common["adsorbates"] = adsorbate
     elif "adsorbate_atoms" in parameters:
         common["adsorbate_atoms"] = co2
-        eos = config["system"]["adsorbate"]["eos"]
-        common["fugacity_coeff"] = peng_robinson_phi(
-            pressure_bar * 100_000.0,
-            float(config["conditions"]["temperature_K"]),
-            eos,
-        )
     else:
         raise RuntimeError(f"Unsupported FLAMES GCMC constructor: {signature}")
 
     simulation = GCMC(**common)
+    actual_fugacity_coeff = float(getattr(simulation, "fugacity_coeff", math.nan))
+    if not math.isclose(actual_fugacity_coeff, fugacity_coeff, rel_tol=1e-12, abs_tol=1e-12):
+        raise RuntimeError(
+            "FLAMES did not retain the requested Peng-Robinson fugacity coefficient: "
+            f"expected {fugacity_coeff:.12g}, got {actual_fugacity_coeff:.12g}."
+        )
     if not callable(getattr(simulation, "md", None)):
         raise RuntimeError("The installed FLAMES GCMC class has no hybrid MD method; use a FLAMES release with GCMC.md().")
     return simulation
@@ -241,6 +255,8 @@ def run_case(config: dict, model_config: dict, pressure_bar: float, seed: int, d
             "reservoir_pressure_bar": float(pressure_bar),
             "external_npt_pressure_bar": float(config["conditions"]["external_npt_pressure_bar"]),
             "temperature_K": float(config["conditions"]["temperature_K"]),
+            "fugacity_coefficient": float(simulation.fugacity_coeff),
+            "fugacity_bar": float(pressure_bar) * float(simulation.fugacity_coeff),
             "seed": int(seed),
             "device": device,
             "status": "pilot_completed_not_convergence_claim",
