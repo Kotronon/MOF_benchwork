@@ -256,7 +256,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", nargs="?", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--dry-run", action="store_true", help="Check repository assets and the input structure; do not import FLAMES or load model checkpoints.")
-    parser.add_argument("--model", choices=("mh", "polar"), help="Run only this model profile.")
+    parser.add_argument("--model", help="Run only this model profile, if it is listed in the JSON input.")
     parser.add_argument("--pressure-bar", type=float, help="Run only this configured reservoir pressure.")
     parser.add_argument("--seed", type=int, help="Run only this configured seed.")
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), help="Override execution.device.")
@@ -270,6 +270,9 @@ def main() -> int:
 
     check_inputs(config, load_ase=False)
     models = [model for model in config["models"] if args.model is None or model["profile"] == args.model]
+    if args.model is not None and not models:
+        available = ", ".join(model["profile"] for model in config["models"])
+        raise ValueError(f"Model {args.model!r} is not listed in this JSON input; available profile(s): {available}")
     pressures = config["conditions"]["reservoir_pressures_bar"]
     if args.pressure_bar is not None:
         if not any(math.isclose(args.pressure_bar, float(p), abs_tol=1e-9) for p in pressures):

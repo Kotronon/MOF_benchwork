@@ -1,6 +1,6 @@
 {
   "schema": "module_d.flames_umof_hybrid.v1",
-  "description": "Short paired FLAMES hybrid GCMC/MD pilot for MIL-53(Al)/CO2. This is a protocol pilot, not a converged isotherm.",
+  "description": "uMOF-MH-only FLAMES hybrid GCMC/MD pilot for MIL-53(Al)/CO2. POLAR is omitted because it exceeded available cluster memory. This is a protocol pilot, not a converged isotherm.",
   "system": {
     "name": "MIL-53(Al)",
     "framework": {
@@ -43,19 +43,7 @@
       "profile": "mh",
       "checkpoint": "external/umof_models/uMOF-MH.model",
       "head": "r2scan+d4",
-      "dtype": "float64"
-    },
-    {
-      "name": "uMOF-POLAR",
-      "profile": "polar",
-      "checkpoint": "external/umof_models/uMOF-POLAR.model",
-      "head": "r2scan+d4",
-      "dtype": "float32",
-      "polar_conditioning": {
-        "total_charge": 0,
-        "total_spin": 1,
-        "note": "MACE conditioning defaults, not quantum-chemistry reference labels"
-      }
+      "dtype": "float32"
     }
   ],
   "pilot": {
@@ -82,6 +70,6 @@
   },
   "comparison": {
     "reference": "NIST Isotherm 11, Boutin et al.; compare only after convergence and matching the experimental activation/pressure protocol",
-    "interpretation": "The short run checks that both model profiles can execute the same hybrid protocol. Its loadings must not be reported as a validated NIST comparison."
+    "interpretation": "The short MH-only run checks the hybrid protocol. Its loadings must not be reported as a validated NIST comparison."
   }
 }
